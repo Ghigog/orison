@@ -1,0 +1,192 @@
+[gd_scene format=3 uid="uid://cc00000000004"]
+
+[ext_resource type="Script" path="res://src/ui/SettingsModal.gd" id="1_settings"]
+[ext_resource type="Theme" uid="uid://cc00000000003" path="res://resources/themes/orison_ui.tres" id="2_theme"]
+
+[node name="SettingsModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_settings")
+
+[node name="OverlayBG" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0431373, 0.0470588, 0.0627451, 0.85)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CardPanel" type="PanelContainer" parent="CenterContainer"]
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+
+[node name="CardMargin" type="MarginContainer" parent="CenterContainer/CardPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 30
+
+[node name="CardVBox" type="VBoxContainer" parent="CenterContainer/CardPanel/CardMargin"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HeaderVBox" type="VBoxContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/HeaderVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+theme_override_font_sizes/font_size = 24
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="TaglineLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/HeaderVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "CONFIGURE ORISON AESTHETICS"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TabContainer" type="TabContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox"]
+custom_minimum_size = Vector2(0, 360)
+layout_mode = 2
+current_tab = 0
+
+[node name="Theme" type="VBoxContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer"]
+layout_mode = 2
+theme_override_constants/separation = 15
+metadata/_tab_index = 0
+
+[node name="PresetHBox" type="HBoxContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="PresetLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/PresetHBox"]
+layout_mode = 2
+text = "Select Theme:"
+
+[node name="ThemeDropdown" type="OptionButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/PresetHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DeleteThemeButton" type="Button" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/PresetHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Delete"
+
+[node name="FontSizeHBox" type="HBoxContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="FontSizeLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/FontSizeHBox"]
+layout_mode = 2
+text = "Font Size:"
+
+[node name="FontSizeDropdown" type="OptionButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/FontSizeHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ColorsGrid" type="GridContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 15
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="BgLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Canvas Background"
+
+[node name="BgPicker" type="ColorPickerButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="SurfaceLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Panel Surface"
+
+[node name="SurfacePicker" type="ColorPickerButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="BorderLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Horizon Border"
+
+[node name="BorderPicker" type="ColorPickerButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="TextLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Text Color"
+
+[node name="TextPicker" type="ColorPickerButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="AccentLabel" type="Label" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Focus Accent"
+
+[node name="AccentPicker" type="ColorPickerButton" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="SaveHBox" type="HBoxContainer" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SaveNameInput" type="LineEdit" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/SaveHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Custom Theme Name..."
+
+[node name="SaveThemeButton" type="Button" parent="CenterContainer/CardPanel/CardMargin/CardVBox/TabContainer/Theme/SaveHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Theme"
+
+[node name="CloseButton" type="Button" parent="CenterContainer/CardPanel/CardMargin/CardVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close"
+
+[node name="DeleteConfirmDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Confirm Deletion"
+initial_position = 2
+size = Vector2i(360, 150)
+ok_button_text = "Delete"

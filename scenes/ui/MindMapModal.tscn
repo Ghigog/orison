@@ -1,0 +1,74 @@
+[gd_scene format=3 uid="uid://b07n1ug01g0fk"]
+
+[ext_resource type="Script" path="res://src/ui/MindMapModal.gd" id="1_modal"]
+[ext_resource type="PackedScene" uid="uid://duwyl5nixja5u" path="res://scenes/ui/CampaignGraphView.tscn" id="2_graph_view"]
+[ext_resource type="Theme" uid="uid://cc00000000003" path="res://resources/themes/orison_ui.tres" id="3_theme"]
+
+[node name="MindMapModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_modal")
+
+[node name="OverlayBG" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0431373, 0.0470588, 0.0627451, 0.85)
+
+[node name="ModalPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.05
+anchor_top = 0.05
+anchor_right = 0.95
+anchor_bottom = 0.95
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="ModalPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ModalPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="Header" type="HBoxContainer" parent="ModalPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="ModalPanel/MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LabelTitle"
+text = "Campaign Connection Mind Map"
+
+[node name="Description" type="Label" parent="ModalPanel/MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Drag to pan, wheel to zoom. Add/remove connections and review entity classifications."
+
+[node name="CloseButton" type="Button" parent="ModalPanel/MarginContainer/VBoxContainer/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ButtonAccent"
+text = "  Close [X]  "
+
+[node name="HSeparator" type="HSeparator" parent="ModalPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="CampaignGraphView" parent="ModalPanel/MarginContainer/VBoxContainer" instance=ExtResource("2_graph_view")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3

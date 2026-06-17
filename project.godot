@@ -11,14 +11,37 @@ config_version=5
 [application]
 
 config/name="Orison"
+run/main_scene="res://scenes/ui/MainViewport.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
-config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.14117648, 0.14117648, 0.14117648, 0)
+boot_splash/image="res://resources/assets/orisonlogo2.png"
+config/icon="res://resources/assets/orisonlogo2.png"
+
+[autoload]
+
+EventBus="*res://src/autoload/EventBus.gd"
+CampaignState="*res://src/autoload/CampaignState.gd"
+LLMClient="*res://src/autoload/LLMClient.gd"
+ThemeManager="*res://src/autoload/ThemeManager.gd"
+
+[debug]
+
+file_logging/enable_file_logging=true
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [physics]
 
+2d/physics_engine="GodotPhysics2D"
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-renderer/rendering_method="mobile"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

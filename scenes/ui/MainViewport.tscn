@@ -1,0 +1,270 @@
+[gd_scene format=3 uid="uid://cc00000000001"]
+
+[ext_resource type="Script" uid="uid://cec0h1od347sp" path="res://src/ui/MainViewport.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://d0c1bisi3lq71" path="res://src/ui/CharacterVisuals.gd" id="2_visuals"]
+[ext_resource type="PackedScene" uid="uid://cc00000000002" path="res://scenes/ui/OnboardingFlow.tscn" id="3_onboarding"]
+[ext_resource type="Theme" uid="uid://cc00000000003" path="res://resources/themes/orison_ui.tres" id="4_theme"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_stage"]
+
+[node name="MainViewport" type="Control" unique_id=445711545]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("4_theme")
+script = ExtResource("1_main")
+
+[node name="BGColor" type="ColorRect" parent="." unique_id=124418932]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.027451, 0.0705882, 1)
+
+[node name="Stage" type="PanelContainer" parent="." unique_id=1818209687]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_stage")
+
+[node name="CharacterVisuals" type="Control" parent="Stage" unique_id=2110616985]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2_visuals")
+
+[node name="SpriteRect" type="TextureRect" parent="Stage/CharacterVisuals" unique_id=47555902]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="EmojiSpawnPoint" type="Marker2D" parent="Stage/CharacterVisuals" unique_id=898251478]
+unique_name_in_owner = true
+position = Vector2(640, 150)
+
+[node name="UIOverlay" type="Control" parent="." unique_id=966843733]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DialogueContainer" type="MarginContainer" parent="UIOverlay" unique_id=200931862]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 40.0
+offset_top = -230.0
+offset_right = -40.0
+offset_bottom = -30.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="UIOverlay/DialogueContainer" unique_id=887512548]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="DialoguePanel" type="PanelContainer" parent="UIOverlay/DialogueContainer/CenterContainer" unique_id=50903332]
+custom_minimum_size = Vector2(900, 200)
+layout_mode = 2
+
+[node name="DialogueMargin" type="MarginContainer" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel" unique_id=1158134730]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="DialogueVBox" type="VBoxContainer" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin" unique_id=1935522602]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SpeakerNameLabel" type="Label" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin/DialogueVBox" unique_id=164255620]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+text = "Narrator"
+
+[node name="DialogueLabel" type="RichTextLabel" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin/DialogueVBox" unique_id=640549599]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+text = "Welcome to Orison! Import an Obsidian vault folder to begin your adventure."
+selection_enabled = true
+
+[node name="InputHBox" type="HBoxContainer" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin/DialogueVBox" unique_id=776774164]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="InputField" type="LineEdit" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin/DialogueVBox/InputHBox" unique_id=659746244]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Type your dialogue or actions here..."
+
+[node name="SendButton" type="Button" parent="UIOverlay/DialogueContainer/CenterContainer/DialoguePanel/DialogueMargin/DialogueVBox/InputHBox" unique_id=1181825721]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Send"
+
+[node name="SidebarContainer" type="Control" parent="UIOverlay" unique_id=763659549]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = 40.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Sidebar" type="PanelContainer" parent="UIOverlay/SidebarContainer" unique_id=428121677]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="SidebarMargin" type="MarginContainer" parent="UIOverlay/SidebarContainer/Sidebar" unique_id=919430390]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="SidebarVBox" type="VBoxContainer" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin" unique_id=1594448293]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="CtrlLabel" type="Label" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox" unique_id=2109277852]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Adventure Controls"
+
+[node name="ButtonsGrid" type="GridContainer" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="ImportVaultButton" type="Button" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/ButtonsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Import Vault"
+
+[node name="LoadGameButton" type="Button" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/ButtonsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Load Save"
+
+[node name="MindMapButton" type="Button" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/ButtonsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Mind Map"
+
+[node name="SettingsButton" type="Button" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/ButtonsGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Settings"
+
+[node name="MemoryHSeparator" type="HSeparator" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox"]
+layout_mode = 2
+
+[node name="MemoryVBox" type="VBoxContainer" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MemoryTitleLabel" type="Label" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/MemoryVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Adventure Memory"
+
+[node name="ShortTermMemoryLabel" type="RichTextLabel" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/MemoryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+text = "[color=#A7F3D0][b]Short-Term:[/b][/color] None"
+fit_content = true
+
+[node name="MediumTermMemoryLabel" type="RichTextLabel" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/MemoryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+text = "[color=#FDE68A][b]Medium-Term:[/b][/color] None"
+fit_content = true
+
+[node name="LongTermMemoryLabel" type="RichTextLabel" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/MemoryVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+text = "[color=#F87171][b]Long-Term:[/b][/color] None"
+fit_content = true
+
+[node name="MemoryHSeparator2" type="HSeparator" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox"]
+layout_mode = 2
+
+[node name="CharTitleLabel" type="Label" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox" unique_id=1700733168]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Nearby Characters"
+
+[node name="CharacterScroll" type="ScrollContainer" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox" unique_id=8277683]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharacterListContainer" type="VBoxContainer" parent="UIOverlay/SidebarContainer/Sidebar/SidebarMargin/SidebarVBox/CharacterScroll" unique_id=743325207]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ToggleSidebarButton" type="Button" parent="UIOverlay/SidebarContainer" unique_id=1854080715]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 60)
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_top = -30.0
+offset_right = 30.0
+offset_bottom = 30.0
+grow_vertical = 2
+text = "⟫"
+
+[node name="OnboardingFlow" parent="." unique_id=848595939 instance=ExtResource("3_onboarding")]
+unique_name_in_owner = true
+layout_mode = 1

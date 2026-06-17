@@ -1,0 +1,79 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000002"]
+
+[ext_resource type="Script" path="res://src/ui/CharacterListItem.gd" id="1_item"]
+
+[node name="CharacterListItem" type="Button"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+script = ExtResource("1_item")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="HeaderHBox" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="AvatarRect" type="TextureRect" parent="Margin/VBox/HeaderHBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NameLabel" type="Label" parent="Margin/VBox/HeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Character Name"
+
+[node name="Spacer" type="Control" parent="Margin/VBox/HeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="AffinityLabel" type="Label" parent="Margin/VBox/HeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "+0.0"
+
+[node name="RapportBar" type="ProgressBar" parent="Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 4)
+layout_mode = 2
+mouse_filter = 2
+min_value = -1.0
+max_value = 1.0
+step = 0.01
+show_percentage = false
+
+[node name="EmotionLabel" type="Label" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Serenity (1.0)"
+
+[node name="ReasonLabel" type="Label" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSubtle"
+text = "Observing Valen's cautious posture and sky focus."
+autowrap_mode = 3
+

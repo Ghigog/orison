@@ -1,0 +1,178 @@
+[gd_scene format=3 uid="uid://duwyl5nixja5u"]
+
+[ext_resource type="Script" path="res://src/ui/CampaignGraphView.gd" id="1_graph"]
+
+[node name="CampaignGraphView" type="HSplitContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+split_offset = 750
+script = ExtResource("1_graph")
+
+[node name="GraphEdit" type="GraphEdit" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+right_disconnects = true
+show_grid = true
+
+[node name="InspectorPanel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="InspectorPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="ScrollContainer" type="ScrollContainer" parent="InspectorPanel/MarginContainer"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 15
+
+[node name="InspectorTitle" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "ENTITY INSPECTOR"
+
+[node name="AutoArrangeButton" type="Button" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Auto-Arrange Layout"
+
+[node name="HSeparator" type="HSeparator" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="NameGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/NameGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Entity Name"
+
+[node name="NodeNameLabel" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/NameGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Select a node"
+autowrap_mode = 2
+
+[node name="TypeGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/TypeGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Classification Override"
+
+[node name="TypeDropdown" type="OptionButton" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/TypeGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PreviewGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/PreviewGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Description / Content Preview"
+
+[node name="ContentPreview" type="RichTextLabel" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/PreviewGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true
+
+[node name="ConnectionsGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/ConnectionsGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Active Connections"
+
+[node name="ConnectionsScroll" type="ScrollContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/ConnectionsGroup"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="ConnectionsList" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/ConnectionsGroup/ConnectionsScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="AddConnectionGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/AddConnectionGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Add Connection"
+
+[node name="ConnectTargetDropdown" type="OptionButton" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/AddConnectionGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ConnectRelationDropdown" type="OptionButton" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/AddConnectionGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AddConnectionButton" type="Button" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/AddConnectionGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+ Connect"
+
+[node name="HSeparator2" type="HSeparator" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="StartParamsGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Starting Parameters"
+
+[node name="LocGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup/LocGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Starting Location"
+
+[node name="StartingLocDropdown" type="OptionButton" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup/LocGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CharGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Label" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup/CharGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Starting Character"
+
+[node name="StartingCharDropdown" type="OptionButton" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/StartParamsGroup/CharGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+
