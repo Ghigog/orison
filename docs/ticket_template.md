@@ -1,6 +1,6 @@
 # Ticket Template
 
-Copy this template to create new tickets in [backlog.md](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/backlog.md) or [in_progress.md](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/in_progress.md).
+Copy this template to create new tickets in [backlog.md](backlog.md) or [in_progress.md](in_progress.md).
 
 ---
 
