@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  GODOT_VERSION: "4.6-stable"
+
+jobs:
+  tests:
+    name: Godot test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot headless binary
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Download Godot headless binary
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot-bin
+          curl -fL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot-bin
+          mv ~/godot-bin/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+
+      - name: Add Godot to PATH
+        run: echo "$HOME/godot-bin" >> "$GITHUB_PATH"
+
+      - name: Import project assets
+        # Cold checkouts have no .godot import cache. Godot can behave as
+        # though resources are missing (or fail the run entirely) if the
+        # test scene is booted before an import pass has ever happened.
+        run: godot --headless --path . --import
+        continue-on-error: true
+
+      - name: Run test suite
+        id: run_tests
+        run: |
+          set +e
+          godot --headless --path . res://tests/TestRunner.tscn 2>&1 | tee godot_test_output.log
+          echo "godot_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Verify results
+        run: |
+          godot_exit="${{ steps.run_tests.outputs.godot_exit }}"
+          echo "Godot process exit code: $godot_exit"
+
+          summary_line="$(grep -E 'Test Results: [0-9]+ / [0-9]+ Tests Passed' godot_test_output.log || true)"
+          if [ -z "$summary_line" ]; then
+            echo "::error::No 'Test Results: N / M Tests Passed' summary line found in output. The suite likely crashed before completing."
+            exit 1
+          fi
+          echo "Summary line: $summary_line"
+
+          passed="$(echo "$summary_line" | grep -oE '[0-9]+' | sed -n '1p')"
+          total="$(echo "$summary_line" | grep -oE '[0-9]+' | sed -n '2p')"
+
+          # TestRunnerNode.gd already calls get_tree().quit(0 if pass_count ==
+          # total_tests else 1) on its final line, so the exit code alone
+          # should be sufficient. Godot has historically been inconsistent
+          # about propagating exit codes through the headless binary across
+          # versions and platforms, so this step trusts the parsed summary
+          # line as the source of truth and additionally checks the process
+          # exit code as a second, independent signal. Either one failing
+          # fails the job.
+          if [ "$passed" != "$total" ]; then
+            echo "::error::Test summary reports $passed / $total tests passed."
+            exit 1
+          fi
+
+          if [ "$godot_exit" != "0" ]; then
+            echo "::error::Test summary reports all $total tests passed, but the Godot process exited with code $godot_exit. Treating this as a failure since a nonzero exit on a fully-passing run indicates the exit code is not trustworthy on this runner."
+            exit 1
+          fi
+
+          echo "All $total tests passed and the process exit code was 0."
+
+  lint:
+    name: Lint (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The codebase has never been linted; the first run is expected to
+    # surface a large number of findings. This job is intentionally
+    # non-blocking (see the follow-up triage issue) rather than gating on
+    # a 19,600-line reformat done in the same change as CI setup.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install gdtoolkit
+        run: pip install "gdtoolkit==4.*"
+
+      - name: gdformat --check
+        run: gdformat --check src/ tests/
+
+      - name: gdlint
+        run: gdlint src/ tests/
