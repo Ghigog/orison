@@ -6,6 +6,7 @@ Orison is a multiplatform (PC, Mac, Mobile) game engine built in Godot 4.x. It p
 
 For details on the project design, developer/agent guides, and backlog tracking, see the following key documents:
 
+- **[Migration Plan](docs/migration_plan.md)**: Ordered plan for moving off Godot to a Rust core with a Tauri 2 desktop shell, with phase-by-phase exit criteria.
 - **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
 - **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
 - **[Gemini Agent Guide](gemini.md)**: Guide for AI agents to locate specific features, find codebase patterns, and maintain modular development.
