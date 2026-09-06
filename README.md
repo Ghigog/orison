@@ -6,15 +6,15 @@ Orison is a multiplatform (PC, Mac, Mobile) game engine built in Godot 4.x. It p
 
 For details on the project design, developer/agent guides, and backlog tracking, see the following key documents:
 
-- **[Architecture](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
-- **[Design Philosophy & Language](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
-- **[Gemini Agent Guide](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/gemini.md)**: Guide for AI agents to locate specific features, find codebase patterns, and maintain modular development.
-- **[Research Case Studies](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/research.md)**: Deep dive into market platforms, Nomi.AI memory system, and takeaways.
-- **[Technical Architecture Proposal](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/proposal.md)**: Details on SQLite databases, desktop passthrough, and local model mitigations.
-- **[Emotion System](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/emotions.md)**: Tri-Dimensional Emotion System logic, relevance flags, and visual feedback mapping.
-- **[Backlog](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/backlog.md)**: Feature roadmap and list of planned tickets.
-- **[In Progress](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/in_progress.md)**: Active tickets currently under development.
-- **[Done](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/done.md)**: Log of completed tickets.
+- **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
+- **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
+- **[Gemini Agent Guide](gemini.md)**: Guide for AI agents to locate specific features, find codebase patterns, and maintain modular development.
+- **[Research Case Studies](docs/research.md)**: Deep dive into market platforms, Nomi.AI memory system, and takeaways.
+- **[Technical Architecture Proposal](docs/proposal.md)**: Details on SQLite databases, desktop passthrough, and local model mitigations.
+- **[Emotion System](docs/emotions.md)**: Tri-Dimensional Emotion System logic, relevance flags, and visual feedback mapping.
+- **[Backlog](docs/backlog.md)**: Feature roadmap and list of planned tickets.
+- **[In Progress](docs/in_progress.md)**: Active tickets currently under development.
+- **[Done](docs/done.md)**: Log of completed tickets.
 
 ## Getting Started
 
