@@ -54,16 +54,39 @@ It prints `[PASS]` / `[FAIL]` per test, a summary line, and exits `0` only if ev
 
 Do them in this order. 0.2 is the highest-value change in the phase, but 0.1 comes first so that the fix is protected by CI the moment it lands.
 
-| # | Task | Effort | Risk |
-|---|---|---|---|
-| 0.1 | Continuous integration | Medium | Low |
-| 0.2 | Fix defect B-1 (context budget) | Small | **Medium — read carefully** |
-| 0.3 | Repair documentation portability | Small | None |
-| 0.4 | Replace agent guidance files | Medium | Low |
-| 0.5 | Move tickets to GitHub Issues | Medium | Low |
-| 0.6 | Declare the feature freeze | Trivial | None |
+| # | Task | Effort | Risk | Status |
+|---|---|---|---|---|
+| 0.1a | Make environment-dependent tests hermetic | Small | Low | **Done** |
+| 0.1 | Continuous integration | Medium | Low | Open |
+| 0.2 | Fix defect B-1 (context budget) | Small | Medium | **Done** |
+| 0.3 | Repair documentation portability | Small | None | Open |
+| 0.4 | Replace agent guidance files | Medium | Low | **Done** |
+| 0.5 | Move tickets to GitHub Issues | Medium | Low | Open |
+| 0.6 | Declare the feature freeze | Trivial | None | Open |
 
 Commit each task separately. Do not bundle them.
+
+### Task 0.1a (done) — read this before doing 0.1
+
+Three of the 46 tests failed on a clean checkout and would have failed on every
+CI run. They are fixed, but the reasons matter for how you write the workflow:
+
+- `test_atomic_writes_and_upgrade` wrote a fixture into `user://adventures/`
+  before any `SaveManager` call created that directory. Every CI run starts with
+  a cold `user://`.
+- Two `LLMStreamRequest` timeout tests pointed at `192.0.2.1` (RFC 5737
+  TEST-NET-1) and depended on packets being **blackholed** so elapsed time would
+  accumulate. Sandboxed runners **refuse** instantly instead, so the
+  connection-error path ran rather than the timeout path.
+
+Both classes of failure are invisible on a developer machine and certain in CI.
+When you add the workflow, confirm the suite is green on a genuinely cold runner
+rather than trusting a local pass.
+
+Verified with Godot 4.6.stable headless: 46/46 on two cold runs and one warm run,
+exit code 0. **The runner's exit code does propagate correctly**, so 0.1 does not
+need the fallback output-parsing described below; keep it only if you find
+otherwise on the CI runner.
 
 ---
 
@@ -89,7 +112,11 @@ Commit each task separately. Do not bundle them.
 
 ---
 
-## Task 0.2 — Fix defect B-1
+## Task 0.2 — Fix defect B-1 (DONE, retained for context)
+
+> Completed. The record below explains what was wrong and what changed; you do
+> not need to act on it, but the rules it establishes about context lengths and
+> budgets are now enforced in `AGENTS.md` and apply to any code you write.
 
 **Read [migration_plan.md](migration_plan.md) Appendix B-1 in full before editing anything.**
 
@@ -163,6 +190,16 @@ Note that token counts here still use the `length / 4` heuristic in `PromptBuild
 
 They appear as `file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/path/to/file.gd` and as unencoded variants with literal spaces.
 
+**Scope has narrowed since this was written.** Task 0.4 is complete: `gemini.md`
+and `.agents/AGENTS.md` are deleted, and the one live absolute path inside
+`design_philosophy.md` that pointed at the old feature map is already fixed. Your
+remaining targets are `ARCHITECTURE.md`, `docs/ticket_template.md`,
+`docs/orison_audit.md`, and any residue in `design_philosophy.md`.
+
+`docs/backlog.md` and `docs/in_progress.md` are owned by Task 0.5 and
+`docs/done.md` is frozen history; leave all three alone. Re-run the grep below to
+get the live list rather than trusting these filenames.
+
 **Fix**: replace with repository-relative links. Mind the directory depth: a link from `docs/foo.md` to a root file needs `../`, and one to a sibling in `docs/` needs no prefix.
 
 Find them all:
@@ -175,7 +212,11 @@ grep -rn "Users/dylangrowcoot" --include='*.md' .
 
 ---
 
-## Task 0.4 — Replace the agent guidance files
+## Task 0.4 — Replace the agent guidance files (DONE, retained for context)
+
+> Completed. `AGENTS.md` and `CLAUDE.md` exist at the repository root;
+> `gemini.md` and `.agents/AGENTS.md` are deleted; `README.md` and
+> `design_philosophy.md` are repointed.
 
 **Problem**: guidance is split across `gemini.md` (118 lines, addressed to a specific tool) and `.agents/AGENTS.md` (5 lines, UI rules only). Neither is at the root, and `AGENTS.md` at the repository root is now the cross-tool convention.
 

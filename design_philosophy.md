@@ -268,7 +268,7 @@ When writing UI scenes or editing code under `res://src/ui/`, developers must ad
 
 * This design language dictates the visual presentation layer overseen by the **UI Presenter** specified in [ARCHITECTURE.md Section 2.8](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#28-ui-presenter--onboarding-ressrui-resautoload-resscenesui).
 * All tickets regarding UI, including [TKT001 (Implement Responsive Full-Screen Dialogue UI)](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/backlog.md#L9-L30), must use this document as their visual and interactive benchmark.
-* New visual elements or animations should update the **Feature Map** inside [gemini.md](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/gemini.md#L14-L22) to trace where style logic is implemented.
+* New visual elements or animations should follow the module responsibilities described in [AGENTS.md](AGENTS.md), which is the canonical guide to where style logic lives.
 
 ---
 

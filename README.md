@@ -9,7 +9,7 @@ For details on the project design, developer/agent guides, and backlog tracking,
 - **[Migration Plan](docs/migration_plan.md)**: Ordered plan for moving off Godot to a Rust core with a Tauri 2 desktop shell, with phase-by-phase exit criteria.
 - **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
 - **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
-- **[Gemini Agent Guide](gemini.md)**: Guide for AI agents to locate specific features, find codebase patterns, and maintain modular development.
+- **[Agent Guide](AGENTS.md)**: Canonical guidance for developers and AI agents: constraints, layout, rules, and how to run the suite.
 - **[Research Case Studies](docs/research.md)**: Deep dive into market platforms, Nomi.AI memory system, and takeaways.
 - **[Technical Architecture Proposal](docs/proposal.md)**: Details on SQLite databases, desktop passthrough, and local model mitigations.
 - **[Emotion System](docs/emotions.md)**: Tri-Dimensional Emotion System logic, relevance flags, and visual feedback mapping.
@@ -52,7 +52,7 @@ For details on the project design, developer/agent guides, and backlog tracking,
 ├── tests/                   # Integration and unit test runner scenes
 ├── ARCHITECTURE.md          # Project architecture design document
 ├── design_philosophy.md     # Unified visual language and component styling
-├── gemini.md                # Agent guide and modular feature map
+├── AGENTS.md                # Canonical developer/agent guide
 └── project.godot            # Godot project settings file
 ```
 
