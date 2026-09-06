@@ -490,7 +490,11 @@ func send_player_input(input_text: String) -> void:
 		func(chunk: String):
 			stream_parser.ingest_chunk(chunk),
 		_on_npc_stream_completed,
-		_on_npc_stream_failed
+		_on_npc_stream_failed,
+		300.0,
+		false,
+		LLMClient.RequestPriority.HIGH,
+		LLMClient.ROLE_CHARACTER
 	)
 
 func _on_npc_stream_completed(full_response: String) -> void:
@@ -637,7 +641,11 @@ func retry_last_input() -> void:
 		func(chunk: String):
 			stream_parser.ingest_chunk(chunk),
 		_on_npc_stream_completed,
-		_on_npc_stream_failed
+		_on_npc_stream_failed,
+		300.0,
+		false,
+		LLMClient.RequestPriority.HIGH,
+		LLMClient.ROLE_CHARACTER
 	)
 
 func select_character(char_id: String) -> void:
@@ -722,7 +730,7 @@ func _trigger_background_director() -> void:
 	# 2. Build the DM prompt with findings injected
 	var dm_prompt = await prompt_builder.build_world_builder_prompt(_last_player_input, active_character_id, research_findings)
 	EventBus.director_prompt_generated.emit(dm_prompt)
-	LLMClient.send_custom_request(dm_prompt, LLMClient.world_builder_model, _on_background_director_completed)
+	LLMClient.send_custom_request(dm_prompt, LLMClient.world_builder_model, _on_background_director_completed, 1500.0, LLMClient.RequestPriority.LOW, false, LLMClient.ROLE_WORLD_BUILDER)
 
 # Inner class carrier to wrap custom requests in an awaitable co-routine
 class ReActSignalCarrier extends RefCounted:

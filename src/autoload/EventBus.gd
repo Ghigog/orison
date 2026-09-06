@@ -15,3 +15,8 @@ signal character_state_updated(character_id: String)
 signal scan_progress(current: int, total: int)
 signal character_speaking(character_id: String)
 
+## Emitted when an assembled prompt exceeds its token budget. The model will
+## silently drop the oldest context (the system prompt) when this happens, so
+## the UI should surface it rather than let it pass unnoticed.
+signal prompt_budget_exceeded(role: String, tokens: int, limit: int)
+

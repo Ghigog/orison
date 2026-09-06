@@ -1105,6 +1105,62 @@ func test_prompt_budgeting() -> bool:
 		print("[FAIL] History length compression failed: ", compressed2)
 		return false
 		
+	# 2b. Budget fractions must never sum above 1.0 (defect B-1).
+	# They previously summed to 1.05 for the character agent, against a limit
+	# that was itself double the window LLMClient actually served.
+	for role_key in PromptBuilder.BUDGET_FRACTIONS.keys():
+		var total = 0.0
+		for fraction in PromptBuilder.BUDGET_FRACTIONS[role_key]:
+			total += fraction
+		if total > 1.0001:
+			print("[FAIL] Budget fractions for '%s' sum to %f, above 1.0" % [role_key, total])
+			return false
+
+	# 2c. The prompt budget must leave room for the response, and must agree
+	# with the context length LLMClient actually sends as num_ctx.
+	var saved_wb_ctx = LLMClient.world_builder_context
+	var saved_char_ctx = LLMClient.character_context
+	var saved_wb_model = LLMClient.world_builder_model
+	var saved_char_model = LLMClient.character_model
+
+	for role in [LLMClient.ROLE_CHARACTER, LLMClient.ROLE_WORLD_BUILDER]:
+		var ctx = LLMClient.get_context_length(role)
+		var budget = LLMClient.get_prompt_budget(role)
+		if budget >= ctx:
+			print("[FAIL] Prompt budget %d for role '%s' leaves no room for the response (context %d)" % [budget, role, ctx])
+			return false
+		if ctx - budget != LLMClient.PROMPT_RESPONSE_RESERVE:
+			print("[FAIL] Response reserve for role '%s' is %d, expected %d" % [role, ctx - budget, LLMClient.PROMPT_RESPONSE_RESERVE])
+			return false
+
+	# 2d. Configuring both roles to the same model must still yield the correct
+	# context length for each. Selection is by role, not by model name.
+	LLMClient.world_builder_model = "same-model"
+	LLMClient.character_model = "same-model"
+	LLMClient.world_builder_context = 8192
+	LLMClient.character_context = 4096
+
+	if LLMClient.get_context_length(LLMClient.ROLE_WORLD_BUILDER) != 8192:
+		print("[FAIL] World builder context resolved to %d with a shared model name" % LLMClient.get_context_length(LLMClient.ROLE_WORLD_BUILDER))
+		LLMClient.world_builder_context = saved_wb_ctx
+		LLMClient.character_context = saved_char_ctx
+		LLMClient.world_builder_model = saved_wb_model
+		LLMClient.character_model = saved_char_model
+		return false
+
+	if LLMClient.get_context_length(LLMClient.ROLE_CHARACTER) != 4096:
+		print("[FAIL] Character context resolved to %d with a shared model name" % LLMClient.get_context_length(LLMClient.ROLE_CHARACTER))
+		LLMClient.world_builder_context = saved_wb_ctx
+		LLMClient.character_context = saved_char_ctx
+		LLMClient.world_builder_model = saved_wb_model
+		LLMClient.character_model = saved_char_model
+		return false
+
+	LLMClient.world_builder_context = saved_wb_ctx
+	LLMClient.character_context = saved_char_ctx
+	LLMClient.world_builder_model = saved_wb_model
+	LLMClient.character_model = saved_char_model
+
 	# 3. Test lore context budgeting in KnowledgeGraphManager
 	var temp_graph = KnowledgeGraphManager.new()
 	# Set a mock graph in CampaignState

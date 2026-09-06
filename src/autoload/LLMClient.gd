@@ -18,6 +18,33 @@ var dm_model: String:
 		world_builder_model = val
 var character_model: String = "llama3"
 
+## Context window sizes, in tokens, for each model role.
+##
+## These are the single source of truth: LLMClient sends them as `num_ctx` and
+## PromptBuilder budgets against them via get_prompt_budget(). Nothing else may
+## hardcode a context length. Previously PromptBuilder assumed 8192 for the
+## character agent while this file sent num_ctx = 4096, so every NPC prompt was
+## budgeted for twice the window it was actually served. See docs/migration_plan.md
+## Appendix B-1.
+##
+## Both default to 8192. Raising either costs KV cache memory on the GPU, which
+## matters because keep_alive is currently -1 and both models stay resident.
+var world_builder_context: int = 8192
+var character_context: int = 8192
+
+## Tokens held back from the prompt budget so the model has room to answer.
+## The character agent emits a JSON object with thinking, narration and dialogue
+## fields and can be verbose. This reserve is deliberately generous because
+## PromptBuilder still estimates tokens with a characters/4 heuristic rather than
+## a real tokenizer (defect B-4, scheduled for migration Phase 2.5).
+const PROMPT_RESPONSE_RESERVE: int = 1024
+
+## Model roles. Pass one of these to the send_* functions so the correct context
+## length is used regardless of how the models happen to be named.
+const ROLE_AUTO: String = ""
+const ROLE_CHARACTER: String = "character"
+const ROLE_WORLD_BUILDER: String = "world_builder"
+
 # Local Image Generation configuration
 var image_gen_enabled: bool = false
 var image_gen_provider: String = "automatic1111"
@@ -159,6 +186,8 @@ func load_config() -> void:
 				save_config()
 			world_builder_model = data.get("world_builder_model", "llama3")
 			character_model = data.get("character_model", "llama3")
+			world_builder_context = int(data.get("world_builder_context", 8192))
+			character_context = int(data.get("character_context", 8192))
 			
 			# Image generation configs
 			image_gen_enabled = data.get("image_gen_enabled", false)
@@ -189,6 +218,8 @@ func save_config() -> void:
 			"api_url": api_url,
 			"world_builder_model": world_builder_model,
 			"character_model": character_model,
+			"world_builder_context": world_builder_context,
+			"character_context": character_context,
 			"image_gen_enabled": image_gen_enabled,
 			"image_gen_provider": image_gen_provider,
 			"image_gen_url": image_gen_url,
@@ -202,16 +233,43 @@ func save_config() -> void:
 		file.store_string(JSON.stringify(data, "\t"))
 		file.close()
 
+## Returns the context window size for a model role.
+##
+## Pass ROLE_CHARACTER or ROLE_WORLD_BUILDER explicitly wherever the role is
+## known. ROLE_AUTO falls back to matching the model name, which is ambiguous
+## when both roles are configured to the same model: the name alone cannot say
+## which role the request is for. That ambiguity is harmless while both context
+## values are equal, and is why they default to the same number, but callers
+## should still pass the role.
+func get_context_length(role: String = ROLE_AUTO, model_name: String = "") -> int:
+	match role:
+		ROLE_CHARACTER:
+			return character_context
+		ROLE_WORLD_BUILDER:
+			return world_builder_context
+		_:
+			if not model_name.is_empty() and model_name == character_model:
+				return character_context
+			return world_builder_context
+
+
+## Returns the tokens available for prompt content: the context window minus the
+## reserve held back for the model's response. PromptBuilder budgets against this,
+## never against the raw context length.
+func get_prompt_budget(role: String = ROLE_AUTO, model_name: String = "") -> int:
+	return maxi(get_context_length(role, model_name) - PROMPT_RESPONSE_RESERVE, 512)
+
+
 ## Returns true if the LLM client is busy processing, streaming, or running a stream request
 func is_busy() -> bool:
 	return _queue_processing or _is_streaming or (_active_stream_req != null)
 
 
 ## Sends a prompt to the local LLM generation endpoint (supports streaming)
-func send_prompt(prompt: String, model_name: String = "", custom_url: String = "", stream: bool = true) -> void:
+func send_prompt(prompt: String, model_name: String = "", custom_url: String = "", stream: bool = true, role: String = ROLE_AUTO) -> void:
 	var active_model = model_name if not model_name.is_empty() else character_model
 	var active_url = custom_url if not custom_url.is_empty() else api_url.rstrip("/").path_join("api/generate")
-	var active_ctx = 4096 if active_model == character_model else 8192
+	var active_ctx = get_context_length(role, active_model)
 	
 	print("[LLMClient] Sending request to model '%s' (Prompt length: %d chars, stream: %s)..." % [active_model, prompt.length(), str(stream)])
 	
@@ -473,13 +531,13 @@ func _process_queue() -> void:
 	
 	match req.type:
 		"custom":
-			_raw_send_custom_request(req.prompt, req.model_name, req.callback, req.timeout, req.get("json_mode", false))
+			_raw_send_custom_request(req.prompt, req.model_name, req.callback, req.timeout, req.get("json_mode", false), req.get("role", ROLE_AUTO))
 		"custom_vision":
-			_raw_send_custom_vision_request(req.prompt, req.image_path, req.model_name, req.callback, req.timeout)
+			_raw_send_custom_vision_request(req.prompt, req.image_path, req.model_name, req.callback, req.timeout, req.get("role", ROLE_AUTO))
 		"custom_stream":
-			_raw_send_custom_stream_request(req.prompt, req.model_name, req.on_chunk, req.on_completed, req.on_failed, req.timeout, req.json_mode)
+			_raw_send_custom_stream_request(req.prompt, req.model_name, req.on_chunk, req.on_completed, req.on_failed, req.timeout, req.json_mode, req.get("role", ROLE_AUTO))
 		"custom_vision_stream":
-			_raw_send_custom_vision_stream_request(req.prompt, req.image_path, req.model_name, req.on_chunk, req.on_completed, req.on_failed, req.timeout)
+			_raw_send_custom_vision_stream_request(req.prompt, req.image_path, req.model_name, req.on_chunk, req.on_completed, req.on_failed, req.timeout, req.get("role", ROLE_AUTO))
 		"warmup":
 			_raw_warmup_model(req.model_name, req.callback)
 
@@ -488,7 +546,7 @@ func _process_queue() -> void:
 # ==============================================================================
 
 ## Sends a custom prompt asynchronously using a temporary HTTPRequest node and returns the response via a callback (non-streaming, with keep_alive)
-func send_custom_request(prompt: String, model_name: String, callback: Callable, timeout: float = 1500.0, priority: int = RequestPriority.LOW, json_mode: bool = false) -> void:
+func send_custom_request(prompt: String, model_name: String, callback: Callable, timeout: float = 1500.0, priority: int = RequestPriority.LOW, json_mode: bool = false, role: String = ROLE_AUTO) -> void:
 	if mock_response_handler.is_valid():
 		mock_response_handler.call(prompt, model_name, callback, timeout)
 		return
@@ -505,11 +563,12 @@ func send_custom_request(prompt: String, model_name: String, callback: Callable,
 		"callback": wrapped_callback,
 		"timeout": timeout,
 		"priority": priority,
-		"json_mode": json_mode
+		"json_mode": json_mode,
+		"role": role
 	})
 
 ## Sends a custom prompt with an image asynchronously using a temporary HTTPRequest node for vision tasks
-func send_custom_vision_request(prompt: String, image_path: String, model_name: String, callback: Callable, timeout: float = 1500.0, priority: int = RequestPriority.LOW) -> void:
+func send_custom_vision_request(prompt: String, image_path: String, model_name: String, callback: Callable, timeout: float = 1500.0, priority: int = RequestPriority.LOW, role: String = ROLE_AUTO) -> void:
 	var wrapped_callback = func(success: bool, response_text: String, error_msg: String):
 		if callback.is_valid():
 			callback.call(success, response_text, error_msg)
@@ -522,11 +581,12 @@ func send_custom_vision_request(prompt: String, image_path: String, model_name: 
 		"model_name": model_name,
 		"callback": wrapped_callback,
 		"timeout": timeout,
-		"priority": priority
+		"priority": priority,
+		"role": role
 	})
 
 ## Sends a custom prompt asynchronously and streams the response via callbacks.
-func send_custom_stream_request(prompt: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, json_mode: bool = false, priority: int = RequestPriority.HIGH) -> void:
+func send_custom_stream_request(prompt: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, json_mode: bool = false, priority: int = RequestPriority.HIGH, role: String = ROLE_AUTO) -> void:
 	var wrapped_completed = func(full_text: String):
 		if on_completed.is_valid():
 			on_completed.call(full_text)
@@ -546,11 +606,12 @@ func send_custom_stream_request(prompt: String, model_name: String, on_chunk: Ca
 		"on_failed": wrapped_failed,
 		"timeout": timeout,
 		"json_mode": json_mode,
-		"priority": priority
+		"priority": priority,
+		"role": role
 	})
 
 ## Sends a custom prompt with an image asynchronously and streams the response via callbacks.
-func send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, priority: int = RequestPriority.HIGH) -> void:
+func send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, priority: int = RequestPriority.HIGH, role: String = ROLE_AUTO) -> void:
 	var wrapped_completed = func(full_text: String):
 		if on_completed.is_valid():
 			on_completed.call(full_text)
@@ -591,7 +652,7 @@ func warmup_model(model_name: String, callback: Callable = Callable(), priority:
 # Raw Execution Methods
 # ==============================================================================
 
-func _raw_send_custom_request(prompt: String, model_name: String, callback: Callable, timeout: float = 1500.0, json_mode: bool = false) -> void:
+func _raw_send_custom_request(prompt: String, model_name: String, callback: Callable, timeout: float = 1500.0, json_mode: bool = false, role: String = ROLE_AUTO) -> void:
 	var temp_http = HTTPRequest.new()
 	_active_http_node = temp_http
 	temp_http.timeout = timeout
@@ -629,7 +690,7 @@ func _raw_send_custom_request(prompt: String, model_name: String, callback: Call
 		temp_http.queue_free()
 	)
 	
-	var active_ctx = 4096 if active_model == character_model else 8192
+	var active_ctx = get_context_length(role, active_model)
 	
 	var headers = ["Content-Type: application/json"]
 	var req_body = {
@@ -653,7 +714,7 @@ func _raw_send_custom_request(prompt: String, model_name: String, callback: Call
 		callback.call(false, "", "Failed to start HTTP request.")
 		temp_http.queue_free()
 
-func _raw_send_custom_vision_request(prompt: String, image_path: String, model_name: String, callback: Callable, timeout: float = 1500.0) -> void:
+func _raw_send_custom_vision_request(prompt: String, image_path: String, model_name: String, callback: Callable, timeout: float = 1500.0, role: String = ROLE_AUTO) -> void:
 	var temp_http = HTTPRequest.new()
 	_active_http_node = temp_http
 	temp_http.timeout = timeout
@@ -690,7 +751,7 @@ func _raw_send_custom_vision_request(prompt: String, image_path: String, model_n
 		callback.call(success, response_text, error_msg)
 		temp_http.queue_free()
 	)
-	var active_ctx = 4096 if active_model == character_model else 8192
+	var active_ctx = get_context_length(role, active_model)
 	
 	var base64_images: Array[String] = []
 	if not image_path.is_empty() and FileAccess.file_exists(image_path):
@@ -724,14 +785,14 @@ func _raw_send_custom_vision_request(prompt: String, image_path: String, model_n
 		callback.call(false, "", "Failed to start HTTP request.")
 		temp_http.queue_free()
 
-func _raw_send_custom_stream_request(prompt: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, json_mode: bool = false) -> void:
+func _raw_send_custom_stream_request(prompt: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, json_mode: bool = false, role: String = ROLE_AUTO) -> void:
 	var active_model = model_name if not model_name.is_empty() else world_builder_model
 	
 	# Estimate tokens (~4 characters per token) + leave 2048 tokens for generation
 	var estimated_tokens = int(ceil(prompt.length() / 4.0)) + 2048
 	# Determine context limit based on model and clamp
-	var ctx_limit = 4096 if active_model == character_model else 8192
-	var active_ctx = clampi(estimated_tokens, 4096, ctx_limit)
+	var ctx_limit = get_context_length(role, active_model)
+	var active_ctx = clampi(estimated_tokens, mini(4096, ctx_limit), ctx_limit)
 	
 	var stream_req = LLMStreamRequest.new()
 	add_child(stream_req)
@@ -742,9 +803,9 @@ func _raw_send_custom_stream_request(prompt: String, model_name: String, on_chun
 	)
 	stream_req.start(api_url, prompt, active_model, active_ctx, on_chunk, on_completed, on_failed, timeout, [], json_mode)
 
-func _raw_send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0) -> void:
+func _raw_send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, role: String = ROLE_AUTO) -> void:
 	var active_model = model_name if not model_name.is_empty() else world_builder_model
-	var active_ctx = 4096 if active_model == character_model else 8192
+	var active_ctx = get_context_length(role, active_model)
 	
 	var base64_images: Array[String] = []
 	if not image_path.is_empty() and FileAccess.file_exists(image_path):

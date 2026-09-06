@@ -26,6 +26,28 @@ func _init(graph: KnowledgeGraphManager, ep_builder: EmotionPromptBuilder) -> vo
 static func estimate_tokens(text: String) -> int:
 	return int(ceil(text.length() / 4.0))
 
+
+## Fractions of the prompt budget allocated to each context block, per role.
+## Exposed so tests can assert they never sum above 1.0. Changing a fraction
+## here must be matched in the corresponding build_* function.
+const BUDGET_FRACTIONS := {
+	"character": [0.30, 0.30, 0.25, 0.15],
+	"world_builder": [0.30, 0.30, 0.30, 0.10]
+}
+
+
+## Reports a prompt that overflowed its budget.
+##
+## This used to be a push_warning(), which is invisible outside the editor and
+## was therefore silently discarded in shipped builds while the model quietly
+## dropped the front of the context (the system prompt and character profile).
+static func _report_overflow(role: String, final_tokens: int, limit: int) -> void:
+	var msg = "[PromptBuilder] Compiled %s prompt is %d tokens, over the %d token budget. The model will truncate the oldest context, which is the system prompt." % [role, final_tokens, limit]
+	printerr(msg)
+	push_warning(msg)
+	if Engine.has_singleton("EventBus") or EventBus != null:
+		EventBus.prompt_budget_exceeded.emit(role, final_tokens, limit)
+
 ## Compress history content by stripping parenthetical actions and truncating
 static func compress_history_content(content: String) -> String:
 	var regex = RegEx.new()
@@ -139,13 +161,19 @@ static func get_emotion_reflection_prompt_for_id(char_id: String, narration_text
 
 ## Builds the fully synthesized prompt context to send to the local LLM
 func build_prompt(char_id: String, user_prompt: String, is_director_busy: bool = false) -> String:
-	var context_limit = 8192 # NPC character model context limit
+	# Budget against the character model's real context window, minus the reserve
+	# held back for the response. LLMClient owns both numbers and sends the same
+	# context length as num_ctx, so the two can no longer disagree. This file must
+	# never hardcode a context size. See docs/migration_plan.md Appendix B-1.
+	var context_limit = LLMClient.get_prompt_budget(LLMClient.ROLE_CHARACTER)
 	
-	# Budgets (in tokens)
-	var sys_budget = int(context_limit * 0.30)  # 2457 tokens
-	var id_budget = int(context_limit * 0.30)   # 2457 tokens
-	var hist_budget = int(context_limit * 0.30) # 2457 tokens
-	var lore_budget = int(context_limit * 0.15) # 1228 tokens
+	# Budgets (in tokens). These fractions must sum to at most 1.0; they
+	# previously summed to 1.05, against a limit that was itself twice the
+	# window actually served.
+	var sys_budget = int(context_limit * 0.30)
+	var id_budget = int(context_limit * 0.30)
+	var hist_budget = int(context_limit * 0.25)
+	var lore_budget = int(context_limit * 0.15)
 	
 	# 1. Truncate biography and writing style if needed to fit NPC Identity budget.
 	# Base NPC identity is ~300 tokens. Remaining budget for biography + writing style is ~928 tokens (~3712 characters).
@@ -311,19 +339,20 @@ func build_prompt(char_id: String, user_prompt: String, is_director_busy: bool =
 	# Warn if overall budget is exceeded
 	var final_tokens = estimate_tokens(prompt)
 	if final_tokens > context_limit:
-		push_warning("[PromptBuilder] WARNING: Compiled character prompt (%d tokens) exceeds target context size (%d tokens)!" % [final_tokens, context_limit])
+		_report_overflow("character", final_tokens, context_limit)
 		
 	return prompt
 
 ## Builds the fully synthesized prompt context to send to the World Builder / Dungeon Master
 func build_world_builder_prompt(user_prompt: String, active_char_id: String = "", research_findings: String = "") -> String:
-	var context_limit = 8192 # World builder model context limit
+	# See the note in build_prompt(). Same rule: no hardcoded context sizes.
+	var context_limit = LLMClient.get_prompt_budget(LLMClient.ROLE_WORLD_BUILDER)
 	
-	# Budgets (in tokens)
-	var sys_budget = int(context_limit * 0.30)  # 2457 tokens
-	var id_budget = int(context_limit * 0.30)   # 2457 tokens
-	var hist_budget = int(context_limit * 0.30) # 2457 tokens
-	var lore_budget = int(context_limit * 0.10) # 819 tokens
+	# Budgets (in tokens). Fractions sum to 1.0.
+	var sys_budget = int(context_limit * 0.30)
+	var id_budget = int(context_limit * 0.30)
+	var hist_budget = int(context_limit * 0.30)
+	var lore_budget = int(context_limit * 0.10)
 	
 	# 1. System instructions
 	var system_prompt = SystemPrompts.get_world_builder_prompt() + "\n"
@@ -479,7 +508,7 @@ func build_world_builder_prompt(user_prompt: String, active_char_id: String = ""
 	# Warn if overall budget is exceeded
 	var final_tokens = estimate_tokens(prompt)
 	if final_tokens > context_limit:
-		push_warning("[PromptBuilder] WARNING: Compiled world builder prompt (%d tokens) exceeds target context size (%d tokens)!" % [final_tokens, context_limit])
+		_report_overflow("world builder", final_tokens, context_limit)
 		
 	return prompt
 
