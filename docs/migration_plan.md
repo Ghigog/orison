@@ -208,7 +208,7 @@ Three rules govern the sequence below.
 There is no `.github/` directory. Nothing runs on push. Every agent-authored or human-authored regression lands silently, which is a direct contributor to how this project stalled.
 
 - Add `.github/workflows/ci.yml`.
-- Job 1: run the Godot test suite headlessly (`godot --headless --path . res://tests/TestRunner.tscn`), parse the runner's output, fail the job on any failed assertion. The runner currently prints results; it will need a non-zero exit code on failure.
+- Job 1: run the Godot test suite headlessly (`godot --headless --path . res://tests/TestRunner.tscn`). The runner already exits non-zero when any test fails (`TestRunnerNode.gd`, final line: `get_tree().quit(0 if pass_count == total_tests else 1)`), so CI needs no changes to the runner itself. Verify the exit code propagates through the Godot binary in headless mode rather than assuming it.
 - Job 2: `gdlint` / `gdformat --check` over `src/` and `tests/`.
 - Run on push and pull request.
 
@@ -600,6 +600,31 @@ Adding `apps/mobile` as a second Tauri target, a reduced UI for small screens, a
 ---
 
 ## Appendix B — Defects to fix during the port
+
+### B-0: Defect register
+
+Every defect below is scheduled against the phase that resolves it. Three are fixed in the current Godot build during Phase 0 because they are cheap, independent of the migration, and deliver value even if the migration never happens. The rest are resolved *by* the port rather than before it: fixing them in GDScript would mean paying for the same work twice.
+
+Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub Issues, mirror these there and keep this table as the index.
+
+| ID | Defect | Severity | Fixed in | Where | Status |
+|---|---|---|---|---|---|
+| B-1 | NPC prompts budgeted at ~2.1x the served context window | **Critical** | **Phase 0.2** | Godot build, now | Open |
+| B-11 | No continuous integration | **Critical** | **Phase 0.1** | Repository, now | Open |
+| B-12 | 62 absolute filesystem paths in documentation | Minor | **Phase 0.3** | Repository, now | Open |
+| B-2 | Chat template bypassed (`/api/generate`, concatenated prompt) | **Critical** | Phase 2.2 | Port | Open |
+| B-3 | Legacy `format: "json"` instead of schema-constrained decoding | Major | Phase 2.4 | Port | Open |
+| B-4 | Token counting by character division | Major | Phase 2.5 | Port | Open |
+| B-6 | Both models pinned in VRAM indefinitely (`keep_alive: -1`) | Major | Phase 2.2 | Port | Open |
+| B-8 | Up to 5 sequential Director calls before narration begins | Major | Phase 2.6 | Port | Open |
+| B-10 | Stale model recommendations hardcoded rather than configured | Major | Phase 2.2 | Port | Open |
+| B-5 | Frame-coupled HTTP streaming | Moderate | Phase 2.2 | Port | Open |
+| B-9 | Dense-only retrieval on a proper-noun-dense corpus | Major | Phase 3.4 | Port | Open |
+| B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | Open |
+
+**Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
+
+**Why the rest wait.** B-2 through B-10 all live in the inference and retrieval layers, which Phase 2 and Phase 3 replace wholesale. Fixing them in GDScript first would mean writing each fix twice and would delay the baseline in §1.4 for no gain. The Godot baseline is *supposed* to include these defects: that is what makes the post-migration comparison meaningful.
 
 ### B-1: NPC prompts are budgeted at twice their actual context window
 
