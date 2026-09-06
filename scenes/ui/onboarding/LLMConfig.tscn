@@ -1,0 +1,65 @@
+[gd_scene load_steps=4 format=3 uid="uid://cc00000000005"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/LLMConfig.gd" id="1_config"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings/LLMSettingsPanel.tscn" id="2_llm_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings/ImageGenSettingsPanel.tscn" id="3_image_gen_panel"]
+
+[node name="LLMConfig" type="VBoxContainer"]
+theme_override_constants/separation = 15
+script = ExtResource("1_config")
+
+[node name="ConfigTitle" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Local LLM Connection Settings"
+
+[node name="ConfigDesc" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Orison uses a local Ollama server for story generation. Configure your models below."
+autowrap_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+custom_minimum_size = Vector2(0, 260)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="FieldsVBox" type="VBoxContainer" parent="ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="LLMSettingsPanel" parent="ScrollContainer/FieldsVBox" instance=ExtResource("2_llm_panel")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HSeparator" type="HSeparator" parent="ScrollContainer/FieldsVBox"]
+layout_mode = 2
+
+[node name="ImageGenSettingsPanel" parent="ScrollContainer/FieldsVBox" instance=ExtResource("3_image_gen_panel")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="ConfigBackButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back"
+
+[node name="StartCampaignButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+theme_type_variation = &"ButtonAccent"
+text = "Craft Adventure"

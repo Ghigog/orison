@@ -11,7 +11,7 @@ The table below summarizes the market categories of AI narrative platforms:
 | Platform Category | Platforms | Key Strength | Key Weakness | Core Takeaway for Orison |
 | :--- | :--- | :--- | :--- | :--- |
 | **Sandbox & Literature** | NovelAI, AI Dungeon | Rich, creative prose; highly open-ended sandboxes | Complex manual setup; high feature degradation or safety filter issues | Provide a clean sandbox but automate lore bookkeeping behind the scenes. |
-| **Structured Game Runners** | Dunia, Dreamrunner, LlamaGen AI | Rigid narrative boundaries; state tracking; multimedia | High token costs; robotic NPC-like dialogue; long-term memory amnesia | Use structured states (e.g. SQLite databases) to enforce game consistency without sacrificing creative writing. |
+| **Structured Game Runners** | Dunia, Dreamrunner, LlamaGen AI | Rigid narrative boundaries; state tracking; multimedia | High token costs; robotic NPC-like dialogue; long-term memory amnesia | Use structured states (e.g. JSON state managers) to enforce game consistency without sacrificing creative writing. |
 | **Companion & Persona Chat** | Nomi AI, Character.AI | High-fidelity character consistency; advanced organic memory | Chat-bubble UI; sycophancy bias (AI companion wants you to win) | Implement dynamic, multi-layered memory structures (like Nomi's Mind Map) to maintain long-term narrative consistency. |
 
 ---
@@ -122,11 +122,11 @@ To build a high-fidelity local engine, Orison should adopt several key lessons f
 
 ### What to Adopt
 1. **Multi-Layered Memory Context:** Rather than a simple chat buffer, divide context into:
-   - **Active Screen State:** Current room, inventory, active quest (drawn from SQLite).
+   - **Active Screen State:** Current room, inventory, active quest (drawn from CampaignState).
    - **Immediate Context Buffer:** Recent dialogue turns.
    - **Semantic Graph Nodes:** Entity metadata resolved from a local knowledge graph.
    - **User Memory Anchors:** Markdown frontmatter parsed from the user's Obsidian files.
-2. **State-Enforced Dungeon Mastering:** Use tools/function calling so the LLM must execute CRUD operations on the SQLite database when changing the world (e.g. updating gold, inventory items, door locks). This stops the LLM from cheating or hallucinating stats.
+2. **State-Enforced Dungeon Mastering:** Use tools/function calling/JSON parsing so the LLM must return state updates to the CampaignState JSON save when changing the world (e.g. updating gold, inventory items, door locks). This stops the LLM from cheating or hallucinating stats.
 3. **Local Sovereignty:** Keeping the models local guarantees zero-logging privacy and avoids costly subscription APIs.
 
 ### What to Avoid

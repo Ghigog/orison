@@ -4,43 +4,41 @@ class_name MainViewport
 
 const CharacterListItemScene = preload("res://scenes/ui/CharacterListItem.tscn")
 const OnboardingFlowScene = preload("res://scenes/ui/OnboardingFlow.tscn")
+const NearbyCharacterListScript = preload("res://src/ui/NearbyCharacterList.gd")
+const LoadingSpinnerScript = preload("res://src/ui/LoadingSpinner.gd")
 
-# Subsystem Managers (Local to view or instantiated helpers)
-var graph_manager: KnowledgeGraphManager
-var emotion_prompt_builder: EmotionPromptBuilder
-var prompt_builder: PromptBuilder
-var emotion_engine: EmotionEngine
+# Toast & Loading indicators
+@onready var _toast_container: VBoxContainer = %ToastContainer
+@onready var _loading_indicator: PanelContainer = %LoadingIndicator
+@onready var _loading_label: Label = %LoadingIndicatorLabel
+@onready var _loading_spinner: LoadingSpinner = %LoadingIndicatorSpinner
+var _active_tasks: Dictionary = {}
 
-# Turn Phase state machine
-enum TurnState {
-	IDLE,
-	WORLD_BUILDER_THINKING,
-	CHARACTER_THINKING
-}
-var _current_turn_state: TurnState = TurnState.IDLE
-var _last_player_input: String = ""
+# Subsystem Managers / References
+var game_loop_controller: Node
 
-# Dynamic State
-var active_character_id: String = ""
-var _is_generating_beginning: bool = false
-var _fallback_beginning_text: String = ""
-var _beginning_scene_title: String = ""
-
-# Background Director & Streaming State
-var _is_director_running: bool = false
-var _stream_sender: String = ""
+# UI Display State
+var _displayed_messages: Array[Dictionary] = []
 var _stream_is_first_chunk: bool = true
-var _stream_in_dialogue_zone: bool = false
-var _stream_dialogue_buffer: String = ""
 
 # Sidebar collapse/expand animation state
 var _is_sidebar_collapsed: bool = false
 var _sidebar_tween: Tween
 
+# Background image generation state
+@onready var bg_texture_rect: TextureRect = %BackgroundTextureRect
+@onready var bg_status_overlay: AssetStatusOverlay = %BgStatusOverlay
+var _last_rendered_location: String = ""
+var _bg_fade_tween: Tween
+
+
 # Bound UI Nodes via @onready
-@onready var dialogue_label: RichTextLabel = %DialogueLabel
+@onready var dialogue_label: ScrollContainer = %DialogueLabel
 @onready var input_field: LineEdit = %InputField
 @onready var send_button: Button = %SendButton
+@onready var snapshot_button: Button = %SnapshotButton
+@onready var chat_settings_button: Button = %ChatSettingsButton
+@onready var chat_character_sheet_button: Button = %ChatCharacterSheetButton
 @onready var character_list_container: VBoxContainer = %CharacterListContainer
 @onready var character_visuals_rect: CharacterVisuals = %CharacterVisuals
 @onready var import_vault_button: Button = %ImportVaultButton
@@ -61,7 +59,12 @@ func _ready() -> void:
 	import_vault_button.pressed.connect(_on_import_pressed)
 	load_game_button.pressed.connect(_on_load_pressed)
 	input_field.text_submitted.connect(_on_input_submitted)
+	input_field.text_changed.connect(_on_input_text_changed)
+	dialogue_label.meta_clicked.connect(_on_dialogue_meta_clicked)
 	send_button.pressed.connect(_on_send_pressed)
+	snapshot_button.pressed.connect(_on_snapshot_pressed)
+	chat_settings_button.pressed.connect(_on_settings_pressed)
+	chat_character_sheet_button.pressed.connect(_on_chat_character_sheet_pressed)
 	toggle_sidebar_button.pressed.connect(_on_toggle_sidebar_pressed)
 	settings_button.pressed.connect(_on_settings_pressed)
 	mind_map_button.pressed.connect(_on_mind_map_pressed)
@@ -69,562 +72,302 @@ func _ready() -> void:
 	ThemeManager.theme_changed.connect(_on_theme_changed)
 	_on_theme_changed()
 	
-	dialogue_label.text = ""
+	# Set tooltips for icon/action buttons
+	toggle_sidebar_button.tooltip_text = "Toggle Character & Logs Sidebar"
+	settings_button.tooltip_text = "Open settings panel"
+	mind_map_button.tooltip_text = "Open campaign connection mind map"
+	import_vault_button.tooltip_text = "Import a new campaign vault folder"
+	load_game_button.tooltip_text = "Load an existing save file"
+	snapshot_button.tooltip_text = "Generate scenery snapshot"
+	chat_settings_button.tooltip_text = "Open settings panel"
+	chat_character_sheet_button.tooltip_text = "View active character details"
+	
+	dialogue_label.clear_messages()
 	dialogue_label.scroll_following = true
 	
-	# 2. Instantiate core local helpers
-	graph_manager = KnowledgeGraphManager.new()
-	emotion_prompt_builder = EmotionPromptBuilder.new()
-	prompt_builder = PromptBuilder.new(graph_manager, emotion_prompt_builder)
-	emotion_engine = EmotionEngine.new()
+	# 2. Instantiate logic controller
+	game_loop_controller = GameLoopController.new()
+	add_child(game_loop_controller)
 	
-	# 3. Connect global Autoload signals
-	LLMClient.response_received.connect(_on_ai_response_received)
-	LLMClient.request_failed.connect(_on_ai_request_failed)
-	LLMClient.response_chunk_received.connect(_on_ai_response_chunk_received)
+	# 3. Connect controller signals
+	game_loop_controller.campaign_started.connect(_on_controller_campaign_started)
+	game_loop_controller.campaign_loaded.connect(_on_controller_campaign_loaded)
+	game_loop_controller.system_message_logged.connect(_display_system_message)
+	game_loop_controller.warning_message_logged.connect(_display_warning_message)
+	game_loop_controller.error_message_logged.connect(_display_error_message)
+	game_loop_controller.message_logged.connect(_on_controller_message_logged)
+	game_loop_controller.stream_chunk_logged.connect(_on_controller_stream_chunk_logged)
+	game_loop_controller.stream_started.connect(_on_controller_stream_started)
+	game_loop_controller.stream_zone_ended.connect(_on_controller_stream_zone_ended)
+	game_loop_controller.turn_state_changed.connect(_on_controller_turn_state_changed)
+	game_loop_controller.active_character_changed.connect(_on_controller_active_character_changed)
+	game_loop_controller.character_visual_update_requested.connect(_on_controller_character_visual_update_requested)
+	game_loop_controller.character_reaction_requested.connect(_on_controller_character_reaction_requested)
+	game_loop_controller.sidebar_refresh_requested.connect(_refresh_character_list)
+	game_loop_controller.memory_updated.connect(_update_memory_ui)
+	game_loop_controller.input_disabled_changed.connect(_set_input_disabled)
+	
+	# 4. Setup NearbyCharacterList UI node
+	character_list_container.setup(game_loop_controller.graph_manager)
+	character_list_container.character_selected.connect(_on_character_selected)
+	
+	# 5. Connect global Autoload signals
 	EventBus.emotion_updated.connect(_on_character_emotion_updated)
+	EventBus.location_changed.connect(_on_controller_background_update_requested)
 	
-	# 4. Initialize Onboarding Flow and hide sidebar initially
+	# Initialize Toast & Loading systems
+	_init_loading_indicator()
+	LLMClient.request_failed.connect(_on_llm_request_failed)
+	ImageGenManager.asset_generated.connect(_on_background_generated)
+	
+	# 6. Initialize Onboarding Flow and hide sidebar initially
 	sidebar_container.visible = false
 	if onboarding_flow:
-		onboarding_flow.adventure_started.connect(start_new_campaign)
-		onboarding_flow.adventure_loaded.connect(load_existing_campaign)
+		onboarding_flow.adventure_started.connect(game_loop_controller.start_new_campaign)
+		onboarding_flow.adventure_loaded.connect(game_loop_controller.load_existing_campaign)
 	
 	# Default message
 	_display_system_message("Welcome to Orison! Import an Obsidian vault folder to begin your adventure.")
+	
+	_ensure_focus_mode(self)
+	
 	print("[SYSTEM] MainViewport loaded. Renderer: ", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
-
-# ==============================================================================
-# Game Setup & Import APIs
-# ==============================================================================
-
-func start_new_campaign(campaign_id: String, title: String, vault_path: String, custom_mappings: Dictionary = {}) -> void:
-	dialogue_label.text = ""
-	_display_system_message("Compiling Vault: " + vault_path + "...")
-	_is_sidebar_collapsed = false
-	sidebar_container.offset_left = -350.0
-	sidebar_container.offset_right = 0.0
-	toggle_sidebar_button.text = "⟫"
-	sidebar_container.visible = true
-	
-	# 1. Compile Markdown vault directory or use pre-compiled data from onboarding
-	var compiled
-	if custom_mappings.has("compiled_data") and custom_mappings["compiled_data"] != null:
-		compiled = custom_mappings["compiled_data"]
-		print("[MainViewport] Using pre-compiled campaign data from onboarding mind map.")
-	else:
-		compiled = VaultCompiler.compile_vault(vault_path, custom_mappings)
-	
-	# 2. Initialize new Campaign JSON save document
-	var initial_state = SaveManager.create_campaign(campaign_id, title)
-	if initial_state.is_empty():
-		_display_error_message("Failed to create save document.")
-		return
-		
-	# 3. Instantiate dynamic state data
-	CampaignState.initialize(campaign_id, initial_state)
-	CampaignState.state["adventure_meta"]["writing_style"] = compiled.get("writing_style", "")
-	_update_memory_ui()
-	
-	# Dynamically handle all missing starter data
-	# A. Character fallback
-	if compiled.characters.is_empty():
-		var fallback_char_id = "companion"
-		compiled.characters[fallback_char_id] = {
-			"name": "Companion",
-			"biography": "A local companion assisting with navigation and instructions.",
-			"affinity": 0.0,
-			"writing_style": "",
-			"avatar": "",
-			"base_emotion": "serenity",
-			"base_intensity": 0.5
-		}
-		compiled.knowledge_graph.nodes[fallback_char_id] = {
-			"label": "Companion",
-			"type": "character",
-			"desc": "A local companion assisting with navigation and instructions.",
-			"properties": {}
-		}
-		
-	# B. Location fallback
-	var has_location = false
-	for node_id in compiled.knowledge_graph.nodes.keys():
-		if compiled.knowledge_graph.nodes[node_id].get("type") == "location":
-			has_location = true
-			break
-			
-	if not has_location:
-		var fallback_desc = "A mysterious location where the adventure begins."
-		var fallback_label = "Starting Area"
-		
-		# Look for any lore/scene node to borrow description/name from
-		for node_id in compiled.knowledge_graph.nodes.keys():
-			var node = compiled.knowledge_graph.nodes[node_id]
-			if node.get("type") in ["lore", "scene", "story"] and not node.desc.is_empty():
-				fallback_label = node.label
-				fallback_desc = node.desc
-				break
-				
-		var fallback_loc_id = "starting_location"
-		compiled.knowledge_graph.nodes[fallback_loc_id] = {
-			"label": fallback_label,
-			"type": "location",
-			"desc": fallback_desc,
-			"properties": {}
-		}
-		
-	# C. Lore/Scene fallback (if graph is completely empty)
-	if compiled.knowledge_graph.nodes.is_empty():
-		var fallback_story_id = "intro_scene"
-		compiled.knowledge_graph.nodes[fallback_story_id] = {
-			"label": "Beginning",
-			"type": "scene",
-			"desc": "The story begins in a quiet corner of the universe.",
-			"properties": {}
-		}
-	
-	# 4. Merge compiled entities (characters, notes)
-	for char_key in compiled.characters.keys():
-		var char_data = compiled.characters[char_key]
-		CampaignState.init_character(
-			char_key, 
-			char_data.name, 
-			char_data.biography, 
-			char_data.get("writing_style", ""),
-			char_data.get("avatar", ""),
-			char_data.get("base_emotion", ""),
-			char_data.get("base_intensity", -1.0)
-		)
-		CampaignState.adjust_affinity(char_key, char_data.affinity)
-		_deduce_base_emotions_if_needed(char_key, char_data)
-		
-	# 4.5. Initialize player character if present
-	if custom_mappings != null and custom_mappings.has("player_character") and custom_mappings["player_character"] != null:
-		var pc = custom_mappings["player_character"]
-		CampaignState.init_character(
-			"player",
-			pc.get("name", "Player"),
-			pc.get("physical_description", ""),
-			"", # writing style
-			pc.get("avatar", "")
-		)
-		CampaignState.state["player_character"] = pc
-		CampaignState.state.characters["player"]["physical_description"] = pc.get("physical_description", "")
-		CampaignState.state.characters["player"]["personality"] = pc.get("personality", "")
-		CampaignState.state.characters["player"]["backstory"] = pc.get("backstory", "")
-		
-	# Import knowledge graph structure
-	var graph = compiled.knowledge_graph
-	for node_id in graph.nodes.keys():
-		var n = graph.nodes[node_id]
-		graph_manager.add_node(node_id, n.label, n.type, n.desc, n.properties)
-		
-	for edge in graph.edges:
-		graph_manager.add_edge(edge.from, edge.to, edge.relation, edge.weight)
-		
-	CampaignState.save()
-	CampaignState.log_state_summary()
-	
-	# 6. Determine starting location and set CampaignState active_location
-	var starting_location_id = ""
-	if custom_mappings != null and custom_mappings.has("starting_location_id") and custom_mappings["starting_location_id"] != null:
-		starting_location_id = str(custom_mappings["starting_location_id"])
-		
-	if starting_location_id.is_empty():
-		for node_id in compiled.knowledge_graph.nodes.keys():
-			if compiled.knowledge_graph.nodes[node_id].get("type") == "location":
-				starting_location_id = node_id
-				break
-				
-	if not starting_location_id.is_empty():
-		CampaignState.set_campaign_meta("active_location", starting_location_id)
-		
-	# 7. Auto-select starting character
-	var starting_char_id = ""
-	if custom_mappings != null and custom_mappings.has("starting_character_id") and custom_mappings["starting_character_id"] != null:
-		starting_char_id = str(custom_mappings["starting_character_id"])
-		
-	if not starting_char_id.is_empty() and CampaignState.state.characters.has(starting_char_id):
-		_select_character(starting_char_id)
-	else:
-		var nearby_ids = _get_nearby_character_ids()
-		if not nearby_ids.is_empty():
-			_select_character(nearby_ids[0])
-		elif not CampaignState.state.characters.is_empty():
-			_select_character(CampaignState.state.characters.keys()[0])
-			
-	# 8. Refresh Character List in UI
-	_refresh_character_list()
-	_display_system_message("Import Successful! Campaign '" + title + "' initialized.")
-	
-	# 9. Display location intro if available
-	if not starting_location_id.is_empty() and compiled.knowledge_graph.nodes.has(starting_location_id):
-		var location_node = compiled.knowledge_graph.nodes[starting_location_id]
-		_beginning_scene_title = location_node.label
-		_fallback_beginning_text = location_node.desc
-		
-		_display_system_message("Starting Location: " + location_node.label)
-		
-		var intro_narration = custom_mappings.get("intro_narration", "")
-		if not intro_narration.is_empty():
-			_is_generating_beginning = false
-			_current_turn_state = TurnState.IDLE
-			_append_to_dialogue_display("narrator", intro_narration)
-			CampaignState.add_history_log("assistant", intro_narration, "narrator")
-			CampaignState.save()
-			_set_input_disabled(false)
-			_trigger_emotion_reflection(intro_narration)
-			return
-			
-		_is_generating_beginning = true
-		_set_input_disabled(true)
-		_append_to_dialogue_display("system", "Generating creative introduction narration...")
-		
-		# Gather characters and locations in compiled state for context
-		var chars_list: Array = []
-		var locs_list: Array = []
-		
-		locs_list.append({"name": location_node.label, "description": location_node.desc})
-		
-		for node_id in compiled.knowledge_graph.nodes.keys():
-			if node_id == starting_location_id:
-				continue
-			var node = compiled.knowledge_graph.nodes[node_id]
-			
-			if node.type in ["character", "npc"]:
-				var is_associated = false
-				for edge in compiled.knowledge_graph.edges:
-					var f = edge.from
-					var t = edge.to
-					var rel = edge.relation
-					if (f == node_id and t == starting_location_id) or (t == node_id and f == starting_location_id):
-						if rel in ["associated_with", "connected_to"]:
-							is_associated = true
-							break
-				if not is_associated:
-					var desc_lower = node.desc.to_lower()
-					var label_lower = location_node.label.to_lower()
-					if desc_lower.contains(label_lower) or desc_lower.contains(starting_location_id.to_lower().replace("_", " ")):
-						is_associated = true
-						
-				if is_associated:
-					chars_list.append({"name": node.label, "biography": node.desc})
-			elif node.type == "location":
-				var is_connected = false
-				for edge in compiled.knowledge_graph.edges:
-					var f = edge.from
-					var t = edge.to
-					var rel = edge.relation
-					if (f == node_id and t == starting_location_id) or (t == node_id and f == starting_location_id):
-						if rel in ["connected_to", "associated_with"]:
-							is_connected = true
-							break
-				if is_connected:
-					locs_list.append({"name": node.label, "description": node.desc})
-					
-		var campaign_writing_style = compiled.get("writing_style", "")
-		var beginning_prompt = SystemPrompts.get_beginning_generation_prompt(
-			title,
-			location_node.label,
-			location_node.desc,
-			chars_list,
-			locs_list,
-			campaign_writing_style
-		)
-		
-		LLMClient.send_prompt(beginning_prompt, LLMClient.world_builder_model)
-
-func load_existing_campaign(campaign_id: String) -> void:
-	_display_system_message("Loading Save: " + campaign_id + "...")
-	_is_sidebar_collapsed = false
-	sidebar_container.offset_left = -350.0
-	sidebar_container.offset_right = 0.0
-	toggle_sidebar_button.text = "⟫"
-	sidebar_container.visible = true
-	var data = SaveManager.load_campaign(campaign_id)
-	if data.is_empty():
-		_display_error_message("Save game not found or corrupted.")
-		return
-		
-	CampaignState.initialize(campaign_id, data)
-	_update_memory_ui()
-	
-	# Re-import knowledge graph structure from loaded state
-	var graph = CampaignState.state.get("knowledge_graph", {"nodes": {}, "edges": []})
-	var first_scene_key = ""
-	for node_id in graph.get("nodes", {}).keys():
-		var n = graph.nodes[node_id]
-		graph_manager.add_node(node_id, n.label, n.type, n.desc, n.properties)
-		if n.type in ["scene", "story"] and first_scene_key.is_empty():
-			first_scene_key = node_id
-		
-	for edge in graph.get("edges", []):
-		graph_manager.add_edge(edge.from, edge.to, edge.relation, edge.weight)
-		
-	var current_active_scene = CampaignState.get_campaign_meta("active_scene", "")
-	if current_active_scene.is_empty() and not first_scene_key.is_empty():
-		CampaignState.set_campaign_meta("active_scene", first_scene_key)
-		
-	var current_active_location = CampaignState.get_campaign_meta("active_location", "")
-	if current_active_location.is_empty():
-		for node_id in graph.get("nodes", {}).keys():
-			if graph.nodes[node_id].get("type") == "location":
-				current_active_location = node_id
-				CampaignState.set_campaign_meta("active_location", current_active_location)
-				break
-				
-	# Auto-select character on load based on metadata, nearby, or campaign characters list
-	var saved_active_char = CampaignState.get_campaign_meta("active_character", "")
-	if not saved_active_char.is_empty() and CampaignState.state.characters.has(saved_active_char):
-		_select_character(saved_active_char)
-	else:
-		var nearby_ids = _get_nearby_character_ids()
-		if not nearby_ids.is_empty():
-			_select_character(nearby_ids[0])
-		elif not CampaignState.state.characters.is_empty():
-			_select_character(CampaignState.state.characters.keys()[0])
-			
-	_refresh_character_list()
-	CampaignState.log_state_summary()
-	
-	# Print last conversation snippet if available
-	var history = CampaignState.get_recent_history(5)
-	if not history.is_empty():
-		dialogue_label.text = ""
-		for entry in history:
-			var sender = entry.get("sender", entry.role)
-			_append_to_dialogue_display(sender, entry.content)
-	else:
-		_display_system_message("Loaded campaign '" + CampaignState.get_campaign_meta("title") + "'. Ready.")
+ 
+func _exit_tree() -> void:
+	# Disconnect all autoload signals to prevent memory leaks
+	if ThemeManager.theme_changed.is_connected(_on_theme_changed):
+		ThemeManager.theme_changed.disconnect(_on_theme_changed)
+	if EventBus.emotion_updated.is_connected(_on_character_emotion_updated):
+		EventBus.emotion_updated.disconnect(_on_character_emotion_updated)
+	if EventBus.location_changed.is_connected(_on_controller_background_update_requested):
+		EventBus.location_changed.disconnect(_on_controller_background_update_requested)
+	if ImageGenManager.asset_generated.is_connected(_on_background_generated):
+		ImageGenManager.asset_generated.disconnect(_on_background_generated)
 
 # ==============================================================================
 # UI Interaction Flow
 # ==============================================================================
 
-func _consume_pending_scene() -> void:
-	var pending = CampaignState.state.get("pending_scene", {})
-	if pending.is_empty() or pending.get("narration", "").is_empty():
-		return
-		
-	var narration_text = pending.get("narration", "")
-	_append_to_dialogue_display("narrator", narration_text)
-	CampaignState.add_history_log("assistant", narration_text, "narrator")
-	
-	var memory_updates = pending.get("memory_updates", {})
-	if not memory_updates.is_empty():
-		var current_mem = CampaignState.state.get("memory", {})
-		for key in ["short_term", "medium_term", "long_term"]:
-			if memory_updates.has(key) and not str(memory_updates[key]).is_empty():
-				current_mem[key] = str(memory_updates[key])
-		CampaignState.state["memory"] = current_mem
-		_update_memory_ui()
-		
-	var plot_updates = pending.get("plot_updates", {})
-	if plot_updates is Dictionary:
-		for flag in plot_updates.keys():
-			CampaignState.set_plot_state(flag, plot_updates[flag])
-			
-	var inventory_updates = pending.get("inventory_updates", [])
-	if inventory_updates is Array:
-		for update in inventory_updates:
-			if update is Dictionary:
-				var item_id = update.get("item_id", "")
-				var action = update.get("action", "add")
-				var qty = int(update.get("quantity", 1))
-				if not item_id.is_empty():
-					if action == "add":
-						CampaignState.add_to_inventory(active_character_id, item_id, qty)
-						_display_system_message("Added to Inventory: %s x%d" % [item_id.capitalize(), qty])
-					elif action == "remove":
-						CampaignState.remove_from_inventory(active_character_id, item_id, qty)
-						_display_system_message("Removed from Inventory: %s x%d" % [item_id.capitalize(), qty])
-		
-	CampaignState.state["pending_scene"] = {}
-	CampaignState.save()
-	_trigger_emotion_reflection(narration_text)
-
 func send_player_input(input_text: String) -> void:
-	if input_text.strip_edges().is_empty():
-		return
-		
-	if active_character_id.is_empty():
-		_display_warning_message("Please select a character in the sidebar to talk to first.")
-		return
-		
-	# 1. Update save logs for player input
-	CampaignState.add_history_log("user", input_text, "player")
-	_append_to_dialogue_display("player", input_text)
-	
-	_last_player_input = input_text
-	_set_input_disabled(true)
-	
-	# Check if a pending scene is queued
-	_consume_pending_scene()
-	
-	# Update turn tracking
-	var turns_since = int(CampaignState.state.get("turns_since_last_director", 0)) + 1
-	CampaignState.state["turns_since_last_director"] = turns_since
-	
-	var cooldown = int(CampaignState.state.get("director_cooldown", 0))
-	if cooldown > 0:
-		CampaignState.state["director_cooldown"] = cooldown - 1
-		
-	CampaignState.save()
-	
-	# Fire NPC immediately
-	_current_turn_state = TurnState.CHARACTER_THINKING
-	var char_name = active_character_id.capitalize()
-	var character = CampaignState.get_character(active_character_id)
-	if not character.is_empty():
-		char_name = character.get("name", char_name)
-	_display_system_message(char_name + " is thinking...")
-	
-	# Start stream variables
-	_stream_sender = active_character_id
+	_fade_out_background()
+	if character_visuals_rect:
+		character_visuals_rect.fade_in()
+	game_loop_controller.send_player_input(input_text)
+
+# ==============================================================================
+# UI Update Receivers (from GameLoopController signals)
+# ==============================================================================
+
+func _on_controller_campaign_started(title: String, active_location_id: String) -> void:
+	_displayed_messages.clear()
+	_is_sidebar_collapsed = false
+	sidebar_container.offset_left = -350.0
+	sidebar_container.offset_right = 0.0
+	toggle_sidebar_button.text = "⟫"
+	sidebar_container.visible = true
+	_update_memory_ui()
+	_refresh_character_list()
+
+func _on_controller_campaign_loaded(campaign_id: String) -> void:
+	_is_sidebar_collapsed = false
+	sidebar_container.offset_left = -350.0
+	sidebar_container.offset_right = 0.0
+	toggle_sidebar_button.text = "⟫"
+	sidebar_container.visible = true
+	_update_memory_ui()
+	_refresh_character_list()
+	_populate_chat_from_history()
+
+func _on_controller_message_logged(sender: String, message: String) -> void:
+	_append_message(sender, message, "chat")
+
+func _on_controller_stream_started(sender_id: String) -> void:
+	_remove_last_system_message()
 	_stream_is_first_chunk = true
-	_stream_in_dialogue_zone = false
-	_stream_dialogue_buffer = ""
 	
-	var npc_prompt = prompt_builder.build_prompt(active_character_id, input_text, _is_director_running)
-	LLMClient.send_prompt(npc_prompt, LLMClient.character_model, "", true)
+	# Add empty streaming message entry
+	_append_message(sender_id, "", "chat", true)
 
-func _on_ai_response_received(raw_response: String) -> void:
-	_remove_last_system_message()
-	
-	var parsed = JsonRepair.extract_json(raw_response)
-	
-	if _is_generating_beginning:
-		_is_generating_beginning = false
-		_current_turn_state = TurnState.IDLE
-		var text_response = parsed.get("response", parsed.get("narration", raw_response))
+func _on_controller_stream_chunk_logged(sender: String, word: String) -> void:
+	if _stream_is_first_chunk:
+		_stream_is_first_chunk = false
+		var sender_id = "narrator" if game_loop_controller.stream_parser.stream_zone == "narration" else sender
+		var friendly_name = "Narrator"
+		if sender_id != "narrator":
+			friendly_name = sender_id.capitalize()
+			var character = CampaignState.get_character(sender_id)
+			if not character.is_empty():
+				friendly_name = character.get("name", sender_id.capitalize())
+		speaker_name_label.text = friendly_name
+		_update_nameplate_color(sender_id)
 		
-		var clean_response = text_response.strip_edges().replace("`", "")
-		if clean_response.is_empty() or text_response.contains("```") or (text_response == raw_response and not raw_response.contains("{")):
-			text_response = _fallback_beginning_text
-			
-		_append_to_dialogue_display("narrator", text_response)
-		CampaignState.add_history_log("assistant", text_response, "narrator")
-		CampaignState.save()
-		_set_input_disabled(false)
-		_trigger_emotion_reflection(text_response)
-		return
-		
-	if _current_turn_state == TurnState.CHARACTER_THINKING:
-		var text_response = parsed.get("dialogue", parsed.get("response", parsed.get("narration", raw_response)))
-		var emotional_update = parsed.get("emotional_update", {})
-		var escalation = str(parsed.get("escalation_signal", "none")).to_lower()
-		
-		# If streaming failed or JSON parser found different keys, output dialogue
-		if _stream_is_first_chunk:
-			_append_to_dialogue_display(active_character_id, text_response)
-		else:
-			dialogue_label.text += "\n"
-			
-		# Record response history
-		CampaignState.add_history_log("assistant", text_response, active_character_id)
-		
-		# Update character emotional state logs & relationship affinity
-		emotion_engine.process_response_tags(active_character_id, emotional_update)
-		
-		# Display the emotional update in logs
-		if not emotional_update.is_empty():
-			var character = CampaignState.get_character(active_character_id)
-			var friendly_char_name = character.get("name", active_character_id.capitalize()) if not character.is_empty() else active_character_id.capitalize()
-			
-			var emotion_name = str(emotional_update.get("emotion", "serenity")).capitalize()
-			var intensity_val = float(emotional_update.get("intensity", 0.5))
-			var delta_val = float(emotional_update.get("rapport_delta", emotional_update.get("affinity_delta", 0.0)))
-			var reason_str = str(emotional_update.get("reason", ""))
-			
-			var delta_str = ""
-			if delta_val > 0:
-				delta_str = "+%.2f" % delta_val
-			elif delta_val < 0:
-				delta_str = "%.2f" % delta_val
-			else:
-				delta_str = "0.0"
+	if not _displayed_messages.is_empty():
+		_displayed_messages[-1]["text"] += word
+		_rebuild_dialogue_text()
+
+func _on_controller_stream_zone_ended() -> void:
+	_stream_is_first_chunk = true
+
+func _on_controller_turn_state_changed(state: int) -> void:
+	if state == GameLoopController.TurnState.WORLD_BUILDER_THINKING:
+		register_task("llm_thinking", "World Builder is thinking...")
+	elif state == GameLoopController.TurnState.CHARACTER_THINKING:
+		var char_name = "Character"
+		if game_loop_controller:
+			var character = CampaignState.get_character(game_loop_controller.active_character_id)
+			if not character.is_empty():
+				char_name = character.get("name", char_name)
+		register_task("llm_thinking", "%s is thinking..." % char_name)
+	else:
+		unregister_task("llm_thinking")
+		_remove_last_system_message()
+		# Clean up any trailing empty message
+		if not _displayed_messages.is_empty():
+			var last_msg = _displayed_messages[-1]
+			if last_msg.get("text", "").strip_edges().is_empty() and last_msg.get("type") == "chat":
+				_displayed_messages.remove_at(_displayed_messages.size() - 1)
+				_rebuild_dialogue_text()
 				
-			var msg = "%s feels: %s (intensity: %.1f) | Rapport: %s" % [
-				friendly_char_name, emotion_name, intensity_val, delta_str
-			]
-			if not reason_str.is_empty():
-				msg += "\nReason: %s" % reason_str
-			print("[SYSTEM] " + msg)
-			
-		# Save updated campaign state
-		CampaignState.save()
-		
-		# Consume pending scene immediately after NPC dialogue is finalized
-		_consume_pending_scene()
-		
-		# Check if we should trigger the background Director
-		var turns_since = int(CampaignState.state.get("turns_since_last_director", 0))
-		var cooldown = int(CampaignState.state.get("director_cooldown", 0))
-		var pending = CampaignState.state.get("pending_scene", {})
-		
-		var needs_escalation = (escalation != "none" and escalation != "")
-		var fallback_reached = (turns_since >= 6)
-		
-		var should_trigger = false
-		if needs_escalation:
-			should_trigger = true
-		elif fallback_reached and cooldown <= 0:
-			should_trigger = true
-			
-		if should_trigger and pending.is_empty() and not _is_director_running:
-			_trigger_background_director()
-			
-		# Reset turn state to Idle and re-enable player controls
-		_current_turn_state = TurnState.IDLE
-		_set_input_disabled(false)
-		return
+	if state == GameLoopController.TurnState.WORLD_BUILDER_THINKING or state == GameLoopController.TurnState.CHARACTER_THINKING:
+		var already_thinking = false
+		for msg in _displayed_messages:
+			if msg.get("is_temporary", false) and msg.get("text") == "Thinking...":
+				already_thinking = true
+				break
+		if not already_thinking:
+			_append_message("system", "Thinking...", "system", true)
+	else:
+		_remove_last_system_message()
 
-func _on_ai_request_failed(error_msg: String) -> void:
-	_remove_last_system_message()
-	
-	if _is_generating_beginning:
-		_is_generating_beginning = false
-		_current_turn_state = TurnState.IDLE
-		_display_warning_message("LLM connection failed. Showing default introduction.")
-		_append_to_dialogue_display("narrator", _fallback_beginning_text)
-		CampaignState.add_history_log("assistant", _fallback_beginning_text, "narrator")
-		CampaignState.save()
-		_set_input_disabled(false)
-		_trigger_emotion_reflection(_fallback_beginning_text)
+func _on_controller_active_character_changed(char_id: String) -> void:
+	# _fade_out_background()
+	character_visuals_rect.load_character(char_id)
+	_update_memory_ui()
+
+func _on_controller_background_update_requested(active_location: String) -> void:
+	if active_location == _last_rendered_location:
 		return
 		
-	_display_error_message("Error from LLM client: " + error_msg)
-	_current_turn_state = TurnState.IDLE
-	_set_input_disabled(false)
+	_last_rendered_location = active_location
+	
+	var loc_node = game_loop_controller.graph_manager.get_node(active_location)
+	if not loc_node:
+		return
+		
+	# Determine target path and setup status overlay
+	var target_path = ImageGenManager.get_scene_path(active_location)
+	if bg_status_overlay:
+		bg_status_overlay.setup(target_path)
+		
+	# Try loading existing image — does NOT trigger generation
+	var tex = await ImageGenManager.get_image_or_fallback(active_location, "scene")
+	if tex:
+		_fade_in_background(tex)
+	else:
+		if bg_texture_rect:
+			bg_texture_rect.texture = null
+	
+	# If a generation is already underway (e.g. triggered manually), show task indicator
+	if LLMClient.image_gen_enabled:
+		var state = ImageGenManager.get_asset_state(target_path)
+		if state.status == "generating":
+			register_task("image_gen", "Generating background artwork...")
+
+
+func _on_controller_character_visual_update_requested(char_id: String, emotion: String, affinity: float) -> void:
+	if char_id == game_loop_controller.active_character_id:
+		# _fade_out_background()
+		character_visuals_rect.apply_emotion(emotion, affinity)
+
+func _on_controller_character_reaction_requested(char_id: String, emotion: String) -> void:
+	if char_id == game_loop_controller.active_character_id:
+		character_visuals_rect.generate_physical_reaction(char_id, emotion)
 
 # ==============================================================================
 # Helper Methods
 # ==============================================================================
 
 func _set_input_disabled(disabled: bool) -> void:
-	input_field.editable = not disabled
+	var can_cancel = false
+	if game_loop_controller:
+		var state = game_loop_controller.get_current_turn_state()
+		if state == GameLoopController.TurnState.CHARACTER_THINKING or state == GameLoopController.TurnState.WORLD_BUILDER_THINKING:
+			can_cancel = true
+			
+	input_field.editable = (not disabled) or can_cancel
 	send_button.disabled = disabled
 
-func _append_to_dialogue_display(sender: String, message: String) -> void:
-	var friendly_name = sender.capitalize()
-	
-	if sender == "user" or sender == "player":
-		friendly_name = "Player"
-	elif sender == "system":
-		friendly_name = "System"
-	elif sender == "narrator":
-		friendly_name = "Narrator"
-	else:
-		var character = CampaignState.get_character(sender)
-		if not character.is_empty():
-			friendly_name = character.get("name", sender.capitalize())
-			
-	speaker_name_label.text = friendly_name
-	_update_nameplate_color(sender)
-	
+func _append_message(sender: String, text: String, type: String = "chat", is_temporary: bool = false) -> void:
+	_displayed_messages.append({
+		"sender": sender,
+		"text": text,
+		"type": type,
+		"is_temporary": is_temporary
+	})
+	_rebuild_dialogue_text()
+
+func _remove_last_system_message() -> void:
+	# Filter out temporary/thinking messages
+	for i in range(_displayed_messages.size() - 1, -1, -1):
+		if _displayed_messages[i].get("is_temporary", false):
+			_displayed_messages.remove_at(i)
+	_rebuild_dialogue_text()
+
+func _rebuild_dialogue_text() -> void:
+	if not dialogue_label:
+		return
 	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-	var sender_color = _get_adjusted_sender_color(sender, is_light)
-	dialogue_label.text += "[color=%s]%s[/color]: %s\n" % [sender_color, friendly_name, message]
+	dialogue_label.set_messages(_displayed_messages, is_light)
+
+func _populate_chat_from_history() -> void:
+	_displayed_messages.clear()
+	
+	var intro_narration = CampaignState.get_campaign_meta("intro_narration", "")
+	if intro_narration.is_empty():
+		var logs = CampaignState.state.get("history_logs", [])
+		for log_entry in logs:
+			if log_entry.get("role") == "assistant" and log_entry.get("sender") == "narrator":
+				intro_narration = log_entry.content
+				CampaignState.set_campaign_meta("intro_narration", intro_narration)
+				CampaignState.save()
+				break
+		if intro_narration.is_empty() and not logs.is_empty():
+			intro_narration = logs[0].content
+			CampaignState.set_campaign_meta("intro_narration", intro_narration)
+			CampaignState.save()
+			
+	var history = CampaignState.get_recent_history(5)
+	if not history.is_empty():
+		var first_entry_is_intro = false
+		if not intro_narration.is_empty():
+			var first_entry = history[0]
+			if first_entry.content == intro_narration:
+				first_entry_is_intro = true
+				
+		if not intro_narration.is_empty() and not first_entry_is_intro:
+			_append_message("narrator", intro_narration, "chat")
+			
+			var logs = CampaignState.state.get("history_logs", [])
+			var intro_index = -1
+			for i in range(logs.size()):
+				if logs[i].content == intro_narration:
+					intro_index = i
+					break
+			
+			var history_start_index = -1
+			for i in range(logs.size()):
+				if logs[i].content == history[0].content and logs[i].timestamp == history[0].timestamp:
+					history_start_index = i
+					break
+					
+			if intro_index != -1 and history_start_index != -1 and history_start_index > intro_index + 1:
+				_append_message("system", "─── Earlier Messages Omitted ───", "system")
+				
+		for entry in history:
+			var sender = entry.get("sender", entry.role)
+			_append_message(sender, entry.content, "chat")
+	else:
+		_append_message("system", "Loaded campaign '" + CampaignState.get_campaign_meta("title") + "'. Ready.", "system")
 
 func _update_nameplate_color(sender: String) -> void:
 	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
@@ -660,158 +403,49 @@ func _get_emotion_hex_color(emotion: String, is_light: bool) -> String:
 
 func _display_system_message(msg: String) -> void:
 	print("[SYSTEM] ", msg)
-	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-	var system_tag_color = "#2563EB" if is_light else "#60A5FA"
-	dialogue_label.text += "[color=%s]ℹ️ [SYSTEM][/color]: %s\n" % [system_tag_color, msg]
+	_append_message("system", msg, "system")
 
 func _display_warning_message(msg: String) -> void:
 	push_warning(msg)
-	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-	var warning_tag_color = "#D97706" if is_light else "#FBBF24"
-	dialogue_label.text += "[color=%s]⚠️ [WARNING][/color]: %s\n" % [warning_tag_color, msg]
+	_append_message("system", msg, "warning")
 
 func _display_error_message(msg: String) -> void:
 	push_error(msg)
-	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-	var error_color = "#DC2626" if is_light else "#F87171"
-	dialogue_label.text += "[color=%s]❌ [ERROR][/color]: [color=%s][b]%s[/b][/color]\n" % [error_color, error_color, msg]
-
-func _remove_last_system_message() -> void:
-	# Strip trailing thinking lines
-	var lines = dialogue_label.text.split("\n")
-	var new_lines = []
-	for line in lines:
-		if not line.contains("Thinking..."):
-			new_lines.append(line)
-	dialogue_label.text = "\n".join(new_lines)
+	_append_message("system", msg, "error")
+	
+	var clean_msg = msg
+	if msg.begins_with("Error from LLM client: "):
+		clean_msg = msg.replace("Error from LLM client: ", "")
+		
+	if "cancelled" in clean_msg.to_lower():
+		return
+		
+	var friendly_msg = clean_msg
+	if "connect" in clean_msg.to_lower() or "status: 0" in clean_msg.to_lower() or "cant_connect" in clean_msg.to_lower():
+		friendly_msg = "Ollama offline on port 11434. Make sure Ollama is running."
+	elif "404" in clean_msg or "not found" in clean_msg.to_lower():
+		friendly_msg = "LLM model not found. Check model configuration."
+	elif "stalled" in clean_msg.to_lower() or "timeout" in clean_msg.to_lower() or "interrupted" in clean_msg.to_lower():
+		friendly_msg = "LLM stream connection was interrupted."
+		
+	show_toast(friendly_msg, true)
 
 func _refresh_character_list() -> void:
-	# Clear old list
-	for child in character_list_container.get_children():
-		child.queue_free()
-		
-	var nearby_ids = _get_nearby_character_ids()
-	var characters = CampaignState.state.get("characters", {})
-	for char_key in nearby_ids:
-		if not characters.has(char_key):
-			continue
-		var char_data = characters[char_key]
-		var item = CharacterListItemScene.instantiate()
-		character_list_container.add_child(item)
-		item.setup(char_key, char_data.get("name", char_key), char_data.get("affinity", 0.0))
-		item.selected.connect(_select_character)
-
-func _get_nearby_character_ids() -> Array[String]:
-	var nearby_ids: Array[String] = []
-	
-	if not active_character_id.is_empty():
-		nearby_ids.append(active_character_id)
-		
-	var active_location = CampaignState.get_campaign_meta("active_location", "")
-	if active_location.is_empty():
-		var graph = CampaignState.state.get("knowledge_graph", {"nodes": {}, "edges": []})
-		var nodes = graph.get("nodes", {})
-		for node_id in nodes.keys():
-			if nodes[node_id].get("type") == "location":
-				active_location = node_id
-				CampaignState.set_campaign_meta("active_location", active_location)
-				break
-				
-	if active_location.is_empty():
-		var characters = CampaignState.state.get("characters", {})
-		for char_id in characters.keys():
-			if char_id == "player":
-				continue
-			if not nearby_ids.has(char_id):
-				nearby_ids.append(char_id)
-		return nearby_ids
-		
-	var loc_node = graph_manager.get_node(active_location)
-	var loc_label = loc_node.get("label", active_location).to_lower()
-	var characters = CampaignState.state.get("characters", {})
-	
-	for char_id in characters.keys():
-		if char_id == "player":
-			continue
-		if nearby_ids.has(char_id):
-			continue
-			
-		var char_data = characters[char_id]
-		var is_nearby = false
-		
-		# 1. Check direct or regional edges in the knowledge graph
-		var edges = graph_manager.get_connected_edges(char_id)
-		var active_neighbors: Array[String] = []
-		for neighbor_id in graph_manager.get_neighbors(active_location):
-			var neighbor_node = graph_manager.get_node(neighbor_id)
-			if neighbor_node.get("type", "") in ["location", "environment", "gate"]:
-				active_neighbors.append(neighbor_id)
-				
-		for edge in edges:
-			var f = edge.get("from", "")
-			var t = edge.get("to", "")
-			var rel = edge.get("relation", "")
-			if rel in ["associated_with", "connected_to"]:
-				if f == active_location or t == active_location:
-					is_nearby = true
-					break
-				if f in active_neighbors or t in active_neighbors:
-					is_nearby = true
-					break
-				
-		# 2. Check biography mentions
-		if not is_nearby:
-			var bio = char_data.get("biography", "").to_lower()
-			if bio.contains(loc_label) or bio.contains(active_location.to_lower().replace("_", " ")):
-				is_nearby = true
-				
-		# 3. Check frontmatter properties connections
-		if not is_nearby:
-			var char_node = graph_manager.get_node(char_id)
-			var fm = char_node.get("properties", {})
-			var connections = fm.get("connections", [])
-			if connections is Array:
-				for conn in connections:
-					var conn_str = str(conn).to_lower().replace(" ", "_")
-					if conn_str == active_location or conn_str == loc_label.replace(" ", "_"):
-						is_nearby = true
-						break
-			elif connections is String:
-				var conn_str = connections.to_lower().replace(" ", "_")
-				if conn_str == active_location or conn_str == loc_label.replace(" ", "_"):
-					is_nearby = true
-					
-		if is_nearby:
-			nearby_ids.append(char_id)
-			
-	return nearby_ids
-
-func _select_character(char_id: String) -> void:
-	active_character_id = char_id
-	CampaignState.set_campaign_meta("active_character", char_id)
-	CampaignState.save()
-	var character = CampaignState.get_character(char_id)
-	character_visuals_rect.load_character(char_id)
-	_display_system_message("Selected conversation target: " + character.get("name", char_id))
-	
-	# Fetch last emotions if available to display active visual state
-	var emotions = character.get("emotions", [])
-	if not emotions.is_empty():
-		var last = emotions[-1]
-		character_visuals_rect.apply_emotion(last.get("emotion", "serenity"), character.get("affinity", 0.0))
+	if game_loop_controller.is_initializing:
+		return
+	character_list_container.refresh(game_loop_controller.active_character_id)
 
 func _on_character_emotion_updated(char_id: String, emotion: String, affinity: float) -> void:
-	if char_id == active_character_id:
-		# If the update has no defined emotion label (e.g. just raw affinity shift), fetch active one
+	if char_id == game_loop_controller.active_character_id:
 		var current_emotion = emotion
 		if current_emotion.is_empty():
 			var character = CampaignState.get_character(char_id)
 			var emotions = character.get("emotions", [])
 			current_emotion = emotions[-1].get("emotion", "serenity") if not emotions.is_empty() else "serenity"
 			
+		# _fade_out_background()
 		character_visuals_rect.apply_emotion(current_emotion, affinity)
 		
-	# Always refresh the character list to keep the sidebar updated for all characters
 	_refresh_character_list()
 
 func _on_input_submitted(new_text: String) -> void:
@@ -834,8 +468,8 @@ func _open_onboarding_to(screen: String) -> void:
 	if not flow:
 		flow = OnboardingFlowScene.instantiate()
 		add_child(flow)
-		flow.adventure_started.connect(start_new_campaign)
-		flow.adventure_loaded.connect(load_existing_campaign)
+		flow.adventure_started.connect(game_loop_controller.start_new_campaign)
+		flow.adventure_loaded.connect(game_loop_controller.load_existing_campaign)
 		
 	sidebar_container.visible = false
 	flow.show_screen(screen)
@@ -851,20 +485,18 @@ func _on_toggle_sidebar_pressed() -> void:
 	var button_text: String
 	
 	if _is_sidebar_collapsed:
-		# Expand
 		target_offset_left = -350.0
 		target_offset_right = 0.0
 		button_text = "⟫"
 		_is_sidebar_collapsed = false
 	else:
-		# Collapse
 		target_offset_left = -30.0
 		target_offset_right = 320.0
 		button_text = "⟪"
 		_is_sidebar_collapsed = true
 		
-	_sidebar_tween.tween_property(sidebar_container, "offset_left", target_offset_left, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_sidebar_tween.tween_property(sidebar_container, "offset_right", target_offset_right, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_sidebar_tween.tween_property(sidebar_container, "offset_left", target_offset_left, ThemeManager.duration_normal).set_trans(ThemeManager.trans_default).set_ease(ThemeManager.ease_default)
+	_sidebar_tween.tween_property(sidebar_container, "offset_right", target_offset_right, ThemeManager.duration_normal).set_trans(ThemeManager.trans_default).set_ease(ThemeManager.ease_default)
 	
 	toggle_sidebar_button.text = button_text
 
@@ -878,16 +510,35 @@ func _update_memory_ui() -> void:
 	
 	if short_term_memory_label:
 		short_term_memory_label.text = "[color=%s][b]Short-Term:[/b][/color] " % green_color + memory.get("short_term", "None")
+		
 	if medium_term_memory_label:
-		medium_term_memory_label.text = "[color=%s][b]Medium-Term:[/b][/color] " % yellow_color + memory.get("medium_term", "None")
+		var mt_text = "[color=%s][b]Medium-Term:[/b][/color] " % yellow_color + memory.get("medium_term", "None")
+		if game_loop_controller and not game_loop_controller.active_character_id.is_empty():
+			var character = CampaignState.get_character(game_loop_controller.active_character_id)
+			if not character.is_empty():
+				var char_name = character.get("name", game_loop_controller.active_character_id.capitalize())
+				var char_mt_list = character.get("medium_term_memories", [])
+				if not char_mt_list.is_empty():
+					mt_text += " | [color=%s][b]%s Memories:[/b][/color]" % [yellow_color, char_name]
+					for mt in char_mt_list:
+						mt_text += " %s;" % mt
+		medium_term_memory_label.text = mt_text
+		
 	if long_term_memory_label:
-		long_term_memory_label.text = "[color=%s][b]Long-Term:[/b][/color] " % red_color + memory.get("long_term", "None")
+		var lt_text = "[color=%s][b]Long-Term:[/b][/color] " % red_color + memory.get("long_term", "None")
+		if game_loop_controller and not game_loop_controller.active_character_id.is_empty():
+			var character = CampaignState.get_character(game_loop_controller.active_character_id)
+			if not character.is_empty():
+				var char_name = character.get("name", game_loop_controller.active_character_id.capitalize())
+				var char_lt = character.get("long_term_memory", "")
+				if not char_lt.is_empty():
+					lt_text += " | [color=%s][b]%s LTM:[/b][/color] %s" % [red_color, char_name, char_lt]
+		long_term_memory_label.text = lt_text
 
 func _on_settings_pressed() -> void:
 	var modal_scene = load("res://scenes/ui/SettingsModal.tscn")
 	if modal_scene:
 		var modal = modal_scene.instantiate()
-		# Override the static .tres reference so the modal uses the live active_theme.
 		modal.theme = ThemeManager.active_theme
 		add_child(modal)
 
@@ -901,198 +552,314 @@ func _on_mind_map_pressed() -> void:
 			_refresh_character_list()
 		)
 
+func _on_snapshot_pressed() -> void:
+	if _last_rendered_location.is_empty():
+		show_toast("No active location to snapshot.", true)
+		return
+		
+	var active_location = _last_rendered_location
+	print("[MainViewport] Snapshot requested for location: ", active_location)
+	
+	register_task("image_gen", "Generating background artwork...")
+	ImageGenManager.generate_scene_background(active_location)
+
 func _on_theme_changed() -> void:
-	# Rebind the root node to active_theme so all children inherit updates
-	# when active_theme.emit_changed() fires on subsequent theme switches.
 	self.theme = ThemeManager.active_theme
-	# ColorRect nodes cannot use theme variations — update explicitly.
 	if bg_color_rect:
 		bg_color_rect.color = ThemeManager.color_bg
+	_rebuild_dialogue_text()
 	_update_memory_ui()
 
-func _on_ai_response_chunk_received(chunk: String) -> void:
-	if not _stream_in_dialogue_zone:
-		_stream_dialogue_buffer += chunk
-		var start_tag = "\"dialogue\":"
-		var idx = _stream_dialogue_buffer.find(start_tag)
-		if idx == -1:
-			return
-			
-		var val_after = _stream_dialogue_buffer.substr(idx + start_tag.length()).strip_edges()
-		if val_after.begins_with("\""):
-			_stream_in_dialogue_zone = true
-			var content = val_after.substr(1)
-			_stream_dialogue_buffer = content
-			if not content.is_empty():
-				_append_stream_chunk(content)
+func _on_background_generated(output_path: String, is_placeholder: bool) -> void:
+	unregister_task("image_gen")
+	var campaign_id = CampaignState.state.get("adventure_meta", {}).get("campaign_id", "default")
+	var filename = _last_rendered_location.to_lower().replace(" ", "_")
+	var expected_path = "user://adventures/%s/generated_assets/scene_%s.png" % [campaign_id, filename]
+	
+	if output_path == expected_path or output_path.get_file() == expected_path.get_file():
+		var state = ImageGenManager.get_asset_state(output_path)
+		if state.status == "success":
+			ImageGenManager.invalidate_cache(_last_rendered_location, "scene")
+			var tex = await ImageGenManager.get_image_or_fallback(_last_rendered_location, "scene")
+			if tex:
+				_fade_in_background(tex)
+		else:
+			if bg_texture_rect:
+				bg_texture_rect.texture = null
+
+func _fade_in_background(new_texture: Texture2D) -> void:
+	if not bg_texture_rect:
+		return
+		
+	# if character_visuals_rect:
+	# 	character_visuals_rect.fade_out()
+		
+	if _bg_fade_tween and _bg_fade_tween.is_valid():
+		_bg_fade_tween.kill()
+		
+	_bg_fade_tween = create_tween()
+	_bg_fade_tween.tween_property(bg_texture_rect, "modulate:a", 0.0, ThemeManager.duration_normal)\
+		.set_trans(ThemeManager.trans_default)\
+		.set_ease(ThemeManager.ease_default)
+	_bg_fade_tween.tween_callback(func():
+		bg_texture_rect.texture = new_texture
+	)
+	_bg_fade_tween.tween_property(bg_texture_rect, "modulate:a", 1.0, ThemeManager.duration_slow)\
+		.set_trans(ThemeManager.trans_default)\
+		.set_ease(ThemeManager.ease_default)
+
+func _on_input_text_changed(new_text: String) -> void:
+	if new_text.is_empty():
+		return
+	if game_loop_controller:
+		var state = game_loop_controller.get_current_turn_state()
+		if state == GameLoopController.TurnState.CHARACTER_THINKING or state == GameLoopController.TurnState.WORLD_BUILDER_THINKING:
+			print("[MainViewport] Player started typing, cancelling active LLM stream request.")
+			LLMClient.cancel()
+
+func _on_dialogue_meta_clicked(meta) -> void:
+	if str(meta) == "retry":
+		print("[MainViewport] User clicked retry.")
+		if game_loop_controller:
+			for i in range(_displayed_messages.size() - 1, -1, -1):
+				var msg = _displayed_messages[i]
+				if msg.get("type") == "error" and "unable to format" in msg.get("text", ""):
+					_displayed_messages.remove_at(i)
+					break
+			_rebuild_dialogue_text()
+			game_loop_controller.retry_last_input()
+
+func _fade_out_background(duration: float = ThemeManager.duration_normal) -> void:
+	if not bg_texture_rect:
+		return
+	if bg_texture_rect.modulate.a == 0.0:
+		return
+		
+	if _bg_fade_tween and _bg_fade_tween.is_valid():
+		_bg_fade_tween.kill()
+		
+	_bg_fade_tween = create_tween()
+	_bg_fade_tween.tween_property(bg_texture_rect, "modulate:a", 0.0, duration)\
+		.set_trans(ThemeManager.trans_default)\
+		.set_ease(ThemeManager.ease_default)
+
+# ==============================================================================
+# Toast & Loading Indicator Helpers & Callbacks
+# ==============================================================================
+
+func _init_loading_indicator() -> void:
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.04, 0.08, 0.75)
+	sb.border_width_left = 1
+	sb.border_width_right = 1
+	sb.border_width_top = 1
+	sb.border_width_bottom = 1
+	sb.border_color = Color(0.4, 0.3, 0.5, 0.3)
+	sb.corner_radius_top_left = ThemeManager.radius_lg
+	sb.corner_radius_top_right = ThemeManager.radius_lg
+	sb.corner_radius_bottom_left = ThemeManager.radius_lg
+	sb.corner_radius_bottom_right = ThemeManager.radius_lg
+	sb.content_margin_left = ThemeManager.spacing_sm
+	sb.content_margin_right = ThemeManager.spacing_md
+	sb.content_margin_top = ThemeManager.spacing_sm
+	sb.content_margin_bottom = ThemeManager.spacing_sm
+	_loading_indicator.add_theme_stylebox_override("panel", sb)
+	
+	_loading_spinner.radius = ThemeManager.radius_md
+	_loading_spinner.line_width = 2.0
+	_loading_spinner.custom_minimum_size = Vector2(20, 20)
+
+func show_toast(message: String, is_error: bool = false, duration: float = 4.0) -> void:
+	if not _toast_container:
+		return
+		
+	var toast_scene = preload("res://scenes/ui/ToastMessage.tscn")
+	var toast = toast_scene.instantiate()
+	_toast_container.add_child(toast)
+	toast.setup(message, is_error)
+	
+	var tween = create_tween().set_parallel(true)
+	tween.tween_property(toast, "modulate:a", 1.0, ThemeManager.duration_normal)
+	
+	toast.position.x += 50
+	tween.tween_property(toast, "position:x", toast.position.x - 50, ThemeManager.duration_normal).set_trans(ThemeManager.trans_default).set_ease(ThemeManager.ease_default)
+	
+	get_tree().create_timer(duration).timeout.connect(func():
+		if is_instance_valid(toast):
+			var fade_tween = create_tween()
+			fade_tween.tween_property(toast, "modulate:a", 0.0, ThemeManager.duration_normal)
+			fade_tween.finished.connect(func():
+				if is_instance_valid(toast):
+					toast.queue_free()
+			)
+	)
+
+func register_task(task_id: String, task_name: String) -> void:
+	_active_tasks[task_id] = task_name
+	_update_loading_indicator()
+
+func unregister_task(task_id: String) -> void:
+	_active_tasks.erase(task_id)
+	_update_loading_indicator()
+
+func _update_loading_indicator() -> void:
+	if not _loading_indicator or not _loading_label:
+		return
+		
+	if _active_tasks.is_empty():
+		if _loading_indicator.visible:
+			var tween = create_tween()
+			tween.tween_property(_loading_indicator, "modulate:a", 0.0, ThemeManager.duration_normal)
+			tween.finished.connect(func():
+				if _active_tasks.is_empty() and is_instance_valid(_loading_indicator):
+					_loading_indicator.visible = false
+			)
 	else:
-		# Process character by character to handle quotes properly
-		for i in range(chunk.length()):
-			var char_val = chunk[i]
-			# If we find a closing quote that is not escaped
-			if char_val == "\"" and (i == 0 or chunk[i-1] != "\\"):
-				_stream_in_dialogue_zone = false
-				break
-			else:
-				_append_stream_chunk(char_val)
-
-func _append_stream_chunk(text: String) -> void:
-	if _stream_is_first_chunk:
-		_stream_is_first_chunk = false
-		_remove_last_system_message() # Remove "thinking" block immediately when stream starts
+		var task_keys = _active_tasks.keys()
+		_loading_label.text = _active_tasks[task_keys[-1]]
 		
-		var friendly_name = _stream_sender.capitalize()
-		var character = CampaignState.get_character(_stream_sender)
-		if not character.is_empty():
-			friendly_name = character.get("name", _stream_sender.capitalize())
-			
-		speaker_name_label.text = friendly_name
-		_update_nameplate_color(_stream_sender)
-		
-		var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-		var sender_color = _get_adjusted_sender_color(_stream_sender, is_light)
-		dialogue_label.text += "[color=%s]%s[/color]: " % [sender_color, friendly_name]
-		
-	dialogue_label.text += text
+		if not _loading_indicator.visible:
+			_loading_indicator.visible = true
+			_loading_indicator.modulate.a = 0.0
+			var tween = create_tween()
+			tween.tween_property(_loading_indicator, "modulate:a", 1.0, ThemeManager.duration_normal)
 
-func _trigger_background_director() -> void:
-	print("[SYSTEM] Triggering background Director model...")
-	_is_director_running = true
-	
-	# Build the DM prompt
-	var dm_prompt = prompt_builder.build_world_builder_prompt(_last_player_input, active_character_id)
-	
-	LLMClient.send_custom_request(dm_prompt, LLMClient.world_builder_model, _on_background_director_completed)
+func _on_llm_request_failed(err_msg: String) -> void:
+	var friendly_msg = err_msg
+	if "connect" in err_msg.to_lower() or "unreachable" in err_msg.to_lower():
+		friendly_msg = "Ollama offline on port 11434. Make sure Ollama is running."
+	elif "404" in err_msg or "not found" in err_msg.to_lower():
+		friendly_msg = "Model not found. Verify model name."
+	elif "cancel" in err_msg.to_lower():
+		return
+	show_toast(friendly_msg, true)
 
-func _on_background_director_completed(success: bool, response_text: String, error_msg: String) -> void:
-	_is_director_running = false
-	
-	if not success:
-		print("[SYSTEM] Background Director model failed: ", error_msg)
+func _unhandled_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed:
 		return
 		
-	var parsed = JsonRepair.extract_json(response_text)
-	var narration_text = parsed.get("narration", response_text)
-	var clean_narration = narration_text.strip_edges().replace("`", "")
+	var is_cmd_or_ctrl = event.is_command_or_control_pressed()
 	
-	# Skip if malformed response or empty
-	if clean_narration.is_empty() or narration_text.contains("```") or (narration_text == response_text and not response_text.contains("{")):
-		print("[SYSTEM] Background Director model response was invalid/malformed.")
+	# 1. Escape: Close active modal / toggle settings
+	if event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		_close_or_toggle_settings()
 		return
 		
-	print("[SYSTEM] Background Director model generated next scene beat successfully.")
-	
-	# Save to pending_scene queue
-	var pending = {
-		"narration": narration_text,
-		"memory_updates": parsed.get("memory_updates", {}),
-		"plot_updates": parsed.get("plot_updates", {}),
-		"inventory_updates": parsed.get("inventory_updates", []),
-		"choices": parsed.get("choices", [])
-	}
-	
-	CampaignState.state["pending_scene"] = pending
-	CampaignState.state["turns_since_last_director"] = 0
-	CampaignState.state["director_cooldown"] = 3 # Cooldown of 3 turns
-	CampaignState.save()
-	
-	# If the user is currently idle, consume the scene immediately so they see the result of the plot transition
-	if _current_turn_state == TurnState.IDLE:
-		_consume_pending_scene()
+	# 2. Ctrl+S / Cmd+S: Quick save
+	if is_cmd_or_ctrl and event.keycode == KEY_S and not event.shift_pressed:
+		get_viewport().set_input_as_handled()
+		_quick_save()
+		return
+		
+	# 3. Ctrl+Shift+S: Save as
+	if is_cmd_or_ctrl and event.keycode == KEY_S and event.shift_pressed:
+		get_viewport().set_input_as_handled()
+		_open_save_as()
+		return
+		
+	# 4. Ctrl+M / Cmd+M: Toggle mind map
+	if is_cmd_or_ctrl and event.keycode == KEY_M:
+		get_viewport().set_input_as_handled()
+		_on_mind_map_pressed()
+		return
+		
+	# 5. / or Enter: Focus chat input
+	if (event.keycode == KEY_SLASH or event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER) and not is_cmd_or_ctrl:
+		var focus_owner = get_viewport().get_focus_owner()
+		if focus_owner != input_field:
+			get_viewport().set_input_as_handled()
+			input_field.grab_focus()
+			if event.keycode == KEY_SLASH:
+				input_field.text = ""
+		return
+		
+	# 6. Tab / Shift+Tab: Navigate sidebar character list
+	if event.keycode == KEY_TAB and not is_cmd_or_ctrl:
+		get_viewport().set_input_as_handled()
+		_navigate_character_list(event.shift_pressed)
+		return
 
-func _trigger_emotion_reflection(narration_text: String) -> void:
-	if active_character_id.is_empty():
-		return
-		
-	var char_id = active_character_id
-	var prompt = SystemPrompts.get_emotion_reflection_prompt_for_id(char_id, narration_text)
-	if prompt.is_empty():
-		return
-		
-	print("[SYSTEM] Character %s is reflecting on the narrative beat..." % char_id)
-	
-	LLMClient.send_custom_request(prompt, LLMClient.character_model, func(success: bool, response_text: String, error_msg: String):
-		if not success:
-			print("[SYSTEM] Emotion reflection failed for %s: %s" % [char_id, error_msg])
-			return
-			
-		var parsed = JsonRepair.extract_json(response_text)
-		var emotional_update = parsed.get("emotional_update", {})
-		if not emotional_update.is_empty():
-			emotion_engine.process_response_tags(char_id, emotional_update)
-			
-			# Log it
-			var character = CampaignState.get_character(char_id)
-			var friendly_char_name = character.get("name", char_id.capitalize()) if not character.is_empty() else char_id.capitalize()
-			
-			var emotion_name = str(emotional_update.get("emotion", "serenity")).capitalize()
-			var intensity_val = float(emotional_update.get("intensity", 0.5))
-			var delta_val = float(emotional_update.get("rapport_delta", emotional_update.get("affinity_delta", 0.0)))
-			var reason_str = str(emotional_update.get("reason", ""))
-			
-			var delta_str = ""
-			if delta_val > 0:
-				delta_str = "+%.2f" % delta_val
-			elif delta_val < 0:
-				delta_str = "%.2f" % delta_val
-			else:
-				delta_str = "0.0"
+func _on_character_selected(char_id: String) -> void:
+	var modal_scene = load("res://scenes/ui/CharacterDetailModal.tscn")
+	if modal_scene:
+		var modal = modal_scene.instantiate() as CharacterDetailModal
+		modal.theme = ThemeManager.active_theme
+		add_child(modal)
+		modal.initialize(char_id)
+		modal.talk_requested.connect(func(id: String):
+			game_loop_controller.select_character(id)
+		)
+
+func _ensure_focus_mode(node: Node) -> void:
+	if node is Button or node is LineEdit or node is TextEdit or node is OptionButton or node is TabContainer:
+		if node.focus_mode == Control.FOCUS_NONE:
+			node.focus_mode = Control.FOCUS_ALL
+	for child in node.get_children():
+		_ensure_focus_mode(child)
+
+func _close_or_toggle_settings() -> void:
+	# Close topmost modal with _on_close_pressed
+	var children = get_children()
+	for i in range(children.size() - 1, -1, -1):
+		var child = children[i]
+		if child.name.ends_with("Modal") or child is SettingsModal or child is MindMapModal or child is CharacterDetailModal or child is SaveAsModal:
+			if child.has_method("_on_close_pressed"):
+				child._on_close_pressed()
+				return
+			elif child.has_method("close"):
+				child.close()
+				return
 				
-			var msg = "%s reflects on environment: %s (intensity: %.1f) | Rapport: %s" % [
-				friendly_char_name, emotion_name, intensity_val, delta_str
-			]
-			if not reason_str.is_empty():
-				msg += "\nReason: %s" % reason_str
-			print("[SYSTEM] " + msg)
-			CampaignState.save()
-	)
+	# If no modals open, open settings
+	_on_settings_pressed()
 
-func _deduce_base_emotions_if_needed(char_id: String, char_data: Dictionary) -> void:
-	var base_emo = char_data.get("base_emotion", "")
-	var base_int = float(char_data.get("base_intensity", -1.0))
-	
-	if not base_emo.is_empty() and base_int >= 0.0:
-		# Already explicitly specified in the campaign/frontmatter
+func _quick_save() -> void:
+	if CampaignState.campaign_id.is_empty():
+		show_toast("No active campaign to save.", true)
+		return
+	var err = CampaignState.save()
+	if err == OK:
+		show_toast("Campaign quick saved successfully!")
+	else:
+		show_toast("Failed to save campaign: Error %d" % err, true)
+
+func _open_save_as() -> void:
+	if CampaignState.campaign_id.is_empty():
+		show_toast("No active campaign to save as.", true)
 		return
 		
-	var char_name = char_data.get("name", char_id.capitalize())
-	var biography = char_data.get("biography", "")
-	
-	if biography.strip_edges().is_empty():
-		# No biography to deduce from, fallback to serenity
-		CampaignState.add_emotion_event(char_id, "serenity", 0.5, "player", "Default baseline (no biography provided).")
+	var modal_scene = load("res://scenes/ui/SaveAsModal.tscn")
+	if modal_scene:
+		var modal = modal_scene.instantiate() as SaveAsModal
+		modal.theme = ThemeManager.active_theme
+		add_child(modal)
+		modal.saved.connect(func(new_id: String):
+			show_toast("Duplicated campaign saved as: " + new_id)
+			_refresh_character_list()
+		)
+
+func _navigate_character_list(reverse: bool = false) -> void:
+	var items = []
+	for child in character_list_container.get_children():
+		if child is CharacterListItem:
+			items.append(child)
+	if items.is_empty():
 		return
 		
-	var prompt = SystemPrompts.get_deduce_base_emotion_prompt(char_name, biography)
-	print("[SYSTEM] Deducing base emotion for character: %s..." % char_id)
+	var current_focus = get_viewport().get_focus_owner()
+	var current_idx = items.find(current_focus)
 	
-	# Quick non-blocking call to character (fast) model
-	LLMClient.send_custom_request(prompt, LLMClient.character_model, func(success: bool, response_text: String, error_msg: String):
-		var deduced_emo = "serenity"
-		var deduced_int = 0.5
-		var reason = "Default fallback (analysis failed)."
-		
-		if success:
-			var parsed = JsonRepair.extract_json(response_text)
-			if parsed.has("base_emotion") and not str(parsed["base_emotion"]).is_empty():
-				var valid_emotions = ["serenity", "joy", "sadness", "anger", "fear", "trust", "disgust", "surprise"]
-				var emotion = str(parsed["base_emotion"]).to_lower().strip_edges()
-				if valid_emotions.has(emotion):
-					deduced_emo = emotion
-					deduced_int = clamp(float(parsed.get("base_intensity", 0.5)), 0.0, 1.0)
-					reason = "Deduced from biography: %s" % deduced_emo.capitalize()
-					
-		# Save deduced stats on character
-		var character = CampaignState.get_character(char_id)
-		if not character.is_empty():
-			character["base_emotion"] = deduced_emo
-			character["base_intensity"] = deduced_int
-			
-		CampaignState.add_emotion_event(char_id, deduced_emo, deduced_int, "player", reason)
-		CampaignState.save()
-		
-		# Refresh UI to show deduced emotion if this is the active character
-		if char_id == active_character_id:
-			character_visuals_rect.apply_emotion(deduced_emo, CampaignState.get_character(char_id).get("affinity", 0.0))
-		_refresh_character_list()
-	)
+	if current_idx == -1:
+		items[0].grab_focus()
+	else:
+		var next_idx = (current_idx + (-1 if reverse else 1)) % items.size()
+		if next_idx < 0:
+			next_idx += items.size()
+		items[next_idx].grab_focus()
+
+func _on_chat_character_sheet_pressed() -> void:
+	if game_loop_controller and not game_loop_controller.active_character_id.is_empty():
+		_on_character_selected(game_loop_controller.active_character_id)
+	else:
+		show_toast("No active character to view details.", true)

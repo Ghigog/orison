@@ -1,4 +1,4 @@
-# res://scripts/parser/MarkdownParser.gd
+# res://src/core/MarkdownParser.gd
 extends RefCounted
 class_name MarkdownParser
 
@@ -7,7 +7,14 @@ static func parse_file(path: String) -> Dictionary:
 	var file = FileAccess.open(path, FileAccess.READ)
 	if not file:
 		printerr("Failed to open markdown file: ", path)
-		return {"frontmatter": {}, "body": ""}
+		return {
+			"frontmatter": {},
+			"body": "",
+			"wiki_links": [],
+			"tags": [],
+			"callouts": [],
+			"tables": []
+		}
 		
 	var lines: Array[String] = []
 	while not file.eof_reached():
@@ -43,9 +50,18 @@ static func parse_file(path: String) -> Dictionary:
 	var frontmatter = _parse_yaml(frontmatter_lines)
 	var body = "\n".join(body_lines)
 	
+	var wiki_links = _extract_wiki_links(body)
+	var hashtags = _extract_hashtags(body)
+	var callouts = _extract_callouts(body_lines)
+	var tables = _extract_tables(body_lines)
+	
 	return {
 		"frontmatter": frontmatter,
-		"body": body
+		"body": body,
+		"wiki_links": wiki_links,
+		"tags": hashtags,
+		"callouts": callouts,
+		"tables": tables
 	}
 
 ## Extremely simple YAML parser to parse frontmatter key-values
@@ -109,3 +125,147 @@ static func _cast_value(s: String) -> Variant:
 	if s.is_valid_float():
 		return s.to_float()
 	return s
+
+## Extracts wiki-links of the form [[Target Entity]] or [[Target Entity|Display Label]]
+static func _extract_wiki_links(body: String) -> Array[Dictionary]:
+	var wiki_links: Array[Dictionary] = []
+	var regex = RegEx.new()
+	regex.compile("\\[\\[([^\\]]+)\\]\\]")
+	var matches = regex.search_all(body)
+	for m in matches:
+		var content = m.get_string(1).strip_edges()
+		if content.is_empty():
+			continue
+		var target = content
+		var label = content
+		if content.contains("|"):
+			var parts = content.split("|")
+			target = parts[0].strip_edges()
+			if parts.size() > 1:
+				label = parts[1].strip_edges()
+		
+		wiki_links.append({
+			"target": target,
+			"label": label
+		})
+	return wiki_links
+
+## Extracts hashtags of the form #tag/subtag, ignoring hex colors and headings
+static func _extract_hashtags(body: String) -> Array[String]:
+	var hashtags: Array[String] = []
+	var regex = RegEx.new()
+	regex.compile("(?:^|\\s)#([a-zA-Z0-9_\\-/]+)")
+	var matches = regex.search_all(body)
+	for m in matches:
+		var tag = m.get_string(1).strip_edges()
+		var is_hex = false
+		if tag.length() == 3 or tag.length() == 6:
+			var hex_regex = RegEx.new()
+			hex_regex.compile("^[a-fA-F0-9]+$")
+			if hex_regex.search(tag):
+				is_hex = true
+		if not is_hex and not tag.is_empty():
+			hashtags.append(tag)
+	return hashtags
+
+## Extracts callout blocks of the form > [!info] or > [!secret]
+static func _extract_callouts(lines: Array[String]) -> Array[Dictionary]:
+	var callouts: Array[Dictionary] = []
+	var in_callout = false
+	var current_callout = {}
+	
+	var callout_header_regex = RegEx.new()
+	callout_header_regex.compile("^>\\s*\\[!([a-zA-Z0-9_\\-]+)\\](.*)")
+	
+	for line in lines:
+		var trimmed = line.strip_edges()
+		var match_header = callout_header_regex.search(trimmed)
+		if match_header:
+			if in_callout:
+				callouts.append(current_callout)
+			var type = match_header.get_string(1).to_lower()
+			var title = match_header.get_string(2).strip_edges()
+			in_callout = true
+			current_callout = {
+				"type": type,
+				"title": title,
+				"content": ""
+			}
+		elif in_callout and trimmed.begins_with(">"):
+			var content_line = trimmed.substr(1).strip_edges()
+			if current_callout["content"].is_empty():
+				current_callout["content"] = content_line
+			else:
+				current_callout["content"] += "\n" + content_line
+		elif in_callout:
+			callouts.append(current_callout)
+			in_callout = false
+			current_callout = {}
+			
+	if in_callout:
+		callouts.append(current_callout)
+		
+	return callouts
+
+## Extracts Markdown tables from the document lines
+static func _extract_tables(lines: Array[String]) -> Array[Dictionary]:
+	var tables: Array[Dictionary] = []
+	var current_table = null
+	var table_state = 0 # 0: outside, 1: found header, 2: parsing data rows
+	var potential_headers: Array[String] = []
+	
+	for line in lines:
+		var trimmed = line.strip_edges()
+		if trimmed.begins_with("|") and trimmed.ends_with("|"):
+			var cells = _parse_table_row(trimmed)
+			if table_state == 0:
+				potential_headers = cells
+				table_state = 1
+			elif table_state == 1:
+				var is_separator = true
+				for cell in cells:
+					var c_trimmed = cell.strip_edges()
+					if c_trimmed.is_empty():
+						continue
+					var is_sep_cell = true
+					for char in c_trimmed:
+						if char != "-" and char != ":":
+							is_sep_cell = false
+							break
+					if not is_sep_cell:
+						is_separator = false
+						break
+				if is_separator:
+					current_table = {
+						"headers": potential_headers,
+						"rows": []
+					}
+					table_state = 2
+				else:
+					potential_headers = cells
+					table_state = 1
+			elif table_state == 2:
+				current_table["rows"].append(cells)
+		else:
+			if table_state == 2 and current_table != null:
+				tables.append(current_table)
+			table_state = 0
+			current_table = null
+			potential_headers = []
+			
+	if table_state == 2 and current_table != null:
+		tables.append(current_table)
+		
+	return tables
+
+static func _parse_table_row(row: String) -> Array[String]:
+	var content = row.strip_edges()
+	if content.begins_with("|"):
+		content = content.substr(1)
+	if content.ends_with("|"):
+		content = content.substr(0, content.length() - 1)
+	var parts = content.split("|")
+	var result: Array[String] = []
+	for p in parts:
+		result.append(p.strip_edges())
+	return result

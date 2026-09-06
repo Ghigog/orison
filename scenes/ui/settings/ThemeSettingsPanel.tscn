@@ -1,0 +1,122 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000006"]
+
+[ext_resource type="Script" path="res://src/ui/settings/ThemeSettingsPanel.gd" id="1_theme_settings"]
+
+[node name="ThemeSettingsPanel" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 15
+script = ExtResource("1_theme_settings")
+
+[node name="PresetHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="PresetLabel" type="Label" parent="PresetHBox"]
+layout_mode = 2
+text = "Select Theme:"
+
+[node name="ThemeDropdown" type="OptionButton" parent="PresetHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DeleteThemeButton" type="Button" parent="PresetHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Delete"
+
+[node name="FontSizeHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="FontSizeLabel" type="Label" parent="FontSizeHBox"]
+layout_mode = 2
+text = "Font Size:"
+
+[node name="FontSizeDropdown" type="OptionButton" parent="FontSizeHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ColorsGrid" type="GridContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 15
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="BgLabel" type="Label" parent="ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Canvas Background"
+
+[node name="BgPicker" type="ColorPickerButton" parent="ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="SurfaceLabel" type="Label" parent="ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Panel Surface"
+
+[node name="SurfacePicker" type="ColorPickerButton" parent="ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="BorderLabel" type="Label" parent="ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Horizon Border"
+
+[node name="BorderPicker" type="ColorPickerButton" parent="ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="TextLabel" type="Label" parent="ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Text Color"
+
+[node name="TextPicker" type="ColorPickerButton" parent="ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="AccentLabel" type="Label" parent="ColorsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Focus Accent"
+
+[node name="AccentPicker" type="ColorPickerButton" parent="ColorsGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 28)
+layout_mode = 2
+
+[node name="SaveHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SaveNameInput" type="LineEdit" parent="SaveHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Custom Theme Name..."
+
+[node name="SaveThemeButton" type="Button" parent="SaveHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Theme"
+
+[node name="DeleteConfirmDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Confirm Deletion"
+initial_position = 2
+size = Vector2i(360, 150)
+ok_button_text = "Delete"

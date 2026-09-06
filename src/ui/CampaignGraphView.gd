@@ -2,14 +2,27 @@
 extends HSplitContainer
 class_name CampaignGraphView
 
-@onready var graph_edit: GraphEdit = $GraphEdit
+@onready var graph_edit: GraphEdit = %GraphEdit
+@onready var search_input: LineEdit = %SearchInput
+@onready var toggle_location: Button = %ToggleLocation
+@onready var toggle_lore: Button = %ToggleLore
+@onready var toggle_scene: Button = %ToggleScene
+@onready var toggle_character: Button = %ToggleCharacter
+@onready var zoom_out_btn: Button = %ZoomOutBtn
+@onready var zoom_reset_btn: Button = %ZoomResetBtn
+@onready var zoom_in_btn: Button = %ZoomInBtn
+@onready var node_count_label: Label = %NodeCountLabel
+
 @onready var inspector_panel: PanelContainer = $InspectorPanel
 @onready var node_name_label: Label = %NodeNameLabel
 @onready var type_dropdown: OptionButton = %TypeDropdown
 @onready var content_preview: RichTextLabel = %ContentPreview
 @onready var connections_list: VBoxContainer = %ConnectionsList
+@onready var no_connections_label: Label = %NoConnectionsLabel
 @onready var starting_loc_dropdown: OptionButton = %StartingLocDropdown
 @onready var starting_char_dropdown: OptionButton = %StartingCharDropdown
+
+var _last_zoom: float = 1.0
 
 # Dropdowns for adding new connections
 @onready var connect_target_dropdown: OptionButton = %ConnectTargetDropdown
@@ -54,6 +67,18 @@ func _ready() -> void:
 	add_connection_btn.pressed.connect(_on_add_connection_pressed)
 	auto_arrange_btn.pressed.connect(_on_auto_arrange_pressed)
 	
+	# Connect filter and search signals
+	search_input.text_changed.connect(_on_filter_changed)
+	toggle_location.toggled.connect(_on_filter_changed)
+	toggle_lore.toggled.connect(_on_filter_changed)
+	toggle_scene.toggled.connect(_on_filter_changed)
+	toggle_character.toggled.connect(_on_filter_changed)
+	
+	# Connect zoom signals
+	zoom_in_btn.pressed.connect(_on_zoom_in_pressed)
+	zoom_out_btn.pressed.connect(_on_zoom_out_pressed)
+	zoom_reset_btn.pressed.connect(_on_zoom_reset_pressed)
+	
 	# Populate type dropdown
 	type_dropdown.clear()
 	for i in range(CATEGORIES.size()):
@@ -69,6 +94,8 @@ func _ready() -> void:
 	# Initial UI state
 	inspector_panel.visible = true
 	_update_inspector_ui()
+	_last_zoom = graph_edit.zoom
+	_update_zoom_label()
 
 ## Initializes the view with compiled graph data
 func initialize(graph_data: Dictionary, start_loc_id: String = "", start_char_id: String = "") -> void:
@@ -86,6 +113,7 @@ func initialize(graph_data: Dictionary, start_loc_id: String = "", start_char_id
 	_render_connections()
 	_update_starting_dropdowns()
 	_update_inspector_ui()
+	_apply_filters()
 
 ## Returns the modified graph and starting selections
 func get_graph_data() -> Dictionary:
@@ -412,12 +440,10 @@ func _populate_connections_list() -> void:
 			node_edges.append(edge)
 			
 	if node_edges.is_empty():
-		var empty_lbl = Label.new()
-		empty_lbl.text = "No connections."
-		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-		connections_list.add_child(empty_lbl)
+		no_connections_label.visible = true
 		return
 		
+	no_connections_label.visible = false
 	for edge in node_edges:
 		var from_id = edge.get("from", "")
 		var to_id = edge.get("to", "")
@@ -428,25 +454,12 @@ func _populate_connections_list() -> void:
 		
 		var target_label = _nodes.get(target_id, {}).get("label", target_id)
 		
-		var hbox = HBoxContainer.new()
-		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		
-		var label = Label.new()
-		label.text = "%s (%s %s)" % [target_label, "➔" if is_outgoing else "⇠", rel]
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.clip_text = true
-		hbox.add_child(label)
-		
-		var del_btn = Button.new()
-		del_btn.text = "✕"
-		del_btn.flat = true
-		del_btn.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-		del_btn.pressed.connect(func():
+		var item = preload("res://scenes/ui/ConnectionListItem.tscn").instantiate()
+		connections_list.add_child(item)
+		item.setup("%s (%s %s)" % [target_label, "➔" if is_outgoing else "⇠", rel])
+		item.delete_pressed.connect(func():
 			_remove_edge(edge)
 		)
-		hbox.add_child(del_btn)
-		
-		connections_list.add_child(hbox)
 
 func _populate_connect_target_dropdown() -> void:
 	connect_target_dropdown.clear()
@@ -616,9 +629,137 @@ func _on_type_selected(idx: int) -> void:
 		_update_starting_dropdowns()
 		_update_inspector_ui()
 		_on_auto_arrange_pressed()
+		_apply_filters()
 
 func _on_starting_loc_selected(idx: int) -> void:
 	_starting_location_id = starting_loc_dropdown.get_item_metadata(idx)
 
 func _on_starting_char_selected(idx: int) -> void:
 	_starting_character_id = starting_char_dropdown.get_item_metadata(idx)
+
+func _on_filter_changed(_new_text_or_toggled: Variant = null) -> void:
+	_apply_filters()
+
+func _apply_filters() -> void:
+	var query = search_input.text.strip_edges().to_lower()
+	var show_location = toggle_location.button_pressed
+	var show_lore = toggle_lore.button_pressed
+	var show_scene = toggle_scene.button_pressed
+	var show_character = toggle_character.button_pressed
+	
+	var total_nodes_count = 0
+	var matching_nodes_count = 0
+	var first_match_node: GraphNode = null
+	
+	# 1. Update visibility & modulation for all nodes in the graph
+	for child in graph_edit.get_children():
+		if not child is GraphNode:
+			continue
+			
+		var node_name = child.name
+		
+		# Handle column header nodes
+		if node_name.begins_with("header_"):
+			var header_type = node_name.substr(7) # e.g. "location", "lore", etc.
+			var header_visible = true
+			match header_type:
+				"location": header_visible = show_location
+				"lore": header_visible = show_lore
+				"scene": header_visible = show_scene
+				"character": header_visible = show_character
+			child.visible = header_visible
+			continue
+			
+		# Handle the special global anchor node
+		if node_name == "global_anchor":
+			child.visible = show_location or show_lore or show_scene or show_character
+			continue
+			
+		# Skip nodes that aren't defined in _nodes
+		if not _nodes.has(node_name):
+			continue
+			
+		total_nodes_count += 1
+		var node_data = _nodes[node_name]
+		var node_type = node_data.get("type", "lore")
+		if node_type == "npc":
+			node_type = "character"
+			
+		# Category check
+		var category_visible = true
+		match node_type:
+			"location": category_visible = show_location
+			"lore": category_visible = show_lore
+			"scene": category_visible = show_scene
+			"character": category_visible = show_character
+			_: category_visible = true
+			
+		if not category_visible:
+			child.visible = false
+			continue
+			
+		child.visible = true
+		
+		# Search check
+		var label = node_data.get("label", node_name).to_lower()
+		var desc = node_data.get("desc", "").to_lower()
+		var matches_search = query.is_empty() or label.contains(query) or node_name.to_lower().contains(query) or desc.contains(query)
+		
+		if matches_search:
+			child.modulate = Color(1.0, 1.0, 1.0, 1.0)
+			matching_nodes_count += 1
+			if first_match_node == null:
+				first_match_node = child
+		else:
+			child.modulate = Color(1.0, 1.0, 1.0, 0.25)
+			
+	# 2. Re-render connections based on node visibility
+	for conn in graph_edit.get_connection_list():
+		graph_edit.disconnect_node(conn.from_node, conn.from_port, conn.to_node, conn.to_port)
+		
+	for edge in _edges:
+		var from_node = edge.get("from", "")
+		var to_node = edge.get("to", "")
+		if graph_edit.has_node(from_node) and graph_edit.has_node(to_node):
+			var from_child = graph_edit.get_node(from_node) as GraphNode
+			var to_child = graph_edit.get_node(to_node) as GraphNode
+			if from_child and to_child and from_child.visible and to_child.visible:
+				graph_edit.connect_node(from_node, 0, to_node, 0)
+				
+	# 3. Update count label
+	node_count_label.text = "Showing %d of %d nodes" % [matching_nodes_count, total_nodes_count]
+	
+	# 4. Center on the first match if search query is active and a match is found
+	if not query.is_empty() and first_match_node != null:
+		call_deferred("_center_on_node", first_match_node)
+
+func _center_on_node(gnode: GraphNode) -> void:
+	if not is_instance_valid(graph_edit) or not is_instance_valid(gnode):
+		return
+	var node_center = gnode.position_offset + gnode.size / 2.0
+	var viewport_center = graph_edit.size / 2.0
+	if graph_edit.size.x < 10 or graph_edit.size.y < 10:
+		var default_center = Vector2(400, 300)
+		graph_edit.scroll_offset = node_center * graph_edit.zoom - default_center
+	else:
+		graph_edit.scroll_offset = node_center * graph_edit.zoom - viewport_center
+
+func _on_zoom_in_pressed() -> void:
+	graph_edit.zoom = clamp(graph_edit.zoom + 0.1, graph_edit.zoom_min, graph_edit.zoom_max)
+	_update_zoom_label()
+
+func _on_zoom_out_pressed() -> void:
+	graph_edit.zoom = clamp(graph_edit.zoom - 0.1, graph_edit.zoom_min, graph_edit.zoom_max)
+	_update_zoom_label()
+
+func _on_zoom_reset_pressed() -> void:
+	graph_edit.zoom = 1.0
+	_update_zoom_label()
+
+func _update_zoom_label() -> void:
+	zoom_reset_btn.text = "%d%%" % round(graph_edit.zoom * 100.0)
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(graph_edit) and not is_equal_approx(graph_edit.zoom, _last_zoom):
+		_last_zoom = graph_edit.zoom
+		_update_zoom_label()

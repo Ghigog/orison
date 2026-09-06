@@ -57,25 +57,26 @@ func _on_close_pressed() -> void:
 	# Save updated graph back to CampaignState when closed
 	var graph_result = campaign_graph_view.get_graph_data()
 	
-	CampaignState.state["knowledge_graph"]["nodes"] = graph_result.nodes
-	CampaignState.state["knowledge_graph"]["edges"] = graph_result.edges
-	
-	# Extract updated characters dict from nodes for synchronization
-	var updated_chars = {}
+	var existing_nodes = CampaignState.state.get("knowledge_graph", {}).get("nodes", {})
 	for node_id in graph_result.nodes.keys():
 		var node = graph_result.nodes[node_id]
 		if node.type in ["character", "npc"]:
-			var existing_char = CampaignState.state.get("characters", {}).get(node_id, {})
-			updated_chars[node_id] = {
-				"name": node.label,
-				"biography": node.desc,
-				"affinity": float(existing_char.get("affinity", 0.0)),
-				"inventory": existing_char.get("inventory", []),
-				"emotions": existing_char.get("emotions", []),
-				"writing_style": existing_char.get("writing_style", ""),
-				"avatar": existing_char.get("avatar", "")
-			}
-	CampaignState.state["characters"] = updated_chars
+			var existing_node = existing_nodes.get(node_id, {})
+			var existing_properties = existing_node.get("properties", {})
+			
+			var properties = node.get("properties", {})
+			if properties.is_empty():
+				properties = existing_properties.duplicate(true)
+			else:
+				for key in existing_properties.keys():
+					if not properties.has(key):
+						properties[key] = existing_properties[key]
+						
+			properties["name"] = node.label
+			properties["biography"] = node.desc
+			node["properties"] = properties
+			
+	CampaignState.set_knowledge_graph_data(graph_result.nodes, graph_result.edges)
 	CampaignState.save()
 	
 	closed.emit()
@@ -103,3 +104,9 @@ func _on_global_theme_changed() -> void:
 
 func _apply_modal_styles() -> void:
 	self.theme = ThemeManager.active_theme
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		_on_close_pressed()
+

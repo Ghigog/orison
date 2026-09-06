@@ -1,0 +1,33 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000020"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/CampaignListItem.gd" id="1_item"]
+
+[node name="CampaignListItem" type="HBoxContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 45.0
+grow_horizontal = 2
+theme_override_constants/separation = 10
+script = ExtResource("1_item")
+
+[node name="Thumbnail" type="TextureRect" parent="."]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(80, 45)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="SelectButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 0
+
+[node name="DeleteButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+theme_override_colors/font_hover_color = Color(1, 0.5, 0.5, 1)
+tooltip_text = "Delete Adventure"
+text = "🗑️"

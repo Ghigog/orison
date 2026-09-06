@@ -1,0 +1,93 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000077"]
+
+[ext_resource type="Script" path="res://src/ui/settings/LLMSettingsPanel.gd" id="1_llm_settings"]
+
+[node name="LLMSettingsPanel" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+script = ExtResource("1_llm_settings")
+
+[node name="UrlGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="UrlLabel" type="Label" parent="UrlGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Ollama Server URL"
+
+[node name="OllamaUrlInput" type="LineEdit" parent="UrlGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. http://localhost:11434"
+
+[node name="WbGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="WbLabel" type="Label" parent="WbGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "World Builder Model (DM)"
+
+[node name="WorldBuilderModelInput" type="LineEdit" parent="WbGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. llama3.1:8b"
+
+[node name="CharGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CharLabel" type="Label" parent="CharGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Character Agent Model"
+
+[node name="CharacterModelInput" type="LineEdit" parent="CharGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. llama3.2:3b"
+
+[node name="AutosaveGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AutosaveLabel" type="Label" parent="AutosaveGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Auto-save Interval (turns)"
+
+[node name="AutosaveInput" type="SpinBox" parent="AutosaveGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 50.0
+value = 5.0
+
+[node name="TestHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TestConnectionButton" type="Button" parent="TestHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Test Connection"
+
+[node name="ConnectionStatusLabel" type="Label" parent="TestHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LabelMuted"
+text = "Not tested"
+autowrap_mode = 2
+
+[node name="ApplyButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ButtonAccent"
+text = "Apply LLM Settings"

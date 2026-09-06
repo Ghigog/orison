@@ -1,0 +1,155 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000006"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/DrawThingsTutorial.gd" id="1_tutorial"]
+
+[node name="DrawThingsTutorial" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_tutorial")
+
+[node name="Overlay" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="CenterContainer" type="CenterContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ModalCard" type="PanelContainer" parent="ScrollContainer/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+
+[node name="CardMargin" type="MarginContainer" parent="ScrollContainer/CenterContainer/ModalCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="CardVBoxInner" type="VBoxContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TitleHBox" type="HBoxContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/TitleHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LabelTitle"
+text = "🎨 Setting Up AI Image Generation"
+
+[node name="CloseButton" type="Button" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/TitleHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "✕"
+
+[node name="HSeparator" type="HSeparator" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner"]
+custom_minimum_size = Vector2(0, 340)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="ContentVBox" type="VBoxContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Heading1" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "🎨  What is local image generation?"
+
+[node name="Block1" type="PanelContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rtl" type="RichTextLabel" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox/Block1"]
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true
+
+[node name="Heading2" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "🍎  Option A — Draw Things  (Mac · Easiest, recommended)"
+
+[node name="Block2" type="PanelContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rtl" type="RichTextLabel" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox/Block2"]
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true
+
+[node name="Heading3" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "💻  Option B — WebUI Forge  (Mac · Advanced)"
+
+[node name="Block3" type="PanelContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rtl" type="RichTextLabel" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox/Block3"]
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true
+
+[node name="Heading4" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "🪟  Option C — WebUI Forge  (Windows · Advanced)"
+
+[node name="Block4" type="PanelContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rtl" type="RichTextLabel" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox/Block4"]
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true
+
+[node name="Heading5" type="Label" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "❓  Common questions"
+
+[node name="Block5" type="PanelContainer" parent="ScrollContainer/CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rtl" type="RichTextLabel" parent="CenterContainer/ModalCard/CardMargin/CardVBoxInner/ScrollContainer/ContentVBox/Block5"]
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+fit_content = true

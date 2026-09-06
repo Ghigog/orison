@@ -8,14 +8,108 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-split_offset = 750
+split_offset = 500
 script = ExtResource("1_graph")
 
-[node name="GraphEdit" type="GraphEdit" parent="."]
+[node name="MainVBox" type="VBoxContainer" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_constants/separation = 0
+
+[node name="ToolbarPanel" type="PanelContainer" parent="MainVBox"]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MainVBox/ToolbarPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="HBoxContainer" type="HFlowContainer" parent="MainVBox/ToolbarPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 8
+
+[node name="SearchInput" type="LineEdit" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+placeholder_text = "🔍 Search entities..."
+clear_button_enabled = true
+
+[node name="VSeparator" type="VSeparator" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="FilterLabel" type="Label" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "Filter:"
+
+[node name="ToggleLocation" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "📍 Locations"
+
+[node name="ToggleLore" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "📚 Lore"
+
+[node name="ToggleScene" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "🎬 Scenes"
+
+[node name="ToggleCharacter" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "👤 Characters"
+
+[node name="VSeparator2" type="VSeparator" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ZoomLabel" type="Label" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+layout_mode = 2
+text = "Zoom:"
+
+[node name="ZoomOutBtn" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = " - "
+
+[node name="ZoomResetBtn" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "100%"
+
+[node name="ZoomInBtn" type="Button" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = " + "
+
+[node name="NodeCountLabel" type="Label" parent="MainVBox/ToolbarPanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Showing 0 of 0 nodes"
+
+[node name="GraphEdit" type="GraphEdit" parent="MainVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 right_disconnects = true
 show_grid = true
+minimap_enabled = true
+minimap_size = Vector2(160, 110)
+minimap_opacity = 0.85
 
 [node name="InspectorPanel" type="PanelContainer" parent="."]
 custom_minimum_size = Vector2(300, 0)
@@ -115,6 +209,13 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
+
+[node name="NoConnectionsLabel" type="Label" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer/ConnectionsGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+text = "No connections."
+
 
 [node name="AddConnectionGroup" type="VBoxContainer" parent="InspectorPanel/MarginContainer/ScrollContainer/VBoxContainer"]
 layout_mode = 2

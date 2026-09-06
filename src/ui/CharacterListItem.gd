@@ -10,8 +10,14 @@ signal selected(character_id: String)
 @onready var emotion_label: Label = %EmotionLabel
 @onready var reason_label: Label = %ReasonLabel
 @onready var avatar_rect: TextureRect = %AvatarRect
+@onready var avatar_status_overlay: AssetStatusOverlay = %AvatarStatusOverlay
+
 
 var character_id: String = ""
+
+func _ready() -> void:
+	if ImageGenManager:
+		ImageGenManager.asset_generated.connect(_on_asset_generated)
 
 func setup(char_id: String, char_name: String, affinity: float) -> void:
 	character_id = char_id
@@ -20,9 +26,14 @@ func setup(char_id: String, char_name: String, affinity: float) -> void:
 	if not is_inside_tree():
 		await ready
 		
-	var texture = CampaignState.get_character_avatar(char_id)
+	var target_path = ImageGenManager.get_avatar_path(char_id)
+	if avatar_status_overlay:
+		avatar_status_overlay.setup(target_path)
+		
+	var texture = await ImageGenManager.get_image_or_fallback(char_id, "avatar")
 	if avatar_rect:
 		avatar_rect.texture = texture
+
 		
 	name_label.text = char_name
 	affinity_label.text = "%+.1f" % affinity
@@ -32,11 +43,13 @@ func setup(char_id: String, char_name: String, affinity: float) -> void:
 	var fill_style = rapport_bar.get_theme_stylebox("fill").duplicate() as StyleBoxFlat
 	if fill_style:
 		if affinity > 0.1:
-			fill_style.bg_color = Color("#10B981") # Emerald
+			fill_style.bg_color = ThemeManager.color_success
 		elif affinity < -0.1:
-			fill_style.bg_color = Color("#EF4444") # Crimson
+			fill_style.bg_color = ThemeManager.color_danger
 		else:
-			fill_style.bg_color = Color("#71717A") if ThemeManager.color_bg.get_luminance() > 0.5 else Color("#A59EBF") # Horizon Grey
+			var grey_c = ThemeManager.color_text
+			grey_c.a = 0.65
+			fill_style.bg_color = grey_c
 		rapport_bar.add_theme_stylebox_override("fill", fill_style)
 		
 	# Retrieve emotion and reason from CampaignState
@@ -50,7 +63,7 @@ func setup(char_id: String, char_name: String, affinity: float) -> void:
 		var reason = str(last_emotion_event.get("context", ""))
 		
 		emotion_label.text = "%s (%.1f)" % [emotion_name.capitalize(), intensity]
-		emotion_label.add_theme_color_override("font_color", get_emotion_color(emotion_name))
+		emotion_label.add_theme_color_override("font_color", ThemeManager.get_emotion_color(emotion_name))
 		emotion_label.visible = true
 		
 		if not reason.strip_edges().is_empty():
@@ -71,17 +84,22 @@ func _update_height() -> void:
 		custom_minimum_size.y = margin_container.get_combined_minimum_size().y
 
 func get_emotion_color(emotion: String) -> Color:
-	var is_light = ThemeManager.color_bg.get_luminance() > 0.5
-	match emotion.to_lower():
-		"joy": return Color("#D97706") if is_light else Color("#F59E0B")
-		"anger": return Color("#B91C1C") if is_light else Color("#DC2626")
-		"sadness": return Color("#1D4ED8") if is_light else Color("#3B82F6")
-		"fear": return Color("#6D28D9") if is_light else Color("#7C3AED")
-		"trust": return Color("#047857") if is_light else Color("#059669")
-		"disgust": return Color("#4D7C0F") if is_light else Color("#65A30D")
-		"surprise": return Color("#0891B2") if is_light else Color("#06B6D4")
-		"serenity": return Color("#4B5563") if is_light else Color("#D1D5DB")
-		_: return Color("#4B5563") if is_light else Color("#D1D5DB")
+	return ThemeManager.get_emotion_color(emotion)
 
 func _pressed() -> void:
 	selected.emit(character_id)
+
+func _on_asset_generated(output_path: String, _is_placeholder: bool) -> void:
+	if character_id.is_empty():
+		return
+	var expected_path = ImageGenManager.get_avatar_path(character_id)
+	if output_path == expected_path or output_path.get_file() == expected_path.get_file():
+		var state = ImageGenManager.get_asset_state(output_path)
+		if state.status == "success":
+			var texture = await ImageGenManager.get_image_or_fallback(character_id, "avatar")
+			if avatar_rect:
+				avatar_rect.texture = texture
+		else:
+			if avatar_rect:
+				avatar_rect.texture = null
+

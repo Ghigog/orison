@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000023"]
+
+[ext_resource type="Script" path="res://src/ui/ToastMessage.gd" id="1_toast"]
+
+[node name="ToastMessage" type="PanelContainer"]
+custom_minimum_size = Vector2(300, 50)
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -300.0
+offset_bottom = 50.0
+grow_horizontal = 0
+script = ExtResource("1_toast")
+
+[node name="MessageLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3

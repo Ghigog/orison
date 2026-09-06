@@ -7,6 +7,7 @@ class_name EmotionEvent
 @export var intensity: float = 0.0
 @export var target: String = ""
 @export var context: String = ""
+@export var rapport_delta: float = 0.0
 
 func to_dict() -> Dictionary:
 	return {
@@ -14,7 +15,8 @@ func to_dict() -> Dictionary:
 		"emotion": emotion,
 		"intensity": intensity,
 		"target": target,
-		"context": context
+		"context": context,
+		"rapport_delta": rapport_delta
 	}
 
 static func from_dict(d: Dictionary) -> EmotionEvent:
@@ -24,4 +26,5 @@ static func from_dict(d: Dictionary) -> EmotionEvent:
 	instance.intensity = d.get("intensity", 0.0)
 	instance.target = d.get("target", "player")
 	instance.context = d.get("context", "")
+	instance.rapport_delta = d.get("rapport_delta", 0.0)
 	return instance

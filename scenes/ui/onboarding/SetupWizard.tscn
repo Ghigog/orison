@@ -1,0 +1,107 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000014"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/SetupWizard.gd" id="1_setup"]
+
+[node name="SetupWizard" type="VBoxContainer"]
+theme_override_constants/separation = 15
+script = ExtResource("1_setup")
+
+[node name="SubInstructions" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Complete the setup below to compile your adventure vault. Your original vault markdown files will remain untouched."
+autowrap_mode = 2
+
+[node name="FormVBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleGroup" type="VBoxContainer" parent="FormVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="FormVBox/TitleGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Adventure Title"
+
+[node name="TitleInput" type="LineEdit" parent="FormVBox/TitleGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. The Lost Crypt"
+
+[node name="IdGroup" type="VBoxContainer" parent="FormVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="IdLabel" type="Label" parent="FormVBox/IdGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Campaign ID"
+
+[node name="CampaignIdInput" type="LineEdit" parent="FormVBox/IdGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. lost_crypt"
+editable = false
+
+[node name="PathGroup" type="VBoxContainer" parent="FormVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PathLabel" type="Label" parent="FormVBox/PathGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Obsidian Vault Directory Path"
+
+[node name="PathInputHBox" type="HBoxContainer" parent="FormVBox/PathGroup"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="VaultPathInput" type="LineEdit" parent="FormVBox/PathGroup/PathInputHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "e.g. /Users/username/Documents/MyVault"
+
+[node name="BrowseButton" type="Button" parent="FormVBox/PathGroup/PathInputHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = " Browse... "
+
+[node name="UseSampleCheck" type="CheckBox" parent="FormVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Use Sample Adventure (Auto-creates files)"
+
+[node name="Spacer" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="SetupBackButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back"
+
+[node name="CraftButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+theme_type_variation = &"ButtonAccent"
+text = "Next >"
+
+[node name="SetupFileDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "Select Obsidian Vault Directory"
+initial_position = 2
+size = Vector2i(600, 400)
+file_mode = 2
+access = 2
+

@@ -2,6 +2,64 @@
 extends RefCounted
 class_name PlayerInputParser
 
+## Sanitizes player input string to strip and escape prompt injection keywords and delimiters.
+static func sanitize_input(input_text: String) -> String:
+	# 1. Escape early closing delimiters to prevent breaking out of the container
+	var sanitized = input_text
+	sanitized = sanitized.replace("<player_message>", "[player_message]")
+	sanitized = sanitized.replace("</player_message>", "[/player_message]")
+	sanitized = sanitized.replace("<system>", "[system]")
+	sanitized = sanitized.replace("</system>", "[/system]")
+	sanitized = sanitized.replace("<user>", "[user]")
+	sanitized = sanitized.replace("</user>", "[/user]")
+	sanitized = sanitized.replace("<assistant>", "[assistant]")
+	sanitized = sanitized.replace("</assistant>", "[/assistant]")
+
+	# 2. Process line-by-line to strip injection prefixes at start of lines (case-insensitive)
+	var lines = sanitized.split("\n")
+	var sanitized_lines: Array[String] = []
+	
+	# Prefixes to check/strip (case-insensitive)
+	var prefixes_to_strip = [
+		"system:",
+		"user:",
+		"assistant:",
+		"narrator:",
+		"player:",
+		"[inst]",
+		"[/inst]",
+		"<<sys>>",
+		"<</sys>>"
+	]
+	
+	for line in lines:
+		var trimmed_line = line.strip_edges()
+		var lower_line = trimmed_line.to_lower()
+		var matched = false
+		
+		for prefix in prefixes_to_strip:
+			if lower_line.begins_with(prefix):
+				var prefix_len = prefix.length()
+				var idx = line.to_lower().find(prefix)
+				if idx != -1:
+					var remaining = line.substr(idx + prefix_len).strip_edges()
+					sanitized_lines.append(remaining)
+				else:
+					sanitized_lines.append(line)
+				matched = true
+				break
+				
+		if not matched:
+			sanitized_lines.append(line)
+			
+	var final_result = "\n".join(sanitized_lines)
+	
+	if final_result != input_text:
+		print("[PromptSanitizer] Sanitized input. Original: '%s' | Sanitized: '%s'" % [input_text, final_result])
+		
+	return final_result
+
+
 ## Parses player input string into dialogue and action segments based on standard visual novel styles.
 static func parse_input(input_text: String) -> Dictionary:
 	var trimmed = input_text.strip_edges()

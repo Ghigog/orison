@@ -1,0 +1,199 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000009"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/ReviewScreen.gd" id="1_review"]
+
+[node name="ReviewScreen" type="VBoxContainer"]
+theme_override_constants/separation = 12
+script = ExtResource("1_review")
+
+[node name="ReviewTitle" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Choose Starting Point"
+
+[node name="ReviewDesc" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "We scanned your vault folder. Orison found:"
+autowrap_mode = 2
+
+[node name="ScanSummaryLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Scanning..."
+autowrap_mode = 2
+
+[node name="StartersScroll" type="ScrollContainer" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 360)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="StartersContainer" type="VBoxContainer" parent="StartersScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="StarterCard1" type="Button" parent="StartersScroll/StartersContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+alignment = 0
+
+[node name="Margin" type="MarginContainer" parent="StartersScroll/StartersContainer/StarterCard1"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="StartersScroll/StartersContainer/StarterCard1/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="CardTitle1" type="Label" parent="StartersScroll/StartersContainer/StarterCard1/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+theme_override_font_sizes/font_size = 14
+text = "Adventure Hook 1"
+clip_text = true
+
+[node name="CardDesc1" type="Label" parent="StartersScroll/StartersContainer/StarterCard1/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+theme_override_font_sizes/font_size = 12
+text = "A mysterious event has occurred in the starting area."
+autowrap_mode = 2
+
+[node name="CardMeta1" type="Label" parent="StartersScroll/StartersContainer/StarterCard1/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+theme_override_font_sizes/font_size = 10
+text = "Location: Starting Location | Character: Companion"
+clip_text = true
+
+[node name="StarterCard2" type="Button" parent="StartersScroll/StartersContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+alignment = 0
+
+[node name="Margin" type="MarginContainer" parent="StartersScroll/StartersContainer/StarterCard2"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="StartersScroll/StartersContainer/StarterCard2/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="CardTitle2" type="Label" parent="StartersScroll/StartersContainer/StarterCard2/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+theme_override_font_sizes/font_size = 14
+text = "Adventure Hook 2"
+clip_text = true
+
+[node name="CardDesc2" type="Label" parent="StartersScroll/StartersContainer/StarterCard2/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+theme_override_font_sizes/font_size = 12
+text = "A mysterious event has occurred in the starting area."
+autowrap_mode = 2
+
+[node name="CardMeta2" type="Label" parent="StartersScroll/StartersContainer/StarterCard2/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+theme_override_font_sizes/font_size = 10
+text = "Location: Starting Location | Character: Companion"
+clip_text = true
+
+[node name="StarterCard3" type="Button" parent="StartersScroll/StartersContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+alignment = 0
+
+[node name="Margin" type="MarginContainer" parent="StartersScroll/StartersContainer/StarterCard3"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="StartersScroll/StartersContainer/StarterCard3/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="CardTitle3" type="Label" parent="StartersScroll/StartersContainer/StarterCard3/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+theme_override_font_sizes/font_size = 14
+text = "Adventure Hook 3"
+clip_text = true
+
+[node name="CardDesc3" type="Label" parent="StartersScroll/StartersContainer/StarterCard3/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+theme_override_font_sizes/font_size = 12
+text = "A mysterious event has occurred in the starting area."
+autowrap_mode = 2
+
+[node name="CardMeta3" type="Label" parent="StartersScroll/StartersContainer/StarterCard3/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+theme_override_font_sizes/font_size = 10
+text = "Location: Starting Location | Character: Companion"
+clip_text = true
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="ReviewBackButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back"
+
+[node name="ReviewNextButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+theme_type_variation = &"ButtonAccent"
+text = "Next >"

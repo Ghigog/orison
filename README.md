@@ -30,7 +30,6 @@ For details on the project design, developer/agent guides, and backlog tracking,
 
 ```text
 ├── .godot/                  # Godot metadata (ignored)
-├── assets/                  # Static media assets (fonts, UI textures, sounds)
 ├── docs/                    # Development documentation and ticket tracking
 │   ├── backlog.md           # Queue of feature tickets
 │   ├── done.md              # Log of completed tickets
@@ -40,11 +39,12 @@ For details on the project design, developer/agent guides, and backlog tracking,
 │   ├── research.md          # Market case studies and memory systems
 │   └── ticket_template.md   # Standard template for creating tickets
 ├── resources/               # Centralized style templates & themes
+│   ├── assets/              # Static media assets (fonts, UI textures, sounds)
 │   └── themes/              # Custom Theme resources (.theme)
 ├── scenes/                  # Visual scene trees (.tscn)
 │   └── ui/                  # Full-screen and component scene views
 ├── src/                     # Game source scripts
-│   ├── autoload/            # Global singletons (EventBus, CampaignState, LLMClient)
+│   ├── autoload/            # Global singletons (EventBus, CampaignState, LLMClient, MediaManager)
 │   ├── core/                # Core engines (parser, compilers, logic modules)
 │   ├── resources/           # Custom typed data models (extends Resource)
 │   └── ui/                  # Controllers bound to visual scenes
@@ -115,4 +115,37 @@ Orison connects to local model endpoints managed by [Ollama](https://ollama.com/
 The engine communicates with the models using HTTP requests.
 - **World Builder Payload**: Generates environmental descriptions and sets choices using `llama3.1`.
 - **Character Agent Payload**: Feeds the active character profile, emotions block, and history to `llama3.2` for character replies.
+
+---
+
+## Local AI Image Generation (Optional)
+
+Orison can generate AI-painted portraits, scenes, and item artwork using a locally-running Stable Diffusion backend. This is **entirely optional** — if disabled, Orison uses its built-in procedural art engine to generate instant retro-style artwork automatically.
+
+The image generation backend is expected to expose the standard `sdapi/v1` API endpoints on `http://127.0.0.1:7860`.
+
+### Option A: Draw Things (Mac — Recommended)
+
+**Draw Things** is a free, native macOS app optimised for Apple Silicon. It is the easiest way to run local image generation on a Mac without any Terminal setup.
+
+1. Install **[Draw Things: AI Generation](https://apps.apple.com/app/draw-things-ai-generation/id6444050820)** from the Mac App Store (free).
+2. Open Draw Things → **Settings (⚙️)** → find **API Server** → turn it **On** and set the port to `7860`.
+3. When first opened, choose **"Download a model via Draw Things"** and select:
+   - **DreamShaper 8** or **Stable Diffusion 1.5** — fast, works on any Mac with 8 GB+ RAM.
+   - **Stable Diffusion XL** — higher quality, requires 16 GB+ RAM or an M-series Pro/Max chip.
+   - Avoid Flux.1 unless you have a Mac Pro/Studio — it is very large and slow on standard Macs.
+4. Keep Draw Things running in the background.
+5. In Orison's settings panel, enable **Local Image Generation** — Orison will auto-detect Draw Things on port 7860.
+
+### Option B: AUTOMATIC1111 / WebUI Forge (Cross-platform — Advanced)
+
+WebUI Forge and AUTOMATIC1111 are developer-oriented WebUI frontends for Stable Diffusion. They require running commands in the Terminal and installing developer tools.
+
+1. Install dependencies (macOS): `brew install cmake protobuf rust python@3.10 git wget`
+2. Clone the repository: `git clone https://github.com/lllyasviel/stable-diffusion-webui-forge`
+3. Edit `webui-user.sh`: set `export COMMANDLINE_ARGS="--api"` to expose the API.
+4. Run: `./webui.sh` — on first launch it downloads models and dependencies automatically.
+5. Once running, the API is available at `http://127.0.0.1:7860`.
+
+> **Tip**: Use the **Test Models** button in Orison's LLM configuration screen to verify both your Ollama connection and your local image generation backend simultaneously.
 

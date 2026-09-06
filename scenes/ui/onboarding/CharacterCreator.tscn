@@ -1,0 +1,257 @@
+[gd_scene format=3 uid="uid://cc00000000007"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/CharacterCreator.gd" id="1_creator"]
+[ext_resource type="Script" path="res://src/ui/LoadingSpinner.gd" id="2_spinner"]
+[ext_resource type="PackedScene" path="res://scenes/ui/AssetStatusOverlay.tscn" id="3_overlay_scene"]
+
+
+[node name="CharacterCreator" type="VBoxContainer"]
+theme_override_constants/separation = 15
+script = ExtResource("1_creator")
+
+[node name="CharacterTitle" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Character Creation"
+
+[node name="CharacterDesc" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Define the protagonist of your adventure."
+autowrap_mode = 2
+
+[node name="NameGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NameLabel" type="Label" parent="NameGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Character Name"
+
+[node name="PcNameInput" type="LineEdit" parent="NameGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. Valen the Ranger"
+
+[node name="PcNameErrorLabel" type="Label" parent="NameGroup"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
+autowrap_mode = 2
+
+
+[node name="ArtStyleGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ArtStyleLabel" type="Label" parent="ArtStyleGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Campaign Art Style"
+
+[node name="CampaignArtStyleDropdown" type="OptionButton" parent="ArtStyleGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+item_count = 4
+popup/item_0/text = "Digital Anime Art"
+popup/item_0/id = 0
+popup/item_1/text = "Watercolor Fantasy"
+popup/item_1/id = 1
+popup/item_2/text = "Realistic Concept Art"
+popup/item_2/id = 2
+popup/item_3/text = "Pixel Art Portrait"
+popup/item_3/id = 3
+
+
+[node name="MidHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="AvatarGroup" type="VBoxContainer" parent="MidHBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AvatarHeaderHBox" type="HBoxContainer" parent="MidHBox/AvatarGroup"]
+layout_mode = 2
+
+[node name="AvatarLabel" type="Label" parent="MidHBox/AvatarGroup/AvatarHeaderHBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Profile Picture"
+
+[node name="AvatarSpacer" type="Control" parent="MidHBox/AvatarGroup/AvatarHeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PcAvatarMagicWandButton" type="Button" parent="MidHBox/AvatarGroup/AvatarHeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Generate profile picture from physical description"
+text = " 🪄 "
+
+[node name="PcAvatarPreview" type="TextureRect" parent="MidHBox/AvatarGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 100)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PcAvatarOverlay" parent="MidHBox/AvatarGroup/PcAvatarPreview" instance=ExtResource("3_overlay_scene")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+
+[node name="PcAvatarBrowseButton" type="Button" parent="MidHBox/AvatarGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Browse..."
+
+[node name="DescGroup" type="VBoxContainer" parent="MidHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="DescHeaderHBox" type="HBoxContainer" parent="MidHBox/DescGroup"]
+layout_mode = 2
+
+[node name="DescLabel" type="Label" parent="MidHBox/DescGroup/DescHeaderHBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Physical Description"
+
+[node name="ControlSpacer" type="Control" parent="MidHBox/DescGroup/DescHeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PcDescriptionCounter" type="Label" parent="MidHBox/DescGroup/DescHeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "0/2000"
+
+[node name="PcMagicWandButton" type="Button" parent="MidHBox/DescGroup/DescHeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Analyze profile picture to generate physical features"
+text = " 🪄 "
+
+[node name="PcDescriptionInput" type="TextEdit" parent="MidHBox/DescGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_vertical = 3
+placeholder_text = "Describe hair, eyes, facial features, attire, etc..."
+wrap_mode = 1
+
+[node name="PcWandStatusLabel" type="Label" parent="MidHBox/DescGroup"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+autowrap_mode = 2
+
+[node name="PersonalityGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PersonalityHeaderHBox" type="HBoxContainer" parent="PersonalityGroup"]
+layout_mode = 2
+
+[node name="PersonalityLabel" type="Label" parent="PersonalityGroup/PersonalityHeaderHBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Personality"
+
+[node name="PersonalitySpacer" type="Control" parent="PersonalityGroup/PersonalityHeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PcPersonalityCounter" type="Label" parent="PersonalityGroup/PersonalityHeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "0/2000"
+
+[node name="PcPersonalityInput" type="TextEdit" parent="PersonalityGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+placeholder_text = "Describe their general disposition, traits, quirks..."
+wrap_mode = 1
+
+[node name="BackstoryGroup" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BackstoryHeaderHBox" type="HBoxContainer" parent="BackstoryGroup"]
+layout_mode = 2
+
+[node name="BackstoryLabel" type="Label" parent="BackstoryGroup/BackstoryHeaderHBox"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Backstory"
+
+[node name="BackstorySpacer" type="Control" parent="BackstoryGroup/BackstoryHeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PcBackstoryCounter" type="Label" parent="BackstoryGroup/BackstoryHeaderHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "0/2000"
+
+[node name="PcBackstoryInput" type="TextEdit" parent="BackstoryGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+placeholder_text = "Describe their history, origins, motivations..."
+wrap_mode = 1
+
+[node name="PcBgProgressLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Spacer" type="Control" parent="."]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="PcBackButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back"
+
+[node name="PcNextButton" type="Button" parent="ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.5
+theme_type_variation = &"ButtonAccent"
+text = "Compile & Scan >"
+
+[node name="ImageFileDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "Select Profile Picture"
+initial_position = 2
+size = Vector2i(600, 400)
+file_mode = 0
+access = 2
+filters = PackedStringArray("*.png, *.jpg, *.jpeg ; Images")

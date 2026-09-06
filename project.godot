@@ -23,6 +23,10 @@ EventBus="*res://src/autoload/EventBus.gd"
 CampaignState="*res://src/autoload/CampaignState.gd"
 LLMClient="*res://src/autoload/LLMClient.gd"
 ThemeManager="*res://src/autoload/ThemeManager.gd"
+ImageGenClient="*res://src/autoload/ImageGenClient.gd"
+ImageGenManager="*res://src/autoload/ImageGenManager.gd"
+MediaManager="*res://src/autoload/MediaManager.gd"
+EmbeddingStore="*res://src/autoload/EmbeddingStore.gd"
 
 [debug]
 
@@ -38,7 +42,6 @@ window/stretch/aspect="expand"
 [physics]
 
 2d/physics_engine="GodotPhysics2D"
-3d/physics_engine="Jolt Physics"
 
 [rendering]
 

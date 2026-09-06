@@ -1,0 +1,136 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000088"]
+
+[ext_resource type="Script" path="res://src/ui/settings/ImageGenSettingsPanel.gd" id="1_image_gen_settings"]
+
+[node name="ImageGenSettingsPanel" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+script = ExtResource("1_image_gen_settings")
+
+[node name="EnableHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="EnableLabel" type="Label" parent="EnableHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LabelSmall"
+text = "Enable Local Image Generation"
+
+[node name="ImageGenEnableCheck" type="CheckBox" parent="EnableHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ImageGenOptionsContainer" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ProviderGroup" type="VBoxContainer" parent="ImageGenOptionsContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ProviderLabel" type="Label" parent="ImageGenOptionsContainer/ProviderGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Image Generator API Provider"
+
+[node name="ImageGenProviderDropdown" type="OptionButton" parent="ImageGenOptionsContainer/ProviderGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+fit_to_longest_item = false
+item_count = 2
+popup/item_0/text = "Automatic1111 / WebUI Forge"
+popup/item_0/id = 0
+popup/item_1/text = "ComfyUI API (Beta)"
+popup/item_1/id = 1
+
+[node name="UrlGroup" type="VBoxContainer" parent="ImageGenOptionsContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="UrlLabel" type="Label" parent="ImageGenOptionsContainer/UrlGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Stable Diffusion API URL"
+
+[node name="ImageGenUrlInput" type="LineEdit" parent="ImageGenOptionsContainer/UrlGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. http://localhost:7860"
+
+[node name="DenoisingGroup" type="VBoxContainer" parent="ImageGenOptionsContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="DenoisingLabel" type="Label" parent="ImageGenOptionsContainer/DenoisingGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Denoising Strength (0.1 - 1.0)"
+
+[node name="ImageGenDenoisingInput" type="LineEdit" parent="ImageGenOptionsContainer/DenoisingGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "e.g. 0.7"
+
+
+[node name="ArtStyleGroup" type="VBoxContainer" parent="ImageGenOptionsContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ArtStyleLabel" type="Label" parent="ImageGenOptionsContainer/ArtStyleGroup"]
+layout_mode = 2
+theme_type_variation = &"LabelSmall"
+text = "Campaign Art Style"
+
+[node name="CampaignArtStyleDropdown" type="OptionButton" parent="ImageGenOptionsContainer/ArtStyleGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+item_count = 4
+popup/item_0/text = "Digital Anime Art"
+popup/item_0/id = 0
+popup/item_1/text = "Watercolor Fantasy"
+popup/item_1/id = 1
+popup/item_2/text = "Realistic Concept Art"
+popup/item_2/id = 2
+popup/item_3/text = "Pixel Art Portrait"
+popup/item_3/id = 3
+
+
+[node name="HelpRow" type="HBoxContainer" parent="ImageGenOptionsContainer"]
+layout_mode = 2
+alignment = 2
+
+[node name="ImageGenHelpButton" type="Button" parent="ImageGenOptionsContainer/HelpRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ButtonAccent"
+text = "📱 How to Set Up (Mac)"
+
+[node name="TestHBox" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TestConnectionButton" type="Button" parent="TestHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Test Connection"
+
+[node name="ConnectionStatusLabel" type="Label" parent="TestHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"LabelMuted"
+text = "Not tested"
+autowrap_mode = 2
+
+[node name="ApplyButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ButtonAccent"
+text = "Apply Image Gen Settings"

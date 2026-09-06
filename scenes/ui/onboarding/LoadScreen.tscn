@@ -1,0 +1,44 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000008"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/LoadScreen.gd" id="1_load"]
+
+[node name="LoadScreen" type="VBoxContainer"]
+theme_override_constants/separation = 15
+script = ExtResource("1_load")
+
+[node name="LoadLabel" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Select a saved campaign to load:"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CampaignList" type="VBoxContainer" parent="ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="NoSavesLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "No saved adventures found."
+horizontal_alignment = 1
+
+[node name="LoadBackButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
+
+[node name="DeleteConfirmDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Delete Adventure"
+initial_position = 2
+size = Vector2i(400, 150)
+dialog_text = "Are you sure you want to delete this adventure? This will permanently erase the save file."
+

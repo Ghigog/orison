@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000021"]
+
+[ext_resource type="Script" path="res://src/ui/ConnectionListItem.gd" id="1_conn"]
+
+[node name="ConnectionListItem" type="HBoxContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 31.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+script = ExtResource("1_conn")
+
+[node name="TextLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="DeleteButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+flat = true
+text = "✕"

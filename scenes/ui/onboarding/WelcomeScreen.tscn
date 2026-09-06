@@ -1,0 +1,34 @@
+[gd_scene load_steps=2 format=3 uid="uid://cc00000000013"]
+
+[ext_resource type="Script" path="res://src/ui/onboarding/WelcomeScreen.gd" id="1_welcome"]
+
+[node name="WelcomeScreen" type="VBoxContainer"]
+theme_override_constants/separation = 25
+script = ExtResource("1_welcome")
+
+[node name="DescLabel" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+text = "Craft interactive roleplaying adventures directly from your Obsidian markdown archives."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ButtonsVBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StartNewButton" type="Button" parent="ButtonsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ButtonAccent"
+text = "Start a New Adventure"
+
+[node name="LoadButton" type="Button" parent="ButtonsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Load Saved Campaign"
+
+[node name="SettingsButton" type="Button" parent="ButtonsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Visual Settings"

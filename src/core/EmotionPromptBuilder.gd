@@ -10,12 +10,12 @@ func build_emotion_block(char_id: String) -> String:
 		
 	var char_name = character.get("name", char_id)
 	var affinity = character.get("affinity", 0.0)
-	var relationship_level = _get_relationship_label(affinity)
+	var relationship_level = CharacterProfile.get_relationship_label(affinity)
 	
 	# Fetch last emotional event
 	var emotions = character.get("emotions", [])
 	var active_emotion = "serenity"
-	var intensity = 1.0
+	var intensity = 0.5
 	var target = "player"
 	var context = "Calm atmosphere."
 	
@@ -40,17 +40,6 @@ func build_emotion_block(char_id: String) -> String:
 	
 	return prompt
 
-func _get_relationship_label(affinity: float) -> String:
-	if affinity <= -0.6:
-		return "Nemesis"
-	elif affinity <= -0.2:
-		return "Enemy"
-	elif affinity <= 0.19:
-		return "Acquaintance"
-	elif affinity <= 0.59:
-		return "Friend"
-	else:
-		return "Best Friend"
 
 func _get_tone_guidance(emotion: String) -> String:
 	match emotion:

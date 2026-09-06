@@ -1,0 +1,186 @@
+[gd_scene format=3 uid="uid://cc00000000015"]
+
+[ext_resource type="Script" path="res://src/ui/CharacterDetailModal.gd" id="1_script"]
+[ext_resource type="Theme" uid="uid://cc00000000003" path="res://resources/themes/orison_ui.tres" id="2_theme"]
+[ext_resource type="PackedScene" path="res://scenes/ui/AssetStatusOverlay.tscn" id="3_overlay_scene"]
+
+[node name="CharacterDetailModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="OverlayBG" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0431373, 0.0470588, 0.0627451, 0.85)
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="CenterContainer" type="CenterContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="CardPanel" type="PanelContainer" parent="ScrollContainer/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(500, 0)
+layout_mode = 2
+
+[node name="CardMargin" type="MarginContainer" parent="ScrollContainer/CenterContainer/CardPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 30
+
+[node name="CardVBox" type="VBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HeaderVBox" type="VBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/HeaderVBox"]
+layout_mode = 2
+theme_type_variation = &"LabelAccent"
+theme_override_font_sizes/font_size = 24
+text = "CHARACTER PROFILE"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+
+[node name="ProfileHBox" type="HBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="AvatarVBox" type="VBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AvatarContainer" type="Control" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/AvatarVBox"]
+custom_minimum_size = Vector2(96, 96)
+layout_mode = 2
+
+[node name="AvatarRect" type="TextureRect" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/AvatarVBox/AvatarContainer"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="AvatarStatusOverlay" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/AvatarVBox/AvatarContainer" instance=ExtResource("3_overlay_scene")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GeneratePortraitButton" type="Button" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/AvatarVBox" unique_name_in_owner=true]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "🎨 Generate"
+
+[node name="DetailsVBox" type="VBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="NameLabel" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelTitle"
+theme_override_font_sizes/font_size = 20
+text = "Character Name"
+
+[node name="AffinityHBox" type="HBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="AffinityTitle" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox/AffinityHBox"]
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Rapport:"
+
+[node name="RapportBar" type="ProgressBar" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox/AffinityHBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 6)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = -1.0
+max_value = 1.0
+step = 0.01
+show_percentage = false
+
+[node name="AffinityLabel" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox/AffinityHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "+0.0"
+
+[node name="EmotionLabel" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelMuted"
+text = "Feeling: Serenity (0.5)"
+
+[node name="ReasonLabel" type="Label" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ProfileHBox/DetailsVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"LabelSubtle"
+text = "Reason: Observing the area carefully."
+autowrap_mode = 3
+
+[node name="BioLabel" type="RichTextLabel" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+theme_type_variation = &"RichTextSmall"
+bbcode_enabled = true
+text = "Character description and biography goes here..."
+fit_content = true
+
+[node name="HSeparator2" type="HSeparator" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox"]
+layout_mode = 2
+theme_override_constants/separation = 15
+alignment = 1
+
+[node name="TalkButton" type="Button" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonAccent"
+text = "Talk"
+
+[node name="CloseButton" type="Button" parent="ScrollContainer/CenterContainer/CardPanel/CardMargin/CardVBox/ButtonsHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Close"

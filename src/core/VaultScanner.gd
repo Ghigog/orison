@@ -8,7 +8,8 @@ static func scan_vault(vault_path: String) -> Dictionary:
 		"folders": {},              # Directory path (relative) -> suggested type
 		"potential_scenes": [],     # Array of Dictionary {"id": String, "label": String, "file_path": String}
 		"potential_characters": [], # Array of Dictionary {"id": String, "label": String, "file_path": String}
-		"all_files": []             # Array of Dictionary {"id": String, "label": String, "file_path": String, "body": String}
+		"all_files": [],            # Array of Dictionary {"id": String, "label": String, "file_path": String, "body": String}
+		"audio_list": []            # Array of String file paths
 	}
 	
 	if not DirAccess.dir_exists_absolute(vault_path):
@@ -17,7 +18,9 @@ static func scan_vault(vault_path: String) -> Dictionary:
 		
 	var file_list: Array[String] = []
 	var image_list: Array[String] = []
-	_scan_dir_recursive(vault_path, file_list, image_list)
+	var audio_list: Array[String] = []
+	_scan_dir_recursive(vault_path, file_list, image_list, audio_list)
+	results.audio_list = audio_list
 	
 	# Group files by their parent folder path (relative to vault_path)
 	var folder_files = {} # relative_folder_path -> Array of absolute file_paths
@@ -113,10 +116,16 @@ static func scan_vault(vault_path: String) -> Dictionary:
 		results.folders[folder] = winner
 		
 	# Build lists of potential scenes and characters
+	var total_files = file_list.size()
+	var processed_count = 0
+	
 	for folder in folder_files.keys():
 		var type = results.folders[folder]
 		var files = folder_files[folder]
 		for file_path in files:
+			processed_count += 1
+			EventBus.scan_progress.emit(processed_count, total_files)
+			
 			var file_basename = file_path.get_file().get_basename()
 			var result = MarkdownParser.parse_file(file_path)
 			var fm = result.get("frontmatter", {})
@@ -151,7 +160,7 @@ static func scan_vault(vault_path: String) -> Dictionary:
 	return results
 
 ## Recursive helper to list all markdown files and images
-static func _scan_dir_recursive(dir_path: String, file_list: Array[String], image_list: Array[String]) -> void:
+static func _scan_dir_recursive(dir_path: String, file_list: Array[String], image_list: Array[String], audio_list: Array[String] = []) -> void:
 	var dir = DirAccess.open(dir_path)
 	if not dir:
 		return
@@ -161,13 +170,15 @@ static func _scan_dir_recursive(dir_path: String, file_list: Array[String], imag
 	while file_name != "":
 		if dir.current_is_dir():
 			if not file_name.begins_with("."):
-				_scan_dir_recursive(dir_path.path_join(file_name), file_list, image_list)
+				_scan_dir_recursive(dir_path.path_join(file_name), file_list, image_list, audio_list)
 		else:
 			var ext = file_name.get_extension().to_lower()
 			if ext == "md":
 				file_list.append(dir_path.path_join(file_name))
 			elif ext in ["png", "jpg", "jpeg"]:
 				image_list.append(dir_path.path_join(file_name))
+			elif ext in ["ogg", "mp3", "wav"]:
+				audio_list.append(dir_path.path_join(file_name))
 		file_name = dir.get_next()
 	dir.list_dir_end()
 
