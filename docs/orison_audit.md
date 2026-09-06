@@ -28,8 +28,8 @@ However, the codebase has **critical structural problems** that will make contin
 
 | File | Size | Lines (est.) | Responsibilities |
 |---|---|---|---|
-| [OnboardingFlow.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/ui/OnboardingFlow.gd) | **85KB** | ~2,400 | Welcome screen, vault import, campaign listing, settings overlay, LLM connection testing, player character creation, physical description generation, avatar generation, adventure hook generation (2 LLM passes), background vault compilation, animated transitions (7+ screens), theme color picking, font size adjustment, Draw Things tutorial modal, model list fetching, save game loading |
-| [MainViewport.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/ui/MainViewport.gd) | **50KB** | ~1,400 | Gameplay UI, entire game loop (Director + Actor), LLM request orchestration, emotion state management, memory management, sidebar character list, chat rendering, image generation, portraits, backgrounds, input handling, settings modal, mind map modal |
+| [OnboardingFlow.gd](../src/ui/OnboardingFlow.gd) | **85KB** | ~2,400 | Welcome screen, vault import, campaign listing, settings overlay, LLM connection testing, player character creation, physical description generation, avatar generation, adventure hook generation (2 LLM passes), background vault compilation, animated transitions (7+ screens), theme color picking, font size adjustment, Draw Things tutorial modal, model list fetching, save game loading |
+| [MainViewport.gd](../src/ui/MainViewport.gd) | **50KB** | ~1,400 | Gameplay UI, entire game loop (Director + Actor), LLM request orchestration, emotion state management, memory management, sidebar character list, chat rendering, image generation, portraits, backgrounds, input handling, settings modal, mind map modal |
 
 **Together these two files are 135KB — likely 55-60% of all GDScript in the project.** Each should be split into 8-12 focused scripts with dedicated sub-scenes.
 
@@ -60,7 +60,7 @@ The system has **zero awareness of LLM context window sizes**. There is:
 - No priority system for context blocks (character personality should outrank distant lore)
 - No warning when prompts exceed model limits
 
-[SystemPrompts.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/SystemPrompts.gd) alone generates prompts that can be thousands of tokens. Add conversation history, world state, memories, and Director instructions — the total easily overflows 4K-8K context models. When it overflows, the LLM silently drops context from the beginning (which is the system prompt), causing NPCs to break character.
+[SystemPrompts.gd](../src/core/SystemPrompts.gd) alone generates prompts that can be thousands of tokens. Add conversation history, world state, memories, and Director instructions — the total easily overflows 4K-8K context models. When it overflows, the LLM silently drops context from the beginning (which is the system prompt), causing NPCs to break character.
 
 ---
 
@@ -110,11 +110,11 @@ The onboarding flow, game viewport, settings modals, character creation screens 
 
 | File | What It Does For Emotions |
 |---|---|
-| [EmotionEngine.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/EmotionEngine.gd) | Almost nothing (~1KB skeleton) |
-| [EmotionPromptBuilder.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/EmotionPromptBuilder.gd) | Builds LLM prompts for emotion extraction |
-| [MainViewport.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/ui/MainViewport.gd) | Actual emotion processing, deduction, reflection (L975-L1018+) |
-| [SystemPrompts.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/SystemPrompts.gd) | Emotion instructions in actor prompts |
-| [CharacterListItem.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/ui/CharacterListItem.gd) | Emotion display |
+| [EmotionEngine.gd](../src/core/EmotionEngine.gd) | Almost nothing (~1KB skeleton) |
+| [EmotionPromptBuilder.gd](../src/core/EmotionPromptBuilder.gd) | Builds LLM prompts for emotion extraction |
+| [MainViewport.gd](../src/ui/MainViewport.gd) | Actual emotion processing, deduction, reflection (L975-L1018+) |
+| [SystemPrompts.gd](../src/core/SystemPrompts.gd) | Emotion instructions in actor prompts |
+| [CharacterListItem.gd](../src/ui/CharacterListItem.gd) | Emotion display |
 
 The file *named* `EmotionEngine.gd` is a near-empty skeleton. The actual emotion logic lives in `MainViewport.gd`. This is deeply misleading — a developer looking to modify emotion behavior will go to the wrong file first.
 
@@ -122,7 +122,7 @@ The file *named* `EmotionEngine.gd` is a near-empty skeleton. The actual emotion
 
 ### 8. EventBus Is Vestigial (~274 bytes)
 
-[EventBus.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/autoload/EventBus.gd) defines 2-3 signals at most. For a project with this many inter-system dependencies, the event bus should be the **central nervous system**. Instead, most communication happens through direct function calls between monoliths, creating tight coupling.
+[EventBus.gd](../src/autoload/EventBus.gd) defines 2-3 signals at most. For a project with this many inter-system dependencies, the event bus should be the **central nervous system**. Instead, most communication happens through direct function calls between monoliths, creating tight coupling.
 
 A properly utilized EventBus would enable:
 - Decoupling emotion updates from UI rendering
@@ -134,7 +134,7 @@ A properly utilized EventBus would enable:
 
 ### 9. KnowledgeGraphManager Is Bypassed
 
-[KnowledgeGraphManager.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/KnowledgeGraphManager.gd) (~5KB) exists but is largely unused. [VaultCompiler.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/VaultCompiler.gd) and [CampaignState.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/autoload/CampaignState.gd) both maintain their own entity dictionaries and relationship data, bypassing the knowledge graph entirely.
+[KnowledgeGraphManager.gd](../src/core/KnowledgeGraphManager.gd) (~5KB) exists but is largely unused. [VaultCompiler.gd](../src/core/VaultCompiler.gd) and [CampaignState.gd](../src/autoload/CampaignState.gd) both maintain their own entity dictionaries and relationship data, bypassing the knowledge graph entirely.
 
 The graph also lacks:
 - Multi-hop traversal (can't query "all NPCs allied with faction Y in locations connected to X")
@@ -157,7 +157,7 @@ Memory arrays in CampaignState grow unbounded with no compaction. Over a long pl
 
 ## 11. Markdown Parser Is Too Basic for the Vault Format
 
-[MarkdownParser.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/MarkdownParser.gd) (~3KB) handles only:
+[MarkdownParser.gd](../src/core/MarkdownParser.gd) (~3KB) handles only:
 - YAML frontmatter extraction
 - Heading-based section splitting
 
@@ -184,7 +184,7 @@ The codebase has extensive async operations (LLM requests, image generation, vau
 
 ## 13. No Save Versioning or Migration
 
-[SaveManager.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/SaveManager.gd) (~3.8KB) has:
+[SaveManager.gd](../src/core/SaveManager.gd) (~3.8KB) has:
 - No version numbers on save files
 - No data validation on load (trusts JSON completely)
 - No migration strategy for schema changes
@@ -199,7 +199,7 @@ When the save format inevitably changes, all existing saves will break silently.
 
 ### 14. PromptBuilder vs SystemPrompts Boundary Is Blurry
 
-Both [PromptBuilder.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/PromptBuilder.gd) and [SystemPrompts.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/core/SystemPrompts.gd) participate in prompt construction with overlapping responsibilities. It's unclear where to make changes for a given prompt modification.
+Both [PromptBuilder.gd](../src/core/PromptBuilder.gd) and [SystemPrompts.gd](../src/core/SystemPrompts.gd) participate in prompt construction with overlapping responsibilities. It's unclear where to make changes for a given prompt modification.
 
 ### 15. No Prompt Injection Protection
 
@@ -231,7 +231,7 @@ OnboardingFlow.gd has settings screens (LLM config, themes, image gen). Settings
 
 ### 22. Design Philosophy Is Only Partially Implemented
 
-[design_philosophy.md](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/design_philosophy.md) specifies spacing scales, border radii, shadow systems, and animation timing curves. [ThemeManager.gd](file:///Users/dylangrowcoot/Documents/Personal%20Apps/orison/src/autoload/ThemeManager.gd) only implements colors and font sizes. The rest of the design system is ad-hoc.
+[design_philosophy.md](../design_philosophy.md) specifies spacing scales, border radii, shadow systems, and animation timing curves. [ThemeManager.gd](../src/autoload/ThemeManager.gd) only implements colors and font sizes. The rest of the design system is ad-hoc.
 
 ### 23. CampaignGraphView Doesn't Scale
 
