@@ -2,13 +2,16 @@
 
 Orison is a multiplatform (PC, Mac, Mobile) game engine built in Godot 4.x. It parses a Markdown archive (such as an Obsidian vault) containing environments, stories, characters, and other notes, and turns it into an interactive DND or Visual Novel experience that players can play through and interact with.
 
+> **Feature freeze in effect.** The Godot build is in maintenance mode: it receives bug fixes only, and new feature work is paused pending a planned migration to a Rust core with a Tauri 2 desktop shell. See the **[Migration Plan](docs/migration_plan.md)** for the full rationale, phasing, and exit criteria. Every feature added to the Godot build after this point is a feature that has to be built twice.
+
 ## Documentation References
 
 For details on the project design, developer/agent guides, and backlog tracking, see the following key documents:
 
+- **[Migration Plan](docs/migration_plan.md)**: Ordered plan for moving off Godot to a Rust core with a Tauri 2 desktop shell, with phase-by-phase exit criteria.
 - **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
 - **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
-- **[Gemini Agent Guide](gemini.md)**: Guide for AI agents to locate specific features, find codebase patterns, and maintain modular development.
+- **[Agent Guide](AGENTS.md)**: Canonical guidance for developers and AI agents: constraints, layout, rules, and how to run the suite.
 - **[Research Case Studies](docs/research.md)**: Deep dive into market platforms, Nomi.AI memory system, and takeaways.
 - **[Technical Architecture Proposal](docs/proposal.md)**: Details on SQLite databases, desktop passthrough, and local model mitigations.
 - **[Emotion System](docs/emotions.md)**: Tri-Dimensional Emotion System logic, relevance flags, and visual feedback mapping.
@@ -51,7 +54,7 @@ For details on the project design, developer/agent guides, and backlog tracking,
 ├── tests/                   # Integration and unit test runner scenes
 ├── ARCHITECTURE.md          # Project architecture design document
 ├── design_philosophy.md     # Unified visual language and component styling
-├── gemini.md                # Agent guide and modular feature map
+├── AGENTS.md                # Canonical developer/agent guide
 └── project.godot            # Godot project settings file
 ```
 

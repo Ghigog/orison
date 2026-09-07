@@ -1105,6 +1105,62 @@ func test_prompt_budgeting() -> bool:
 		print("[FAIL] History length compression failed: ", compressed2)
 		return false
 		
+	# 2b. Budget fractions must never sum above 1.0 (defect B-1).
+	# They previously summed to 1.05 for the character agent, against a limit
+	# that was itself double the window LLMClient actually served.
+	for role_key in PromptBuilder.BUDGET_FRACTIONS.keys():
+		var total = 0.0
+		for fraction in PromptBuilder.BUDGET_FRACTIONS[role_key]:
+			total += fraction
+		if total > 1.0001:
+			print("[FAIL] Budget fractions for '%s' sum to %f, above 1.0" % [role_key, total])
+			return false
+
+	# 2c. The prompt budget must leave room for the response, and must agree
+	# with the context length LLMClient actually sends as num_ctx.
+	var saved_wb_ctx = LLMClient.world_builder_context
+	var saved_char_ctx = LLMClient.character_context
+	var saved_wb_model = LLMClient.world_builder_model
+	var saved_char_model = LLMClient.character_model
+
+	for role in [LLMClient.ROLE_CHARACTER, LLMClient.ROLE_WORLD_BUILDER]:
+		var ctx = LLMClient.get_context_length(role)
+		var budget = LLMClient.get_prompt_budget(role)
+		if budget >= ctx:
+			print("[FAIL] Prompt budget %d for role '%s' leaves no room for the response (context %d)" % [budget, role, ctx])
+			return false
+		if ctx - budget != LLMClient.PROMPT_RESPONSE_RESERVE:
+			print("[FAIL] Response reserve for role '%s' is %d, expected %d" % [role, ctx - budget, LLMClient.PROMPT_RESPONSE_RESERVE])
+			return false
+
+	# 2d. Configuring both roles to the same model must still yield the correct
+	# context length for each. Selection is by role, not by model name.
+	LLMClient.world_builder_model = "same-model"
+	LLMClient.character_model = "same-model"
+	LLMClient.world_builder_context = 8192
+	LLMClient.character_context = 4096
+
+	if LLMClient.get_context_length(LLMClient.ROLE_WORLD_BUILDER) != 8192:
+		print("[FAIL] World builder context resolved to %d with a shared model name" % LLMClient.get_context_length(LLMClient.ROLE_WORLD_BUILDER))
+		LLMClient.world_builder_context = saved_wb_ctx
+		LLMClient.character_context = saved_char_ctx
+		LLMClient.world_builder_model = saved_wb_model
+		LLMClient.character_model = saved_char_model
+		return false
+
+	if LLMClient.get_context_length(LLMClient.ROLE_CHARACTER) != 4096:
+		print("[FAIL] Character context resolved to %d with a shared model name" % LLMClient.get_context_length(LLMClient.ROLE_CHARACTER))
+		LLMClient.world_builder_context = saved_wb_ctx
+		LLMClient.character_context = saved_char_ctx
+		LLMClient.world_builder_model = saved_wb_model
+		LLMClient.character_model = saved_char_model
+		return false
+
+	LLMClient.world_builder_context = saved_wb_ctx
+	LLMClient.character_context = saved_char_ctx
+	LLMClient.world_builder_model = saved_wb_model
+	LLMClient.character_model = saved_char_model
+
 	# 3. Test lore context budgeting in KnowledgeGraphManager
 	var temp_graph = KnowledgeGraphManager.new()
 	# Set a mock graph in CampaignState
@@ -1329,13 +1385,20 @@ func test_atomic_writes_and_upgrade() -> bool:
 	var campaign_id = "test_atomic_upgrade"
 	var final_path = SaveManager.SAVE_DIR + campaign_id + ".json"
 	var tmp_path = SaveManager.SAVE_DIR + campaign_id + ".tmp"
-	
+
+	# This test writes a fixture file directly, before calling any SaveManager
+	# function that would create SAVE_DIR itself. On a cold user:// directory
+	# (every CI run, and any fresh install) the directory does not exist yet and
+	# FileAccess.open below returns null. Create it explicitly.
+	if not DirAccess.dir_exists_absolute(SaveManager.SAVE_DIR):
+		DirAccess.make_dir_recursive_absolute(SaveManager.SAVE_DIR)
+
 	# Clean up old runs
 	if FileAccess.file_exists(final_path):
 		DirAccess.remove_absolute(final_path)
 	if FileAccess.file_exists(tmp_path):
 		DirAccess.remove_absolute(tmp_path)
-		
+
 	# 1. Create a legacy save file (version 0.0.0 format)
 	var legacy_data = {
 		"adventure_meta": {
@@ -1346,6 +1409,7 @@ func test_atomic_writes_and_upgrade() -> bool:
 	
 	var file = FileAccess.open(final_path, FileAccess.WRITE)
 	if not file:
+		print("[FAIL] Could not open legacy fixture for writing at %s (error %d)" % [final_path, FileAccess.get_open_error()])
 		return false
 	file.store_string(JSON.stringify(legacy_data))
 	file.close()
@@ -2533,77 +2597,94 @@ func test_json_repair_diagnostics() -> bool:
 	return true
 
 func test_llm_stream_request_timeout() -> bool:
+	# This test drives _process() directly rather than calling start() against a
+	# network address. The previous version pointed at 192.0.2.1 (RFC 5737
+	# TEST-NET-1) and relied on the packets being silently blackholed so that
+	# elapsed time would accumulate until the timeout fired. Sandboxed CI runners
+	# refuse the connection immediately instead, so the client reached
+	# STATUS_CANT_CONNECT and _fail() ran with a connection error rather than the
+	# timeout message, failing the test for environmental reasons.
+	#
+	# The timeout branch in LLMStreamRequest._process() is checked before the
+	# socket status switch and returns immediately, so a single _process() call
+	# with a delta larger than the timeout exercises it with no socket at all.
 	var req = LLMStreamRequest.new()
 	var state = {
 		"failed_called": false,
 		"error_received": ""
 	}
-	
+
 	add_child(req)
-	
-	req.start("http://192.0.2.1:11434", "prompt", "model", 2048,
-		func(word: String): pass,
-		func(text: String): pass,
-		func(err: String):
-			state["failed_called"] = true
-			state["error_received"] = err,
-		0.1 # Very short timeout to trigger immediately
-	)
-	
-	# Wait for timeout to fire (it runs inside _process)
-	var timer = 0.0
-	while not state["failed_called"] and timer < 1.5:
-		await get_tree().process_frame
-		timer += get_process_delta_time()
-		
+	req.set_process(false) # Drive _process manually; no frame-rate dependence.
+
+	req.timeout_seconds = 0.1
+	req._chunk_count = 0
+	req._on_failed_callback = func(err: String):
+		state["failed_called"] = true
+		state["error_received"] = err
+	req._is_running = true
+
+	req._process(0.5) # Exceeds timeout_seconds in one step.
+
 	if not state["failed_called"]:
 		print("[FAIL] LLMStreamRequest did not timeout and fail")
 		if is_instance_valid(req):
 			req.queue_free()
 		return false
-		
+
 	if not "Request timed out" in state["error_received"]:
 		print("[FAIL] Unexpected timeout error message: ", state["error_received"])
+		if is_instance_valid(req):
+			req.queue_free()
 		return false
-		
+
+	req.queue_free()
 	return true
 
 func test_llm_stream_request_timeout_prevented_by_chunks() -> bool:
+	# Companion to test_llm_stream_request_timeout, and hermetic for the same
+	# reason: no socket is opened, so the result does not depend on whether the
+	# environment blackholes or refuses an unroutable address.
+	#
+	# _process() runs three checks in order: the request timeout (suppressed when
+	# _chunk_count > 0), the chunk-stall timeout, then the socket status switch.
+	# To prove the first check was suppressed without letting execution reach the
+	# socket switch, the stall timer is primed past CHUNK_TIMEOUT so the second
+	# check fires and returns. A stall failure therefore means the request
+	# timeout was correctly skipped despite elapsed time exceeding it; a timeout
+	# failure would mean _chunk_count was ignored.
 	var req = LLMStreamRequest.new()
 	var state = {
 		"failed_called": false,
 		"error_received": ""
 	}
-	
+
 	add_child(req)
-	
-	req.start("http://192.0.2.1:11434", "prompt", "model", 2048,
-		func(word: String): pass,
-		func(text: String): pass,
-		func(err: String):
-			state["failed_called"] = true
-			state["error_received"] = err,
-		0.1 # Very short timeout
-	)
-	
-	# Simulate that we already received a chunk
-	req._chunk_count = 1
-	
-	# Wait for a while (exceeding the 0.1s timeout)
-	var timer = 0.0
-	while not state["failed_called"] and timer < 0.5:
-		await get_tree().process_frame
-		timer += get_process_delta_time()
-		
-	# The timeout should NOT have been triggered because _chunk_count > 0
-	if state["failed_called"]:
+	req.set_process(false) # Drive _process manually; no frame-rate dependence.
+
+	req.timeout_seconds = 0.1
+	req._chunk_count = 1 # Simulate that we already received a chunk.
+	req._chunk_timeout_timer = req.CHUNK_TIMEOUT + 1.0
+	req._on_failed_callback = func(err: String):
+		state["failed_called"] = true
+		state["error_received"] = err
+	req._is_running = true
+
+	req._process(0.5) # Exceeds timeout_seconds, but chunks have been received.
+
+	if "Request timed out" in state["error_received"]:
 		print("[FAIL] LLMStreamRequest timed out even though chunks were received: ", state["error_received"])
 		if is_instance_valid(req):
 			req.queue_free()
 		return false
-		
-	# Clean up
-	req.cancel()
+
+	if not state["failed_called"] or not "stalled" in state["error_received"]:
+		print("[FAIL] Expected the chunk-stall path to fire, got: ", state["error_received"])
+		if is_instance_valid(req):
+			req.queue_free()
+		return false
+
+	req.queue_free()
 	return true
 
 func test_vault_scanner_progress() -> bool:

@@ -14,7 +14,7 @@ Orison's aesthetic is defined as **"The Ethereal Codex (Daybreak Edition)"**—a
 ```
 
 ### Pillar 1: Immersive Transparency
-* **Contrast of Layers:** The background environment (loaded via [ImageGenManager](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/src/autoload/ImageGenManager.gd) as described in [ARCHITECTURE.md Section 2.6](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#26-image-generation-subsystem-resautoload-rescore)) is the visual focal point. The UI must never block it with solid, heavy shapes. Instead, use high-contrast glassmorphism—frosted panels with backdrop blurs and subtle edge borders—allowing the scene to bleed through the controls.
+* **Contrast of Layers:** The background environment (loaded via [ImageGenManager](src/autoload/ImageGenManager.gd) as described in [ARCHITECTURE.md Section 2.6](ARCHITECTURE.md#26-image-generation-subsystem-resautoload-rescore)) is the visual focal point. The UI must never block it with solid, heavy shapes. Instead, use high-contrast glassmorphism—frosted panels with backdrop blurs and subtle edge borders—allowing the scene to bleed through the controls.
 * **Non-Intrusive Overlays:** Controls float like cards over the canvas, casting soft dropshadows to establish depth.
 
 ### Pillar 2: Dynamic Tactility
@@ -22,7 +22,7 @@ Orison's aesthetic is defined as **"The Ethereal Codex (Daybreak Edition)"**—a
 * **Micro-animations over Static States:** Avoid sudden state changes. Interface shifts use short, organic transitions (tweening scales, opacity fades) that mimic organic physical movements.
 
 ### Pillar 3: Semantic Atmosphere
-* **Aesthetics Linked to Logic:** Visual states reflect the backend data. Character cards pulse with soft hues corresponding to their active emotions (from [Emotion Engine](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/emotions.md)), and the layout morphs dynamically to fit different screen dimensions without compromising layout density.
+* **Aesthetics Linked to Logic:** Visual states reflect the backend data. Character cards pulse with soft hues corresponding to their active emotions (from [Emotion Engine](docs/emotions.md)), and the layout morphs dynamically to fit different screen dimensions without compromising layout density.
 
 ---
 
@@ -45,7 +45,7 @@ To achieve a premium, dark-mode-first aesthetic reflecting the dawn, Orison uses
 
 ### 2.2 Emotional Glow Mapping
 
-The [Emotion Engine](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/src/core/EmotionEngine.gd) (described in [ARCHITECTURE.md Section 2.3](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#23-emotion-engine-ressrccore)) drives character interactions. When rendering a character’s nameplate or their floating UI card, a subtle radial glow or panel border color is applied using the following mapping:
+The [Emotion Engine](src/core/EmotionEngine.gd) (described in [ARCHITECTURE.md Section 2.3](ARCHITECTURE.md#23-emotion-engine-ressrccore)) drives character interactions. When rendering a character’s nameplate or their floating UI card, a subtle radial glow or panel border color is applied using the following mapping:
 
 | Emotion | HSL / Hex | Visual Representation |
 | :--- | :--- | :--- |
@@ -241,7 +241,7 @@ Animations must be smooth and performant, avoiding structural lag. All transitio
 
 ### 6.2 Character Emotion Reactions (`res://src/ui/CharacterVisuals.gd`)
 
-Characters react visually to dialogue changes. The [CharacterVisuals.gd](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/src/ui/CharacterVisuals.gd) script (described in [ARCHITECTURE.md Section 2.8](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#28-ui-presenter--onboarding-ressrui-resautoload-resscenesui)) translates emotion events into sprite adjustments:
+Characters react visually to dialogue changes. The [CharacterVisuals.gd](src/ui/CharacterVisuals.gd) script (described in [ARCHITECTURE.md Section 2.8](ARCHITECTURE.md#28-ui-presenter--onboarding-ressrui-resautoload-resscenesui)) translates emotion events into sprite adjustments:
 
 * **Anger (Jitter Shake):**
   * Action: Rapidly offsets the sprite's `position.x` by random values between `-5px` and `5px` for `0.25 seconds`.
@@ -259,16 +259,16 @@ When writing UI scenes or editing code under `res://src/ui/`, developers must ad
 
 1. **Strict Theme Separation:** Never set ad-hoc colors, fonts, or margins inside node inspectors. Use a global theme file (`res://assets/themes/default_theme.tres`) containing standard StyleBoxes, Fonts, and Colors.
 2. **Backdrop Blur Safety:** Godot's screen-reading shader (used for backdrop blurs) can be expensive on mobile. Always check the target platform; if mobile, automatically degrade the blur to simple semi-transparent backgrounds without screen copies to protect battery life.
-3. **Save State Integrity:** Ensure UI changes never occur before save states are flushed. Visual notifications (e.g., "Rapport Increased!") should only trigger *after* the [SaveManager](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/src/core/SaveManager.gd) (described in [ARCHITECTURE.md Section 2.2](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#22-story-state-manager-resautoload)) returns a successful write code.
+3. **Save State Integrity:** Ensure UI changes never occur before save states are flushed. Visual notifications (e.g., "Rapport Increased!") should only trigger *after* the [SaveManager](src/core/SaveManager.gd) (described in [ARCHITECTURE.md Section 2.2](ARCHITECTURE.md#22-story-state-manager-resautoload)) returns a successful write code.
 4. **Anchor Management:** Always use anchor presets (`Control -> Anchors Preset`) to anchor panels, ensuring layouts don't break when switching window ratios.
 
 ---
 
 ## 8. Integration & Document Alignment
 
-* This design language dictates the visual presentation layer overseen by the **UI Presenter** specified in [ARCHITECTURE.md Section 2.8](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/ARCHITECTURE.md#28-ui-presenter--onboarding-ressrui-resautoload-resscenesui).
-* All tickets regarding UI, including [TKT001 (Implement Responsive Full-Screen Dialogue UI)](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/backlog.md#L9-L30), must use this document as their visual and interactive benchmark.
-* New visual elements or animations should update the **Feature Map** inside [gemini.md](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/gemini.md#L14-L22) to trace where style logic is implemented.
+* This design language dictates the visual presentation layer overseen by the **UI Presenter** specified in [ARCHITECTURE.md Section 2.8](ARCHITECTURE.md#28-ui-presenter--onboarding-ressrui-resautoload-resscenesui).
+* All tickets regarding UI, including [TKT001 (Implement Responsive Full-Screen Dialogue UI)](docs/backlog.md#L9-L30), must use this document as their visual and interactive benchmark.
+* New visual elements or animations should follow the module responsibilities described in [AGENTS.md](AGENTS.md), which is the canonical guide to where style logic lives.
 
 ---
 
