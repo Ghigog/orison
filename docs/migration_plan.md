@@ -646,8 +646,8 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-5 | Frame-coupled HTTP streaming | Moderate | Phase 2.2 | Port | Open |
 | B-9 | Dense-only retrieval on a proper-noun-dense corpus | Major | Phase 3.4 | Port | Open |
 | B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | Open |
-| B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | Phase 3.4 | Port (or sooner) | Open |
-| B-14 | Character nodes discard raw source text entirely | **Critical** | Phase 3.2 | Port | Open |
+| B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | **Phase 1** | Godot build | **Fixed** (recall 0.00-0.20 -> 0.88-1.00) |
+| B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 
@@ -749,11 +749,19 @@ retrieval". The reciprocal rank fusion is real, but one input is this near-dead
 lexical path and the other needs `nomic-embed-text` installed. Without an
 embedding model, retrieval returns nothing at all.
 
-**Fix**: Phase 3.4 replaces this wholesale with BM25 via `tantivy` plus dense ANN
-and rank fusion. That schedule assumed the lexical half was merely weak, not
-inoperative. Given the measured impact, inverting the condition in the Godot
-build is a two-character change that would deliver most of a fix immediately, and
-is worth considering despite the feature freeze. Raise it before doing it.
+**Fixed in the Godot build**, ahead of the port, because retrieval returning
+nothing is not a degraded feature but an absent one. The containment test is
+replaced with term-overlap scoring over each node's label, id, tags, description
+and body, with stopword filtering and label-weighted scoring. Recall went from
+0.00-0.20 to 0.88-1.00 across the three fixtures, with zero queries returning
+nothing.
+
+This is **not** BM25 and does not close Phase 3.4. There is no corpus-wide IDF
+and no length normalisation. Precision is now the weak point: on `large`, one
+query retrieves 74 of 207 nodes alongside the correct answer, because term
+overlap plus one-degree neighbour expansion casts very wide. That is what a
+cross-encoder reranker exists to fix, so Phase 3.4's argument is strengthened,
+not weakened. Two-hop queries also still fail.
 
 ### B-14: Character nodes discard their raw source text
 
@@ -777,8 +785,14 @@ the system in some form."
 It also removes the safety net from the entire Bug 1 class of heading-parsing
 failures. Those bugs are only catastrophic *because* of this one.
 
-**Fix**: Phase 3.2 must retain full source text per node, chunked and retrievable,
-with extracted fields as an addition to it rather than a replacement for it.
+**Fixed in the Godot build.** `VaultCompiler` now retains the full source body on
+every node type, so extraction is additive to the source rather than a
+replacement for it. Ingest completeness on the `messy` fixture went from 3/6 to
+6/6.
+
+Phase 3.2 still owns the proper version: chunked, with overlap and provenance, so
+retrieval can cite the source note. What landed here is the safety net, not the
+retrieval-quality work.
 
 ### B-11: No continuous integration
 

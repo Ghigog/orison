@@ -4,7 +4,9 @@
 > [migration_plan.md](migration_plan.md) cannot be declared complete until the
 > Rust engine meets or beats every figure here.
 >
-> **Recorded**: 7 September 2026, against `main` at the close of Phase 0.
+> **Recorded**: 7 September 2026, against `main` at the close of Phase 0, then
+> re-measured after fixing the two critical defects the harness surfaced (B-13,
+> B-14). Both sets of numbers are kept: the port must beat the *fixed* figures.
 > **Engine**: Godot 4.6 / GDScript, ~19,600 lines.
 > **Harness**: `eval/EvalRunner.tscn`. See [Running it](#running-it).
 
@@ -69,72 +71,98 @@ extraction from wiki-links works.
 This is genuinely good and worth saying plainly: the ingest pipeline's *structure*
 holds up against deliberately hostile input.
 
-### Retrieval — the headline result
+### Retrieval — the headline result, and its fix
 
-| Fixture | Mean recall | Queries returning nothing at all |
-|---|---:|---:|
-| `minimal` | **0.200** | 4 of 5 |
-| `messy` | **0.000** | 5 of 5 |
-| `large` | **0.000** | 4 of 4 |
+Retrieval was measured, found to be almost entirely non-functional, fixed, and
+re-measured. Both states are recorded: the first is what the harness found, the
+second is the bar the Rust port must actually beat.
 
-**13 of 14 queries retrieved literally zero nodes.** The single success is a
-positive control deliberately written to embed a node's full label verbatim.
+| Fixture | Mean recall (as found) | Mean recall (after fix) | Queries returning nothing |
+|---|---:|---:|---|
+| `minimal` | 0.200 | **1.000** | 4 of 5 → 0 |
+| `messy` | 0.000 | **0.933** | 5 of 5 → 0 |
+| `large` | 0.000 | **0.875** | 4 of 4 → 0 |
 
-Retrieval latency: p50 0 ms, p95 1 ms. Fast, because it is doing almost nothing.
+**As found, 13 of 14 queries retrieved literally zero nodes.** The single success
+was a positive control deliberately written to embed a node's full label verbatim.
 
-This is defect **B-13**, confirmed empirically and recorded in
-[migration_plan.md](migration_plan.md) Appendix B. The cause is a single inverted
-condition at `KnowledgeGraphManager.gd:179`:
+This was defect **B-13**: a single inverted condition at
+`KnowledgeGraphManager.gd:179`.
 
 ```gdscript
 if normalized_prompt.contains(label) or normalized_prompt.contains(id.to_lower()):
 ```
 
-It asks whether the **query contains the node's label**, not whether the node
-matches the query. Lexical retrieval therefore only fires when the player happens
-to type an entity's full name inside their sentence. Note bodies are never
-searched at all: only labels and ids.
+It asked whether the **query contained the node's label**, not whether the node
+matched the query. Lexical retrieval therefore fired only when the player typed
+an entity's full name inside their sentence, and note bodies were never searched
+at all: only labels and ids. There was also **no BM25 anywhere in the codebase**,
+despite the retired feature map advertising "Hybrid BM25 + KNN semantic
+retrieval", so with no embedding model installed retrieval returned nothing
+whatsoever.
 
-The control query proves this is the cause rather than a harness wiring fault.
-`"tell me about thornwick archive"` contains the label `"thornwick archive"`
-verbatim, and scores 1.00 with two nodes retrieved. `"Thornwick"` alone scores
-0.00, because `"thornwick".contains("thornwick archive")` is false. Do not delete
-that control: it is what makes every zero above trustworthy.
+The control query is what makes those zeros trustworthy rather than a suspected
+harness fault: `"tell me about thornwick archive"` contains the label verbatim
+and scored 1.00, while `"Thornwick"` alone scored 0.00, because
+`"thornwick".contains("thornwick archive")` is false. Keep that control.
 
-There is also **no BM25 implementation anywhere in the codebase**, despite the
-retired feature map advertising "Hybrid BM25 + KNN semantic retrieval". The
-reciprocal rank fusion in `retrieve_context` is real, but one of its two inputs
-is a near-dead lexical path and the other requires `nomic-embed-text` to be
-installed. With no embedding model present, retrieval returns nothing whatsoever.
+**The fix** replaces the containment test with term-overlap scoring over each
+node's label, id, tags, description and body, with stopword filtering and
+weighting that favours label matches. Retrieval latency: p50 0 ms, p95 1 ms both
+before and after.
+
+**What the fix is not.** It is not BM25. There is no corpus-wide inverse document
+frequency and no length normalisation, so a long note is easier to match than a
+short one. Phase 3.4 still replaces it with real BM25 via `tantivy` plus dense
+ANN and rank fusion; this is a large improvement over a broken path, not a
+substitute for the planned work.
+
+**Precision is now the weak point, and it is the honest caveat on those numbers.**
+On `large`, `"what stopped the boundary war"` retrieves the right note but drags
+in 74 of 207 nodes alongside it, because term overlap plus one-degree neighbour
+expansion casts very wide. Recall is fixed; precision is not measured yet and
+should be. This is exactly the gap a cross-encoder reranker closes, and it
+strengthens rather than weakens the Phase 3.4 argument.
+
+Two cases remain imperfect and are worth keeping as targets:
+
+- `messy` / `"who was at the granary"` scores 0.67. The connection lives only in
+  an untyped scratch note; genuine multi-hop reasoning is still missing.
+- `large` / `"who keeps the accord"` scores 0.50. It finds the Accord but not the
+  chapel that holds it, which is the same two-hop limitation.
 
 ### Ingest completeness
 
-| Fixture | Retained |
-|---|---|
-| `messy` | **3 of 6** required source substrings |
+| Fixture | As found | After fix |
+|---|---|---|
+| `messy` | 3 of 6 required source substrings | **6 of 6** |
 
-Dropped: `"salt throne at nineteen"`, `"abolished before he dies"`,
-`"loyal to individuals rather than institutions"`.
+Originally dropped: `"salt throne at nineteen"`, `"abolished before he dies"`,
+`"loyal to individuals rather than institutions"` — all three from character
+files.
 
-**Attribute this carefully.** Under a synthetic cassette the LLM extraction
-returns canned filler, so this metric cannot distinguish "the compiler dropped
-it" from "the mock replaced it". What it *does* establish, and what code
-inspection confirms, is architectural:
+This was defect **B-14**, and it was architectural rather than a parsing slip.
+`VaultCompiler.gd:254` built character nodes with frontmatter as properties and
+the LLM-extracted biography as `desc`. Scenes and locations kept the original
+prose in `props["body"]`; **characters kept nothing.** Whatever the single
+extraction pass missed was unrecoverable, and nothing downstream could tell
+"this character has no personality written" from "the extractor failed on this
+file".
 
-`VaultCompiler.gd:254` builds character nodes with frontmatter as properties and
-the LLM-extracted biography as `desc`. Unlike scenes and locations, which keep
-`props["body"]` (lines 515, 548), **character nodes retain no raw source text at
-all.** Whatever the extraction pass misses is unrecoverable, because the original
-prose is never stored anywhere in the graph.
+That violated [rag_architecture.md](rag_architecture.md) §1.1 outright, and it is
+why the bold-numeric-heading class of bug (Bug 1) was ever catastrophic: those
+bugs are only unrecoverable *because* there was no raw text to fall back on.
 
-That is a direct violation of the data-lake principle in
-[rag_architecture.md](rag_architecture.md) §1.1 ("no information should ever be
-silently discarded"), and it is recorded as defect **B-14**. It also means the
-bold-numeric-heading class of bug (Bug 1) has no safety net: if extraction fails
-on a file, that character is simply blank forever.
+**The fix** retains the full source body on every node type, so extraction is now
+additive to the source rather than a replacement for it. All six required
+substrings survive compilation.
 
-Whether Bug 1 itself still reproduces cannot be answered from this run. It needs
-a recorded cassette.
+One caveat on interpreting the original 3/6: under a synthetic cassette the LLM
+extraction returns canned filler, so the metric alone could not distinguish "the
+compiler dropped it" from "the mock replaced it". Code inspection settled that,
+and the fix confirms it. Whether Bug 1's heading parsing itself still misfires is
+a separate question that needs a recorded cassette; it now merely degrades
+quality rather than destroying data.
 
 ---
 

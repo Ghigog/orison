@@ -174,17 +174,32 @@ func retrieve_context(user_prompt: String, max_tokens: int = -1, target_level: i
 		
 	var normalized_prompt = user_prompt.to_lower()
 	
-	# 1. Keyword search (substring match)
-	var keyword_matches: Array[String] = []
+	# 1. Lexical search (term overlap against the node's searchable text)
+	#
+	# This previously asked `normalized_prompt.contains(label)`, i.e. whether the
+	# QUERY contained the node's LABEL rather than the reverse. That only fires
+	# when a player types an entity's full name inside their sentence, and it
+	# never looked at note bodies at all. Measured against the Phase 1 fixtures,
+	# 13 of 14 queries retrieved literally nothing. See migration_plan.md B-13
+	# and docs/eval_baseline.md.
+	#
+	# This is term-overlap scoring, not BM25: there is no corpus-wide inverse
+	# document frequency and no length normalisation, so a long note is easier to
+	# match than a short one. It is a large improvement over what it replaces and
+	# a placeholder for real BM25 in migration Phase 3.4, not a substitute for it.
+	var query_terms := _tokenize(normalized_prompt)
+	var lexical_scores := {}
 	for id in filtered_nodes.keys():
 		var node = filtered_nodes[id]
-		var label = node.get("label", "").to_lower()
-		if normalized_prompt.contains(label) or normalized_prompt.contains(id.to_lower()):
-			keyword_matches.append(id)
-			
-	# Rank keyword matches by label length descending (longer, more specific names rank higher)
+		var score := _lexical_score(query_terms, node, str(id))
+		if score > 0.0:
+			lexical_scores[id] = score
+
+	var keyword_matches: Array[String] = []
+	for id in lexical_scores.keys():
+		keyword_matches.append(id)
 	keyword_matches.sort_custom(func(a, b):
-		return filtered_nodes[a].get("label", "").length() > filtered_nodes[b].get("label", "").length()
+		return lexical_scores[a] > lexical_scores[b]
 	)
 	
 	# 2. Semantic search (KNN)
@@ -345,3 +360,71 @@ func _traverse_graph(current_id: String, edge_type: String, current_depth: int, 
 			elif t == current_id:
 				_traverse_graph(f, edge_type, current_depth + 1, max_depth, visited)
 
+
+## Splits text into lowercase search terms, dropping stopwords and punctuation.
+## Stopwords matter here: without them "who keeps the archive" matches every node
+## containing "the", which is all of them.
+static func _tokenize(text: String) -> PackedStringArray:
+	const STOPWORDS := {
+		"a": true, "an": true, "and": true, "are": true, "as": true, "at": true,
+		"be": true, "but": true, "by": true, "do": true, "does": true, "for": true,
+		"from": true, "had": true, "has": true, "have": true, "he": true, "her": true,
+		"his": true, "how": true, "i": true, "in": true, "is": true, "it": true,
+		"its": true, "me": true, "my": true, "of": true, "on": true, "or": true,
+		"our": true, "she": true, "so": true, "that": true, "the": true, "their": true,
+		"them": true, "then": true, "there": true, "these": true, "they": true,
+		"this": true, "to": true, "up": true, "was": true, "we": true, "were": true,
+		"what": true, "when": true, "where": true, "which": true, "who": true,
+		"why": true, "will": true, "with": true, "you": true, "your": true,
+	}
+	var cleaned := ""
+	for ch in text.to_lower():
+		cleaned += ch if (ch.is_valid_identifier() or ch.is_valid_int() or (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9")) else " "
+	var out := PackedStringArray()
+	for raw in cleaned.split(" ", false):
+		var t := raw.strip_edges()
+		# Single characters are noise; two-character tokens are usually stopwords
+		# that survived, but keep them since some proper nouns are short.
+		if t.length() < 2 or STOPWORDS.has(t):
+			continue
+		if not out.has(t):
+			out.append(t)
+	return out
+
+
+## Scores one node against the query terms.
+##
+## Label matches are weighted heaviest because an entity named in the query is
+## almost always the subject of it; description and body matches are weighted
+## progressively lower. Tags count because vault authors use them as the primary
+## grouping mechanism.
+static func _lexical_score(query_terms: PackedStringArray, node: Dictionary, node_id: String) -> float:
+	if query_terms.is_empty():
+		return 0.0
+
+	var label := str(node.get("label", "")).to_lower()
+	var desc := str(node.get("desc", "")).to_lower()
+	var props: Dictionary = node.get("properties", {})
+	var body := str(props.get("body", "")).to_lower()
+
+	var tag_text := ""
+	var tags = props.get("tags", props.get("tag", []))
+	if tags is Array:
+		for t in tags:
+			tag_text += " " + str(t).to_lower()
+	elif tags != null:
+		tag_text = str(tags).to_lower()
+
+	var id_text := node_id.to_lower().replace("_", " ").replace("-", " ")
+
+	var score := 0.0
+	for term in query_terms:
+		if label.contains(term) or id_text.contains(term):
+			score += 3.0
+		elif tag_text.contains(term):
+			score += 2.0
+		elif desc.contains(term):
+			score += 1.5
+		elif body.contains(term):
+			score += 1.0
+	return score

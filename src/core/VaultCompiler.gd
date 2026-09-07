@@ -250,8 +250,18 @@ func _process_nodes_first_pass():
 		else:
 			desc = body.substr(0, body_limit).strip_edges()
 		
+		# Retain the full source body on every node type, not just scenes and
+		# locations. Character nodes previously kept only the LLM-extracted
+		# fields, so anything the extraction pass missed was unrecoverable: there
+		# was no overflow bucket and no way to tell "this character has no
+		# personality written" from "the extractor failed on this file". That
+		# violates rag_architecture.md 1.1 and removes the safety net from the
+		# entire heading-parsing class of bugs. See migration_plan.md B-14.
+		var node_props: Dictionary = fm.duplicate(true)
+		node_props["body"] = body
+
 		# Store as knowledge graph node
-		graph_manager.add_node(node_id, label, type, desc, fm)
+		graph_manager.add_node(node_id, label, type, desc, node_props)
 		
 		# Map label and ID universally
 		_node_name_to_id[label.to_lower()] = node_id
