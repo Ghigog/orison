@@ -5,7 +5,6 @@
     "file_count": 8,
     "vault_root": "10_Entities/characters, 10_Entities/places, 30_Systems/lore, notes"
   },
-
   "hostile_cases": [
     {
       "file": "10_Entities/characters/King Yuna.md",
@@ -39,42 +38,71 @@
       "breaks": "No type, no name, no heading structure, in a folder with no type heuristic. Must not be discarded and must not be misclassified as a character."
     }
   ],
-
   "entities": [
     {
       "name": "King Yuna",
       "type": "character",
-      "required_fields": ["biography", "personality", "appearance", "goals"],
+      "required_fields": [
+        "biography",
+        "personality",
+        "appearance",
+        "goals"
+      ],
       "expect_gender_contains": "he",
       "why_gender": "No gender field. Must be inferred from the title 'King' and the body, never from the name."
     },
     {
       "name": "Lord Anneke",
       "type": "character",
-      "required_fields": ["biography"],
+      "required_fields": [
+        "biography"
+      ],
       "expect_gender_contains": "he",
       "why_gender": "The critical case. Title and body are unambiguously masculine; the name is not."
     },
     {
       "name": "Sergeant Adah",
       "type": "character",
-      "required_fields": ["biography", "personality"],
+      "required_fields": [
+        "biography",
+        "personality"
+      ],
       "expect_gender_contains": "she",
-      "expect_properties": { "power": 3, "courage": 4, "wisdom": 1 }
+      "expect_properties": {
+        "power": 3,
+        "courage": 4,
+        "wisdom": 1
+      }
     },
-    { "name": "Mira of the Fens", "type": "character", "required_fields": ["biography"] },
-    { "name": "Saltmarsh Landing", "type": "location", "required_fields": [] },
-    { "name": "Fen Marches", "type": "location", "required_fields": [] },
-    { "name": "The Salt Tithe", "type": "lore", "required_fields": [] }
+    {
+      "name": "Mira of the Fens",
+      "type": "character",
+      "required_fields": [
+        "biography"
+      ]
+    },
+    {
+      "name": "Saltmarsh Landing",
+      "type": "location",
+      "required_fields": []
+    },
+    {
+      "name": "Fen Marches",
+      "type": "location",
+      "required_fields": []
+    },
+    {
+      "name": "The Salt Tithe",
+      "type": "lore",
+      "required_fields": []
+    }
   ],
-
   "must_not_exist": [
     {
       "name": "The Chancellor",
       "why": "Referenced by a dangling wiki-link only. Compilation must tolerate it without inventing an entity."
     }
   ],
-
   "ingest_must_retain": [
     {
       "source": "10_Entities/characters/King Yuna.md",
@@ -107,59 +135,123 @@
       "why": "Untyped loose note. The data lake principle says this is still retrievable."
     }
   ],
-
   "edges": [
-    { "from": "Lord Anneke", "to": "Fen Marches", "why": "Explicit wiki-link plus 'Held for the crown by'." },
-    { "from": "Mira of the Fens", "to": "Saltmarsh Landing", "why": "Explicit wiki-link." },
-    { "from": "The Salt Tithe", "to": "Saltmarsh Landing", "why": "Riots began at the granary there." }
+    {
+      "from": "Lord Anneke",
+      "to": "Fen Marches",
+      "why": "Explicit wiki-link plus 'Held for the crown by'."
+    },
+    {
+      "from": "Mira of the Fens",
+      "to": "Saltmarsh Landing",
+      "why": "Explicit wiki-link."
+    },
+    {
+      "from": "The Salt Tithe",
+      "to": "Saltmarsh Landing",
+      "why": "Riots began at the granary there."
+    }
   ],
-
   "retrieval": [
     {
       "query": "who knows about the hidden causeway",
-      "relevant": ["Mira of the Fens"],
+      "relevant": [
+        "Mira of the Fens"
+      ],
       "k": 5,
       "why": "Payload sits inside a callout block. Fails outright if callouts are dropped at ingest."
     },
     {
       "query": "why do people resent the crown",
-      "relevant": ["The Salt Tithe"],
+      "relevant": [
+        "The Salt Tithe"
+      ],
       "k": 5,
       "why": "Thematic, no shared proper noun with the source. Dense embeddings should beat BM25 here; the inverse of the Thornwick case in minimal/."
     },
     {
       "query": "Saltmarsh",
-      "relevant": ["Saltmarsh Landing", "Mira of the Fens", "The Salt Tithe"],
+      "relevant": [
+        "Saltmarsh Landing",
+        "Mira of the Fens",
+        "The Salt Tithe"
+      ],
       "k": 5,
       "why": "Rare proper noun, also an alias. BM25 should beat dense here."
     },
     {
       "query": "who was at the granary",
-      "relevant": ["Sergeant Adah", "Mira of the Fens", "The Salt Tithe"],
+      "relevant": [
+        "Sergeant Adah",
+        "Mira of the Fens",
+        "The Salt Tithe"
+      ],
       "k": 5,
       "why": "Multi-hop. The connection lives only in an untyped scratch note. Hardest case in the set; expected to fail before migration_plan.md 3.4 lands."
     },
     {
       "query": "who rules the coast",
-      "relevant": ["King Yuna"],
+      "relevant": [
+        "King Yuna"
+      ],
       "k": 5,
       "why": "Depends on the bold-numeric heading body having survived ingest."
     }
   ],
-
   "pronoun_checks": [
     {
       "character": "Lord Anneke",
-      "expect_any": ["he", "him", "his"],
-      "forbid": ["she ", "her ", "hers"],
+      "expect_any": [
+        "he",
+        "him",
+        "his"
+      ],
+      "forbid": [
+        "she ",
+        "her ",
+        "hers"
+      ],
       "why": "The headline regression test. rag_architecture.md Bug 3."
     },
     {
       "character": "King Yuna",
-      "expect_any": ["he", "him", "his"],
-      "forbid": ["she ", "her ", "hers"],
+      "expect_any": [
+        "he",
+        "him",
+        "his"
+      ],
+      "forbid": [
+        "she ",
+        "her ",
+        "hers"
+      ],
       "why": "The original reported instance of the bug."
     },
-    { "character": "Sergeant Adah", "expect_any": ["she", "her"], "forbid": ["he ", "him ", "his "] }
-  ]
+    {
+      "character": "Sergeant Adah",
+      "expect_any": [
+        "she",
+        "her"
+      ],
+      "forbid": [
+        "he ",
+        "him ",
+        "his "
+      ]
+    }
+  ],
+  "transcript_character": "Lord Anneke",
+  "transcript_forbidden_pronouns": [
+    "she",
+    "her",
+    "hers"
+  ],
+  "transcript_script": [
+    "Good evening. I'm looking for passage across the marches.",
+    "I can pay. What would it take?",
+    "I'll wait until dawn then. Tell me about the causeway.",
+    "Who else knows the route?",
+    "Thank you. I'll speak with her at the Landing."
+  ],
+  "_transcript_note": "Lord Anneke is the transcript character because he is the pronoun trap: the file has no gender field, the title and body are unambiguously masculine, and the name carries a strong feminine prior. rag_architecture.md Bug 3. The last player line deliberately says 'her' about a third party (Mira), so a model that simply echoes the player's pronouns will be caught."
 }

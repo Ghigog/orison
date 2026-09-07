@@ -1,59 +1,43 @@
 {
   "meta": {
     "kind": "synthetic",
-    "purpose": "Exercises and self-tests the harness. This is NOT a measurement of Orison's narrative quality and must never be reported as one. Record a real cassette with --live for that.",
-    "warning": "The transcript below contains DELIBERATE defects, one per metric. If a run against this cassette reports the transcript suite as clean, the harness is broken, not the engine."
+    "purpose": "Exercises and self-tests the harness. NOT a measurement of Orison's narrative quality and must never be reported as one. Record a real cassette with --live for that.",
+    "warning": "The transcript below contains DELIBERATE defects, one per metric. If a run against this cassette reports the transcript suite as clean, the harness is broken, not the engine.",
+    "how_it_works": "The harness drives real scripted turns through the real PromptBuilder; this cassette stands in for the model. Entries are matched by substring against the assembled prompt, so they key off the character name that PromptBuilder writes into the CHARACTER PROFILE block."
   },
-
   "entries": [
     {
       "match": "Extract the following fields",
-      "_note": "VaultCompiler's per-character LLM extraction. Keyed off names present in the fixtures so entity_fields_populated has something real to check.",
-      "response": "{\"biography\":\"A synthetic biography supplied by the eval cassette so that field-population checks have content to assert against.\",\"personality\":\"Synthetic personality.\",\"appearance\":\"Synthetic appearance.\",\"gender\":\"unspecified\",\"goals\":\"A synthetic goal.\"}"
+      "_note": "VaultCompiler per-character field extraction.",
+      "response": "{\"biography\": \"A synthetic biography supplied by the eval cassette.\", \"personality\": \"Synthetic personality.\", \"appearance\": \"Synthetic appearance.\", \"gender\": \"unspecified\", \"goals\": \"A synthetic goal.\"}"
     },
     {
       "match": "Analyze the following entities from a narrative campaign",
       "_note": "RAPTOR level-1 clustering.",
-      "response": "{\"theme_title\":\"Synthetic Cluster\",\"summary\":\"A synthetic cluster summary.\"}"
+      "response": "{\"theme_title\": \"Synthetic Cluster\", \"summary\": \"A synthetic cluster summary.\"}"
     },
     {
-      "match": "summar",
-      "response": "{\"summary\":\"A synthetic summary.\"}"
+      "match": "I'll speak with her at the Landing",
+      "_defect": "SCHEMA \u2014 one turn out of five returns a conversational prefix before the JSON, which is closer to how a real small model fails than a character who is broken on every turn. Matched on the player's line so it lands on exactly one turn of the messy transcript.",
+      "response": "Certainly! Here's Lord Anneke's reply:\n{\"thinking\":\"She is not mine to speak for.\",\"dialogue\":\"Mind how you go.\"}"
+    },
+    {
+      "match": "Embody the character Lord Anneke",
+      "_defect": "PRONOUN \u2014 feminine pronouns for a he/him character (rag_architecture.md Bug 3).",
+      "response": "{\"thinking\": \"The traveller wants passage.\", \"narration\": \"Lord Anneke turns to the window. She considers the fens a moment longer.\", \"dialogue\": \"You'll not cross tonight. Ask me again at first light.\", \"emotional_update\": {\"emotion\": \"serenity\", \"intensity\": 0.3, \"reason\": \"Unmoved.\", \"rapport_delta\": 0.0}, \"escalation_signal\": \"none\"}"
+    },
+    {
+      "match": "Embody the character Bram Holt",
+      "_defect": "LOOP and FORBIDDEN PHRASING \u2014 identical dialogue every turn, containing third-person self-reference and a leaked affinity score.",
+      "response": "{\"thinking\": \"Answer the traveller.\", \"narration\": \"\", \"dialogue\": \"Bram Holt says it's two coppers. My affinity toward you is 0.35.\", \"emotional_update\": {\"emotion\": \"joy\", \"intensity\": 0.4, \"reason\": \"Company.\", \"rapport_delta\": 0.05}, \"escalation_signal\": \"none\"}"
+    },
+    {
+      "match": "Embody the character",
+      "_note": "Any other character: well-formed control response, so not every turn is a defect.",
+      "response": "{\"thinking\": \"Consider the situation.\", \"narration\": \"The room settles.\", \"dialogue\": \"That is not a thing I will discuss tonight.\", \"emotional_update\": {\"emotion\": \"trust\", \"intensity\": 0.2, \"reason\": \"Civil enough.\", \"rapport_delta\": 0.02}, \"escalation_signal\": \"none\"}"
     }
   ],
-
-  "default": "{\"biography\":\"Synthetic default.\",\"personality\":\"Synthetic default.\",\"appearance\":\"Synthetic default.\",\"gender\":\"unspecified\",\"goals\":\"Synthetic default.\",\"summary\":\"Synthetic default.\"}",
-
-  "transcript": [
-    {
-      "_defect": "none - control turn, must pass everything",
-      "character": "Lord Anneke",
-      "pronoun_rule": ["she ", "her ", "hers"],
-      "response": "{\"thinking\":\"The traveller wants passage across the marches.\",\"narration\":\"Lord Anneke sets down his cup and studies the visitor.\",\"dialogue\":\"You'll not cross tonight. The causeway takes anyone who tries it in the dark.\",\"emotional_update\":{\"emotion\":\"trust\",\"intensity\":0.3,\"reason\":\"The traveller was courteous.\",\"rapport_delta\":0.05},\"escalation_signal\":\"none\"}"
-    },
-    {
-      "_defect": "PRONOUN — rag_architecture.md Bug 3. Feminine pronouns for a character the fixture establishes as he/him.",
-      "character": "Lord Anneke",
-      "pronoun_rule": ["she ", "her ", "hers"],
-      "response": "{\"thinking\":\"Consider the request.\",\"narration\":\"Lord Anneke turns to the window. She considers the fens a moment longer.\",\"dialogue\":\"Ask me again at first light.\",\"emotional_update\":{\"emotion\":\"serenity\",\"intensity\":0.2,\"reason\":\"Nothing has changed.\",\"rapport_delta\":0.0},\"escalation_signal\":\"none\"}"
-    },
-    {
-      "_defect": "SCHEMA — not valid JSON. A conversational prefix precedes the object, which is exactly what JsonRepair.gd exists to paper over and what schema-constrained decoding makes impossible (migration plan 2.4).",
-      "character": "King Yuna",
-      "pronoun_rule": ["she ", "her ", "hers"],
-      "response": "Sure! Here is the response you asked for:\n{\"thinking\":\"...\",\"dialogue\":\"The tithe stands.\"}"
-    },
-    {
-      "_defect": "LOOP — dialogue is byte-identical to the control turn above.",
-      "character": "Lord Anneke",
-      "pronoun_rule": ["she ", "her ", "hers"],
-      "response": "{\"thinking\":\"Repeating myself.\",\"narration\":\"\",\"dialogue\":\"You'll not cross tonight. The causeway takes anyone who tries it in the dark.\",\"emotional_update\":{\"emotion\":\"serenity\",\"intensity\":0.2,\"reason\":\"No change.\",\"rapport_delta\":0.0},\"escalation_signal\":\"none\"}"
-    },
-    {
-      "_defect": "FORBIDDEN PHRASING — two at once: third-person self-reference inside the dialogue field, and leaking the raw affinity number into prose.",
-      "character": "Sergeant Adah",
-      "pronoun_rule": ["he ", "him ", "his "],
-      "response": "{\"thinking\":\"Respond to the accusation.\",\"narration\":\"\",\"dialogue\":\"Sergeant Adah says that she was nowhere near the granary. My affinity toward you is 0.35 and falling.\",\"emotional_update\":{\"emotion\":\"anger\",\"intensity\":0.6,\"reason\":\"Accused unjustly.\",\"rapport_delta\":-0.15},\"escalation_signal\":\"none\"}"
-    }
-  ]
+  "default": "Sure! Here is the response you asked for:\n{\"thinking\":\"...\",\"dialogue\":\"The tithe stands.\"}",
+  "_default_note": "SCHEMA defect. Anything not matched above gets a conversational prefix before the JSON object, which is what JsonRepair.gd exists to paper over and what schema-constrained decoding makes impossible (migration plan 2.4). The harness parses strictly, so it is caught. This also means any NEW prompt shape the engine starts emitting will show up as a schema failure, which is a useful canary rather than a nuisance.",
+  "_matching_note": "Entries are tried IN ORDER and the first substring match wins, so the most specific rules come first. Character-agent rules key off 'Embody the character <name>', which SystemPrompts writes verbatim and which appears in no other prompt. An earlier version matched on the bare character name, which also matched the vault-extraction prompt for that same character and silently replaced their biography with dialogue JSON."
 }

@@ -195,30 +195,77 @@ cries wolf is worse than no metric, because people learn to ignore it.
 
 ## What is still missing
 
-Two things, both requiring a machine with Ollama.
+The narrative half. It needs one run on a machine with Ollama.
 
-**1. Record a cassette.** On a machine with Ollama running and the configured
-models pulled:
+### How the transcript suite works
+
+The harness drives **real scripted turns**: for each player line in a fixture's
+`transcript_script`, it builds the prompt with the real `PromptBuilder`, sends it
+through the real `LLMClient` as the character agent, parses the response strictly
+(deliberately *not* through `JsonRepair`, since the point of migration plan 2.4 is
+that repair should be unnecessary), scores it, and feeds the dialogue back into
+history so the next turn sees it.
+
+The same code path runs whether a cassette or a live model is behind it. That is
+what makes a recorded cassette a baseline rather than a prop.
+
+`messy` carries the transcript that matters. Its character is **Lord Anneke**: no
+gender field, a title and body that are unambiguously masculine, and a name with a
+strong feminine prior. The last player line deliberately says "her" about a third
+party, so a model that simply echoes the player's pronouns gets caught.
+
+### Recording a baseline
+
+On a machine with Ollama running and your configured models pulled:
 
 ```bash
 godot --headless --path . res://eval/EvalRunner.tscn -- --live --fixture=all
-cp ~/.local/share/godot/app_userdata/Orison/recorded_cassette.json \
+```
+
+Then copy the cassette out of Godot's user data directory, which differs by OS:
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Godot/app_userdata/Orison/` |
+| Linux | `~/.local/share/godot/app_userdata/Orison/` |
+| Windows | `%APPDATA%\Godot\app_userdata\Orison\` |
+
+```bash
+# macOS
+cp ~/Library/Application\ Support/Godot/app_userdata/Orison/recorded_cassette.json \
    eval/cassettes/baseline.json
 ```
 
-Commit that cassette. Every later run replays it deterministically, in CI, with
-no Ollama needed. Then re-run and replace the narrative section above:
+Commit it, then re-run in replay and update the narrative section of this file:
 
 ```bash
 godot --headless --path . res://eval/EvalRunner.tscn -- --cassette=baseline --fixture=all
 ```
 
-**2. The judge suite** (plan §1.3) is not built. It scores in-character
-consistency, use of vault-sourced facts, narrative progression and absence of
-sycophancy on a 1-5 rubric. It is deliberately last: judge scores are noisy, they
-are for trend detection across many samples, and the deterministic suite above is
-the actual gate. Building it before there is a single real transcript to judge
-would be premature.
+### Three things to know before recording
+
+**Embeddings change the result.** Replay stubs out `get_embedding`, which isolates
+the lexical path. A live run with `nomic-embed-text` installed activates the dense
+half of the rank fusion, so retrieval recall may differ from the figures above.
+That is a better number, not a contradictory one, but note which you are quoting.
+
+**Live mode bypasses the request queue.** The recording proxy re-enters at
+`_raw_send_custom_request` to capture responses, which skips the serialisation in
+`send_custom_request`. The harness awaits each turn, so calls are sequential in
+practice, but if Ollama returns concurrency errors during a live run, this is why.
+
+**The cassette keys on full prompts.** Exact-match replay. Reword a prompt and the
+cassette stops matching, which surfaces as a schema failure rather than a silent
+wrong answer. That is intended: a cassette recorded against a different prompt is
+not evidence about the current one. Re-record after prompt changes.
+
+### Not built: the judge suite
+
+Plan §1.3. Scores in-character consistency, use of vault-sourced facts, narrative
+progression and absence of sycophancy on a 1-5 rubric. Deliberately last: judge
+scores are noisy and only meaningful as a trend across many samples, the
+deterministic suite above is the actual gate, and there is not yet a single real
+transcript to judge.
 
 ---
 

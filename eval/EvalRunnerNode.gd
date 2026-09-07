@@ -63,15 +63,15 @@ func _ready() -> void:
 				img.fill(Color(0.2, 0.3, 0.4, 1.0))
 				cb.call(true, img, "")
 
-	if not _opts["live"]:
+	if _opts["live"]:
+		_install_recording_proxy()
+	else:
 		_load_cassette()
 		_install_replay_mock()
 
 	var fixtures := _fixtures_to_run()
 	for name in fixtures:
 		await _run_fixture(name)
-
-	await _run_transcript_suite()
 
 	if _opts["selftest"]:
 		_run_selftest()
@@ -154,6 +154,25 @@ func _cassette_response(prompt: String) -> String:
 			return resp if resp is String else JSON.stringify(resp)
 	var d = _cassette.get("default", "{}")
 	return d if d is String else JSON.stringify(d)
+
+
+## In live mode the harness must both call the real model AND capture what came
+## back, but mock_response_handler short-circuits before the real request. So the
+## recording handler re-enters at _raw_send_custom_request, which does not consult
+## the mock, and captures the pair on the way out.
+##
+## The full prompt is stored as the match key, so replay is exact-match. That is
+## deliberately brittle: if a prompt is reworded the cassette stops matching and
+## must be re-recorded, which is correct, because a cassette recorded against a
+## different prompt is not evidence about the current one.
+func _install_recording_proxy() -> void:
+	LLMClient.mock_response_handler = func(prompt: String, model: String, callback: Callable, timeout: float):
+		var wrapped := func(success: bool, text: String, err: String):
+			if success:
+				_recorded.append({"match": prompt, "response": text})
+			if callback.is_valid():
+				callback.call(success, text, err)
+		LLMClient._raw_send_custom_request(prompt, model, wrapped, timeout, false)
 
 
 func _install_replay_mock() -> void:
@@ -249,6 +268,7 @@ func _run_fixture(fixture: String) -> void:
 	_check_retained(fixture, gt, nodes)
 	_check_edges(fixture, gt, graph, labels)
 	await _check_retrieval(fixture, gt, compiled)
+	await _run_transcript_suite(fixture, compiled)
 
 
 func _check_entities(fixture: String, gt: Dictionary, nodes: Dictionary, labels: Dictionary) -> void:
@@ -439,32 +459,80 @@ func _labels_from_context(ctx: String) -> Dictionary:
 # Transcript suite: metrics over model output
 # ==============================================================================
 
-func _run_transcript_suite() -> void:
+## Drives real scripted turns and measures the model's actual output.
+##
+## Crucially this builds the prompt with the real PromptBuilder and sends it
+## through the real LLMClient, so the same code path runs whether a cassette or a
+## live model is behind it. An earlier version scored a hand-authored array of
+## responses, which measured nothing about the engine: the prompt assembly, the
+## character card, the history window and the schema instructions were all
+## bypassed. This is what makes a recorded cassette a baseline rather than a prop.
+func _run_transcript_suite(fixture: String, compiled: Dictionary) -> void:
 	print("-----------------------------------------------------------------")
-	print("TRANSCRIPT SUITE")
+	print("TRANSCRIPT SUITE (%s)" % fixture)
 	print("-----------------------------------------------------------------")
 
-	var turns: Array = _cassette.get("transcript", [])
-	if turns.is_empty():
-		_skip("transcript", "schema_validity", "cassette has no transcript")
-		_skip("transcript", "pronoun_consistency", "cassette has no transcript")
-		_skip("transcript", "loop_detection", "cassette has no transcript")
-		_skip("transcript", "forbidden_phrasing", "cassette has no transcript")
+	var gt := _load_ground_truth(fixture)
+	var script: Array = gt.get("transcript_script", [])
+	if script.is_empty():
+		_skip(fixture, "transcript", "fixture defines no transcript_script")
 		return
 
+	var char_name := str(gt.get("transcript_character", ""))
+	var kg_data: Dictionary = compiled.get("knowledge_graph", {})
+	var nodes: Dictionary = kg_data.get("nodes", {})
+
+	var char_id := ""
+	for id in nodes:
+		if str(nodes[id].get("label", "")).to_lower() == char_name.to_lower():
+			char_id = str(id)
+			break
+	if char_id.is_empty():
+		_record(fixture, "transcript_setup", false,
+			"transcript_character '%s' not found in the compiled graph" % char_name)
+		return
+
+	# A real campaign, so PromptBuilder sees the state it expects.
+	var campaign_id := "eval_" + fixture
+	var save_data := SaveManager.create_campaign(campaign_id, "Eval " + fixture)
+	CampaignState.initialize(campaign_id, save_data)
+	CampaignState.set_knowledge_graph_data(nodes, kg_data.get("edges", []))
+
+	var node: Dictionary = nodes[char_id]
+	var node_props: Dictionary = node.get("properties", {})
+	CampaignState.init_character(char_id, char_name, str(node.get("desc", "")))
+	CampaignState.update_character_properties(char_id, node_props)
+
+	var graph := KnowledgeGraphManager.new()
+	var prompt_builder := PromptBuilder.new(graph, EmotionPromptBuilder.new())
+
+	var expected_pronouns: Array = gt.get("transcript_forbidden_pronouns", [])
 	var bad_schema: Array[String] = []
 	var pronoun_errors: Array[String] = []
 	var forbidden: Array[String] = []
-	var seen := {}
 	var repeats: Array[String] = []
+	var seen := {}
+	var turn_latencies: Array[float] = []
 
-	for i in range(turns.size()):
-		var turn: Dictionary = turns[i]
-		var raw := str(turn.get("response", ""))
-		var speaker := str(turn.get("character", ""))
+	for i in range(script.size()):
+		var player_input := str(script[i])
+		CampaignState.add_history_log("user", player_input)
 
-		# 1. Schema validity. Under schema-constrained decoding (migration plan
-		#    2.4) this must be exactly 100%; anything less is a real defect.
+		var prompt: String = await prompt_builder.build_prompt(char_id, player_input, false)
+
+		var t0 := Time.get_ticks_msec()
+		var res := await _send_async(prompt)
+		turn_latencies.append(float(Time.get_ticks_msec() - t0))
+
+		var raw := str(res[1])
+		if not bool(res[0]):
+			bad_schema.append("turn %d (request failed)" % i)
+			continue
+
+		# 1. Schema validity. Parsed strictly: JsonRepair is deliberately NOT used
+		#    here, because the whole point of migration plan 2.4 is that the model
+		#    should be incapable of emitting anything that needs repairing. Scoring
+		#    post-repair output would hide exactly the defect being measured.
 		var parsed = JSON.parse_string(raw)
 		if not (parsed is Dictionary) or not parsed.has("dialogue"):
 			bad_schema.append("turn %d" % i)
@@ -474,12 +542,11 @@ func _run_transcript_suite() -> void:
 		var narration := str(parsed.get("narration", ""))
 		var blob := (dialogue + " " + narration).to_lower()
 
-		# 2. Pronoun consistency (rag_architecture.md Bug 3).
-		#    Word-bounded, NOT substring: "she was" contains "he ", so naive
-		#    matching flags every correctly-gendered feminine line as an error.
-		for rule in turn.get("pronoun_rule", []):
+		# 2. Pronoun consistency (rag_architecture.md Bug 3). Word-bounded, since
+		#    "she was" contains "he ".
+		for rule in expected_pronouns:
 			if _contains_word(blob, str(rule)):
-				pronoun_errors.append("turn %d (%s): forbidden '%s'" % [i, speaker, rule.strip_edges()])
+				pronoun_errors.append("turn %d: forbidden '%s'" % [i, str(rule).strip_edges()])
 
 		# 3. Loop detection.
 		var norm := dialogue.strip_edges().to_lower()
@@ -489,26 +556,49 @@ func _run_transcript_suite() -> void:
 			else:
 				seen[norm] = i
 
-		# 4. Forbidden phrasing: third-person self-reference in the dialogue
-		#    field, and leaking raw numeric state into prose.
-		if not speaker.is_empty():
-			var third := "%s says" % speaker.to_lower()
-			if dialogue.to_lower().contains(third):
-				forbidden.append("turn %d: third-person self-reference" % i)
+		# 4. Forbidden phrasing.
+		if _contains_word(dialogue.to_lower(), char_name.to_lower() + " says"):
+			forbidden.append("turn %d: third-person self-reference" % i)
 		if dialogue.to_lower().contains("affinity"):
 			forbidden.append("turn %d: leaks affinity score" % i)
 
-	_record("transcript", "schema_validity", bad_schema.is_empty(),
-		"%d/%d parsed" % [turns.size() - bad_schema.size(), turns.size()]
+		CampaignState.add_history_log("assistant", dialogue, char_name, char_id)
+
+	var n := script.size()
+	_record(fixture, "schema_validity", bad_schema.is_empty(),
+		"%d/%d parsed" % [n - bad_schema.size(), n]
 			+ ("" if bad_schema.is_empty() else " | bad: " + ", ".join(bad_schema)),
-		float(turns.size() - bad_schema.size()) / float(turns.size()))
-	_record("transcript", "pronoun_consistency", pronoun_errors.is_empty(),
-		"clean" if pronoun_errors.is_empty() else ", ".join(pronoun_errors),
+		float(n - bad_schema.size()) / float(n))
+	_record(fixture, "pronoun_consistency", pronoun_errors.is_empty(),
+		"clean across %d turns" % n if pronoun_errors.is_empty() else ", ".join(pronoun_errors),
 		pronoun_errors.size())
-	_record("transcript", "loop_detection", repeats.is_empty(),
+	_record(fixture, "loop_detection", repeats.is_empty(),
 		"no verbatim repeats" if repeats.is_empty() else ", ".join(repeats), repeats.size())
-	_record("transcript", "forbidden_phrasing", forbidden.is_empty(),
+	_record(fixture, "forbidden_phrasing", forbidden.is_empty(),
 		"clean" if forbidden.is_empty() else ", ".join(forbidden), forbidden.size())
+
+	if not turn_latencies.is_empty():
+		turn_latencies.sort()
+		var p50: float = turn_latencies[int(turn_latencies.size() * 0.5)]
+		_record(fixture, "turn_latency_p50_ms", true, "%.0f ms" % p50, p50)
+
+
+## Wraps the callback-style LLM API in something awaitable.
+func _send_async(prompt: String) -> Array:
+	var carrier := EvalSignalCarrier.new()
+	LLMClient.send_custom_request(prompt, LLMClient.character_model,
+		func(success: bool, text: String, err: String):
+			carrier.done.call_deferred(success, text, err),
+		300.0, LLMClient.RequestPriority.HIGH, false, LLMClient.ROLE_CHARACTER)
+	return await carrier.finished
+
+
+class EvalSignalCarrier:
+	extends RefCounted
+	signal finished(result: Array)
+
+	func done(success: bool, text: String, err: String) -> void:
+		finished.emit([success, text, err])
 
 
 ## Word-bounded containment. The reason this exists rather than String.contains:
@@ -548,7 +638,7 @@ func _run_selftest() -> void:
 	var expected := ["schema_validity", "pronoun_consistency", "loop_detection", "forbidden_phrasing"]
 	var caught := {}
 	for r in _results:
-		if r.get("suite", "") == "transcript" and not r.get("passed", true):
+		if not r.get("passed", true) and not r.get("skipped", false):
 			caught[r.get("metric", "")] = true
 
 	var undetected: Array[String] = []

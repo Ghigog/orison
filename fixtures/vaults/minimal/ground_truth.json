@@ -132,5 +132,18 @@
         "her "
       ]
     }
-  ]
+  ],
+  "transcript_character": "Bram Holt",
+  "transcript_forbidden_pronouns": [
+    "she",
+    "her",
+    "hers"
+  ],
+  "transcript_script": [
+    "Morning. What's the toll?",
+    "And if I've no coin?",
+    "What's the toll?",
+    "Fine. Who keeps the archive up the road?"
+  ],
+  "_transcript_note": "Turn 3 repeats turn 1 verbatim to bait a lazy model into repeating its own answer word for word, which is what loop_detection measures."
 }
