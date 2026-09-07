@@ -1,6 +1,8 @@
 # Orison Migration Plan
 
-> **Status**: Phase 0 complete and merged. Phase 1 is next.
+> **Status**: Phase 0 complete and merged. Phase 1 in progress: fixtures and
+> harness built, structural baseline recorded in [eval_baseline.md](eval_baseline.md),
+> narrative baseline pending a recorded cassette.
 > **Date**: September 2026
 > **Supersedes**: the platform assumptions in [proposal.md](proposal.md) (Pillar 3, "Zero-Dependency Portability" via GDScript). The product pillars in that document still hold; the implementation strategy does not.
 > **Companion documents**: [orison_audit.md](orison_audit.md) (June 2026 code audit, largely remediated), [rag_architecture.md](rag_architecture.md) (retrieval philosophy, still authoritative).
@@ -315,8 +317,8 @@ Judge scores are noisy. Use them for trend detection across many samples, never 
 Run the entire harness against the existing GDScript engine and commit the numbers to `docs/eval_baseline.md`. This is the bar the migration must clear. Without it, Phase 5's exit criterion is unfalsifiable.
 
 **Phase 1 exit criteria**
-- [ ] Three fixture vaults with ground-truth retrieval labels.
-- [ ] Deterministic suite runs in CI against a small model.
+- [x] Three fixture vaults with ground-truth retrieval labels.
+- [x] Deterministic suite runs in CI (replay mode; no model needed).
 - [ ] Judge suite runs on demand.
 - [ ] `docs/eval_baseline.md` records Godot-build numbers for every metric.
 
@@ -644,6 +646,8 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-5 | Frame-coupled HTTP streaming | Moderate | Phase 2.2 | Port | Open |
 | B-9 | Dense-only retrieval on a proper-noun-dense corpus | Major | Phase 3.4 | Port | Open |
 | B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | Open |
+| B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | Phase 3.4 | Port (or sooner) | Open |
+| B-14 | Character nodes discard raw source text entirely | **Critical** | Phase 3.2 | Port | Open |
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 
@@ -711,6 +715,70 @@ See §3.4.
 ### B-10: Stale model recommendations
 
 `README.md` recommends Llama 3.1 8B and Llama 3.2 3B; `rag_architecture.md` references `gemma4:e4b`. Current guidance for an 8GB consumer GPU centres on Qwen3 8B at Q4_K_M. More important than the specific name: **model identifiers must be configuration with a recommended default profile, never constants in code.** They will be stale again within a year, and the migration should make that a settings update rather than a code change.
+
+### B-13: Lexical retrieval is inverted and searches nothing
+
+**Severity: critical. Found by the Phase 1 harness before it had even finished
+being written.**
+
+`KnowledgeGraphManager.gd:179`:
+
+```gdscript
+if normalized_prompt.contains(label) or normalized_prompt.contains(id.to_lower()):
+```
+
+This asks whether the **query contains the node's label**, not whether the node
+matches the query. Lexical retrieval therefore fires only when the player types
+an entity's full name inside their sentence, and note *bodies* are never searched
+at all: only labels and ids.
+
+Measured on the Phase 1 fixtures (see [eval_baseline.md](eval_baseline.md)):
+
+| Fixture | Mean recall | Queries returning nothing |
+|---|---:|---:|
+| `minimal` | 0.200 | 4 of 5 |
+| `messy` | 0.000 | 5 of 5 |
+| `large` | 0.000 | 4 of 4 |
+
+The one non-zero score is a positive control written to embed a label verbatim,
+which proves the graph is loaded and the inverted condition is the cause.
+
+Compounding it, **there is no BM25 implementation anywhere in the codebase**,
+despite the retired feature map advertising "Hybrid BM25 + KNN semantic
+retrieval". The reciprocal rank fusion is real, but one input is this near-dead
+lexical path and the other needs `nomic-embed-text` installed. Without an
+embedding model, retrieval returns nothing at all.
+
+**Fix**: Phase 3.4 replaces this wholesale with BM25 via `tantivy` plus dense ANN
+and rank fusion. That schedule assumed the lexical half was merely weak, not
+inoperative. Given the measured impact, inverting the condition in the Godot
+build is a two-character change that would deliver most of a fix immediately, and
+is worth considering despite the feature freeze. Raise it before doing it.
+
+### B-14: Character nodes discard their raw source text
+
+**Severity: critical. Architectural, not a typo.**
+
+`VaultCompiler.gd:254` creates character nodes with frontmatter as properties and
+the LLM-extracted biography as `desc`. Scenes and locations retain the original
+prose in `props["body"]` (lines 515, 548). **Characters retain nothing.**
+
+Whatever the single extraction pass misses is unrecoverable, because the source
+is never stored. There is no overflow bucket and no fallback. A character whose
+file confuses the extractor is simply blank forever, and nothing downstream can
+tell the difference between "this character has no personality written" and "the
+extractor failed on this file".
+
+This directly violates [rag_architecture.md](rag_architecture.md) §1.1, which is
+unambiguous: "No information should ever be silently discarded. If a file section
+cannot be parsed into a canonical field, its content must still be available to
+the system in some form."
+
+It also removes the safety net from the entire Bug 1 class of heading-parsing
+failures. Those bugs are only catastrophic *because* of this one.
+
+**Fix**: Phase 3.2 must retain full source text per node, chunked and retrievable,
+with extracted fields as an addition to it rather than a replacement for it.
 
 ### B-11: No continuous integration
 
