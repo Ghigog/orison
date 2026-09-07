@@ -7,7 +7,8 @@
 > **Recorded**: 7 September 2026, against `main` at the close of Phase 0, then
 > re-measured after fixing the two critical defects the harness surfaced (B-13,
 > B-14). Both sets of numbers are kept: the port must beat the *fixed* figures.
-> **Engine**: Godot 4.6 / GDScript, ~19,600 lines.
+> **Engine**: Godot / GDScript, ~19,600 lines. Verified identical on 4.6 and 4.7
+> (46/46 unit tests and byte-identical eval results on both); CI runs 4.7.
 > **Harness**: `eval/EvalRunner.tscn`. See [Running it](#running-it).
 
 ---

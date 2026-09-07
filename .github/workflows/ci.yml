@@ -5,7 +5,13 @@ on:
   pull_request:
 
 env:
-  GODOT_VERSION: "4.6-stable"
+  # Matched to the version developed against locally. 4.7 was verified against
+  # the full unit suite (46/46) and the eval harness with byte-identical results
+  # to 4.6, so this is a version bump with no behavioural change. project.godot
+  # still declares 4.6 in config/features, which is forward-compatible and left
+  # alone deliberately: rewriting it triggers an editor migration pass on a
+  # codebase the migration plan replaces outright.
+  GODOT_VERSION: "4.7-stable"
 
 jobs:
   tests:
