@@ -220,7 +220,25 @@ party, so a model that simply echoes the player's pronouns gets caught.
 On a machine with Ollama running and your configured models pulled:
 
 ```bash
-godot --headless --path . res://eval/EvalRunner.tscn -- --live --fixture=all
+# Recommended. Records everything the narrative baseline needs, in ~7 model calls.
+godot --headless --path . res://eval/EvalRunner.tscn -- --live --fixture=minimal,messy
+```
+
+**Do not use `--fixture=all` for a live run unless you mean it.** Compilation
+makes one model call per character file, and `large` has 170 of them, so `all` is
+roughly 177 sequential calls plus RAPTOR summaries: tens of minutes on local
+hardware. `large` contributes only retrieval numbers, and retrieval in live mode
+differs from replay solely by having embeddings available. Every narrative metric
+comes from `minimal` and `messy`, which are seven character files between them.
+
+The cassette is flushed after each fixture, so an interrupted long run keeps what
+it recorded rather than discarding all of it.
+
+On macOS, Godot is not on `$PATH`; the binary lives inside the app bundle:
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path . \
+  res://eval/EvalRunner.tscn -- --live --fixture=minimal,messy
 ```
 
 Then copy the cassette out of Godot's user data directory, which differs by OS:

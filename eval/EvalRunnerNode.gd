@@ -11,7 +11,10 @@ extends Node
 ##   godot --headless --path . res://eval/EvalRunner.tscn -- --fixture=all
 ##
 ## Options (after the bare `--`):
-##   --fixture=minimal|messy|large|all   default: all
+##   --fixture=<name>[,<name>...]|all    default: all
+##                                       e.g. --fixture=minimal,messy skips the
+##                                       170-character `large` fixture, which is
+##                                       170 sequential model calls in live mode
 ##   --cassette=<name>                   default: synthetic
 ##   --live                              call a real Ollama and record a cassette
 ##   --selftest                          assert the harness detects planted defects
@@ -72,13 +75,18 @@ func _ready() -> void:
 	var fixtures := _fixtures_to_run()
 	for name in fixtures:
 		await _run_fixture(name)
+		# Flush after each fixture. A live run over `all` is long enough that an
+		# interrupt is likely, and writing only at the end meant Ctrl-C threw away
+		# every response recorded so far.
+		if _opts["live"]:
+			_write_cassette(true)
 
 	if _opts["selftest"]:
 		_run_selftest()
 
 	var ok := _report()
 	if _opts["live"]:
-		_write_cassette()
+		_write_cassette(false)
 	get_tree().quit(0 if ok else 1)
 
 
@@ -118,8 +126,14 @@ func _print_header() -> void:
 func _fixtures_to_run() -> Array[String]:
 	if _opts["fixture"] == "all":
 		return ["minimal", "messy", "large"]
+	# Comma-separated, so a live run can skip `large`. That fixture alone is 170
+	# character files and therefore 170 sequential model calls; the narrative
+	# metrics all come from minimal and messy, which are 7 between them.
 	var out: Array[String] = []
-	out.append(str(_opts["fixture"]))
+	for part in str(_opts["fixture"]).split(",", false):
+		var name := part.strip_edges()
+		if not name.is_empty():
+			out.append(name)
 	return out
 
 
@@ -184,7 +198,7 @@ func _install_replay_mock() -> void:
 	LLMClient.mock_embedding_handler = func(_text: String): return []
 
 
-func _write_cassette() -> void:
+func _write_cassette(interim: bool = false) -> void:
 	var path := "user://recorded_cassette.json"
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if not f:
@@ -201,8 +215,13 @@ func _write_cassette() -> void:
 		"default": "{}",
 	}, "\t"))
 	f.close()
-	print("\n[eval] Recorded cassette written to %s" % ProjectSettings.globalize_path(path))
-	print("[eval] Copy it to eval/cassettes/baseline.json and commit it.")
+	if interim:
+		print("[eval] Cassette flushed (%d responses so far) -> %s"
+			% [_recorded.size(), ProjectSettings.globalize_path(path)])
+	else:
+		print("\n[eval] Recorded cassette written to %s (%d responses)"
+			% [ProjectSettings.globalize_path(path), _recorded.size()])
+		print("[eval] Copy it to eval/cassettes/baseline.json and commit it.")
 
 
 # ==============================================================================
