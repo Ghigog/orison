@@ -1,6 +1,6 @@
 # Orison Migration Plan
 
-> **Status**: Proposed, not started.
+> **Status**: Phase 0 complete and merged. Phase 1 is next.
 > **Date**: September 2026
 > **Supersedes**: the platform assumptions in [proposal.md](proposal.md) (Pillar 3, "Zero-Dependency Portability" via GDScript). The product pillars in that document still hold; the implementation strategy does not.
 > **Companion documents**: [orison_audit.md](orison_audit.md) (June 2026 code audit, largely remediated), [rag_architecture.md](rag_architecture.md) (retrieval philosophy, still authoritative).
@@ -236,13 +236,36 @@ This is the highest-value single change available in the current codebase and sh
 
 From the end of Phase 0, the Godot build receives bug fixes only. No new features. Every feature added after this point is a feature that must be ported twice.
 
+### 0.7 — Two things Phase 0 discovered
+
+Recorded because both changed the plan.
+
+**Three tests were already failing on a clean tree** (task 0.1a, added during
+execution). One wrote into `user://adventures/` before anything created it; two
+pointed at `192.0.2.1` and relied on packets being *blackholed* so a timeout
+would fire. GitHub's runners do blackhole that address, so only the first failed
+in CI; a sandboxed runner refuses instantly, so all three failed there. Same
+latent bug, different symptom per environment, invisible on a developer machine.
+All three now avoid the network entirely. **Lesson for Phase 1: assert against
+behaviour you control, never against how an environment happens to treat an
+unroutable address.**
+
+**Two CI facts worth keeping.** The runner's exit code does propagate correctly
+through the headless Godot binary, so the workflow's summary-line parsing is
+belt-and-braces rather than necessary. And job-level `continue-on-error` does
+not stop Actions from skipping later steps after an earlier one fails, so
+`gdlint` was silently skipped behind a failing `gdformat --check` until each
+step was made independent. The lint job reports green while `gdlint` is still
+finding ~2,939 issues, almost all trailing whitespace; that is deliberate and
+unresolved. Do not mass-reformat a codebase the migration deletes.
+
 **Phase 0 exit criteria**
-- [ ] CI runs tests and lint on every push, and fails correctly.
-- [ ] B-1 fixed and verified.
-- [ ] Zero absolute filesystem paths in documentation.
-- [ ] `AGENTS.md` exists at the repository root; the line-number Feature Map is gone.
-- [ ] Open tickets exist as Issues.
-- [ ] Feature freeze announced in `README.md`.
+- [x] CI runs tests and lint on every push, and fails correctly.
+- [x] B-1 fixed and verified.
+- [x] Zero absolute filesystem paths in documentation.
+- [x] `AGENTS.md` exists at the repository root; the line-number Feature Map is gone.
+- [x] Open tickets exist as Issues.
+- [x] Feature freeze announced in `README.md`.
 
 ---
 
@@ -609,9 +632,9 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 
 | ID | Defect | Severity | Fixed in | Where | Status |
 |---|---|---|---|---|---|
-| B-1 | NPC prompts budgeted at ~2.1x the served context window | **Critical** | **Phase 0.2** | Godot build, now | Open |
-| B-11 | No continuous integration | **Critical** | **Phase 0.1** | Repository, now | Open |
-| B-12 | 62 absolute filesystem paths in documentation | Minor | **Phase 0.3** | Repository, now | Open |
+| B-1 | NPC prompts budgeted at ~2.1x the served context window | **Critical** | **Phase 0.2** | Godot build, now | **Fixed** |
+| B-11 | No continuous integration | **Critical** | **Phase 0.1** | Repository, now | **Fixed** |
+| B-12 | 62 absolute filesystem paths in documentation | Minor | **Phase 0.3** | Repository, now | **Fixed** |
 | B-2 | Chat template bypassed (`/api/generate`, concatenated prompt) | **Critical** | Phase 2.2 | Port | Open |
 | B-3 | Legacy `format: "json"` instead of schema-constrained decoding | Major | Phase 2.4 | Port | Open |
 | B-4 | Token counting by character division | Major | Phase 2.5 | Port | Open |

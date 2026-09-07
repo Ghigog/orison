@@ -1,33 +1,8 @@
 # Tickets In Progress
 
-This file contains the tickets that are currently being actively worked on. When a ticket is completed, move it to [done.md](file:///Users/dylangrowcoot/Documents/Personal Apps/orison/docs/done.md).
-
----
-
-## Active Tickets
-
-*None.*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> **Moved to GitHub Issues.**
+>
+> Work in progress is tracked by assigning and labelling issues at
+> [github.com/Ghigog/orison/issues](https://github.com/Ghigog/orison/issues)
+> rather than by moving text between markdown files. See
+> [backlog.md](backlog.md) for the migration record.

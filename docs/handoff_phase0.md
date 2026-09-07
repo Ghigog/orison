@@ -5,6 +5,18 @@
 > **Branch**: `claude/project-revival-modernization-6mpddx`
 > **This document is self-contained.** It assumes no knowledge of the conversation that produced the migration plan.
 
+> ## Phase 0 is complete.
+>
+> All seven tasks are done and merged. `main` carries CI, the B-1 fix, hermetic
+> tests, `AGENTS.md`, portable documentation links, the feature freeze, and the
+> ticket migration to GitHub Issues. The test suite is green at 46/46 on a cold
+> runner.
+>
+> This document is retained as the record of what was done and why. **The next
+> work is Phase 1** (build the evaluation harness and baseline the Godot build)
+> in [migration_plan.md](migration_plan.md). Do not start Phase 2 before Phase 1
+> has recorded a baseline: the whole migration is graded against it.
+
 ---
 
 ## What Phase 0 is for
@@ -57,12 +69,12 @@ Do them in this order. 0.2 is the highest-value change in the phase, but 0.1 com
 | # | Task | Effort | Risk | Status |
 |---|---|---|---|---|
 | 0.1a | Make environment-dependent tests hermetic | Small | Low | **Done** |
-| 0.1 | Continuous integration | Medium | Low | Open |
+| 0.1 | Continuous integration | Medium | Low | **Done** |
 | 0.2 | Fix defect B-1 (context budget) | Small | Medium | **Done** |
-| 0.3 | Repair documentation portability | Small | None | Open |
+| 0.3 | Repair documentation portability | Small | None | **Done** |
 | 0.4 | Replace agent guidance files | Medium | Low | **Done** |
-| 0.5 | Move tickets to GitHub Issues | Medium | Low | Open |
-| 0.6 | Declare the feature freeze | Trivial | None | Open |
+| 0.5 | Move tickets to GitHub Issues | Medium | Low | **Done** |
+| 0.6 | Declare the feature freeze | Trivial | None | **Done** |
 
 Commit each task separately. Do not bundle them.
 

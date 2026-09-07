@@ -1,6 +1,13 @@
 # Completed Tickets
 
-This file contains the archive of completed tickets for Orison.
+> **Closed to new entries.** This is a frozen historical record of the tickets
+> completed while the project used markdown-file ticket tracking. Ticket
+> tracking moved to GitHub Issues in Phase 0.5 of the
+> [migration plan](migration_plan.md); completed work is now recorded by closing
+> the issue.
+>
+> Kept because it is a useful record of what was tried and why, and several
+> entries explain decisions that are still load-bearing. Do not append to it.
 
 ---
 
