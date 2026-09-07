@@ -2,6 +2,8 @@
 
 Orison is a multiplatform (PC, Mac, Mobile) game engine built in Godot 4.x. It parses a Markdown archive (such as an Obsidian vault) containing environments, stories, characters, and other notes, and turns it into an interactive DND or Visual Novel experience that players can play through and interact with.
 
+> **Feature freeze in effect.** The Godot build is in maintenance mode: it receives bug fixes only, and new feature work is paused pending a planned migration to a Rust core with a Tauri 2 desktop shell. See the **[Migration Plan](docs/migration_plan.md)** for the full rationale, phasing, and exit criteria. Every feature added to the Godot build after this point is a feature that has to be built twice.
+
 ## Documentation References
 
 For details on the project design, developer/agent guides, and backlog tracking, see the following key documents:
