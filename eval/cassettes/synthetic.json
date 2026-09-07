@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "kind": "synthetic",
+    "purpose": "Exercises and self-tests the harness. This is NOT a measurement of Orison's narrative quality and must never be reported as one. Record a real cassette with --live for that.",
+    "warning": "The transcript below contains DELIBERATE defects, one per metric. If a run against this cassette reports the transcript suite as clean, the harness is broken, not the engine."
+  },
+
+  "entries": [
+    {
+      "match": "Extract the following fields",
+      "_note": "VaultCompiler's per-character LLM extraction. Keyed off names present in the fixtures so entity_fields_populated has something real to check.",
+      "response": "{\"biography\":\"A synthetic biography supplied by the eval cassette so that field-population checks have content to assert against.\",\"personality\":\"Synthetic personality.\",\"appearance\":\"Synthetic appearance.\",\"gender\":\"unspecified\",\"goals\":\"A synthetic goal.\"}"
+    },
+    {
+      "match": "Analyze the following entities from a narrative campaign",
+      "_note": "RAPTOR level-1 clustering.",
+      "response": "{\"theme_title\":\"Synthetic Cluster\",\"summary\":\"A synthetic cluster summary.\"}"
+    },
+    {
+      "match": "summar",
+      "response": "{\"summary\":\"A synthetic summary.\"}"
+    }
+  ],
+
+  "default": "{\"biography\":\"Synthetic default.\",\"personality\":\"Synthetic default.\",\"appearance\":\"Synthetic default.\",\"gender\":\"unspecified\",\"goals\":\"Synthetic default.\",\"summary\":\"Synthetic default.\"}",
+
+  "transcript": [
+    {
+      "_defect": "none - control turn, must pass everything",
+      "character": "Lord Anneke",
+      "pronoun_rule": ["she ", "her ", "hers"],
+      "response": "{\"thinking\":\"The traveller wants passage across the marches.\",\"narration\":\"Lord Anneke sets down his cup and studies the visitor.\",\"dialogue\":\"You'll not cross tonight. The causeway takes anyone who tries it in the dark.\",\"emotional_update\":{\"emotion\":\"trust\",\"intensity\":0.3,\"reason\":\"The traveller was courteous.\",\"rapport_delta\":0.05},\"escalation_signal\":\"none\"}"
+    },
+    {
+      "_defect": "PRONOUN — rag_architecture.md Bug 3. Feminine pronouns for a character the fixture establishes as he/him.",
+      "character": "Lord Anneke",
+      "pronoun_rule": ["she ", "her ", "hers"],
+      "response": "{\"thinking\":\"Consider the request.\",\"narration\":\"Lord Anneke turns to the window. She considers the fens a moment longer.\",\"dialogue\":\"Ask me again at first light.\",\"emotional_update\":{\"emotion\":\"serenity\",\"intensity\":0.2,\"reason\":\"Nothing has changed.\",\"rapport_delta\":0.0},\"escalation_signal\":\"none\"}"
+    },
+    {
+      "_defect": "SCHEMA — not valid JSON. A conversational prefix precedes the object, which is exactly what JsonRepair.gd exists to paper over and what schema-constrained decoding makes impossible (migration plan 2.4).",
+      "character": "King Yuna",
+      "pronoun_rule": ["she ", "her ", "hers"],
+      "response": "Sure! Here is the response you asked for:\n{\"thinking\":\"...\",\"dialogue\":\"The tithe stands.\"}"
+    },
+    {
+      "_defect": "LOOP — dialogue is byte-identical to the control turn above.",
+      "character": "Lord Anneke",
+      "pronoun_rule": ["she ", "her ", "hers"],
+      "response": "{\"thinking\":\"Repeating myself.\",\"narration\":\"\",\"dialogue\":\"You'll not cross tonight. The causeway takes anyone who tries it in the dark.\",\"emotional_update\":{\"emotion\":\"serenity\",\"intensity\":0.2,\"reason\":\"No change.\",\"rapport_delta\":0.0},\"escalation_signal\":\"none\"}"
+    },
+    {
+      "_defect": "FORBIDDEN PHRASING — two at once: third-person self-reference inside the dialogue field, and leaking the raw affinity number into prose.",
+      "character": "Sergeant Adah",
+      "pronoun_rule": ["he ", "him ", "his "],
+      "response": "{\"thinking\":\"Respond to the accusation.\",\"narration\":\"\",\"dialogue\":\"Sergeant Adah says that she was nowhere near the granary. My affinity toward you is 0.35 and falling.\",\"emotional_update\":{\"emotion\":\"anger\",\"intensity\":0.6,\"reason\":\"Accused unjustly.\",\"rapport_delta\":-0.15},\"escalation_signal\":\"none\"}"
+    }
+  ]
+}

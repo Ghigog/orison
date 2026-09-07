@@ -111,3 +111,89 @@ jobs:
       - name: gdlint
         run: gdlint src/ tests/
         continue-on-error: true
+
+  eval:
+    name: Evaluation harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Phase 1 of the migration plan. Runs in replay mode against the synthetic
+    # cassette, so it needs no Ollama and no models. It gates on the harness
+    # SELF-TEST rather than on the metric values: the synthetic cassette
+    # deliberately contains one planted defect per metric, so a run where the
+    # transcript metrics all pass means the harness has stopped working.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot headless binary
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Download Godot headless binary
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot-bin
+          curl -fL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot-bin
+          mv ~/godot-bin/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+
+      - name: Add Godot to PATH
+        run: echo "$HOME/godot-bin" >> "$GITHUB_PATH"
+
+      - name: Verify the large fixture is in sync with its generator
+        # The generator is seeded, so regenerating must be a no-op. If this
+        # fails, someone hand-edited generated files and the ground-truth
+        # labels may no longer point at the notes they claim to.
+        run: |
+          before="$(find fixtures/vaults/large -type f -print0 | sort -z | xargs -0 cat | md5sum)"
+          python3 fixtures/generate_large_vault.py
+          after="$(find fixtures/vaults/large -type f -print0 | sort -z | xargs -0 cat | md5sum)"
+          if [ "$before" != "$after" ]; then
+            echo "::error::fixtures/vaults/large is out of sync with generate_large_vault.py."
+            git --no-pager diff --stat -- fixtures/vaults/large || true
+            exit 1
+          fi
+          echo "Large fixture matches its generator."
+
+      - name: Import project assets
+        run: godot --headless --path . --import
+        continue-on-error: true
+
+      - name: Run evaluation harness
+        # The explicit timeout is not belt-and-braces. If EvalRunnerNode.gd
+        # fails to parse, Godot loads the scene with no script attached and the
+        # process never exits; without this the job would burn its full budget
+        # on a hang rather than reporting a parse error.
+        run: |
+          set -o pipefail
+          timeout 600 godot --headless --path . res://eval/EvalRunner.tscn -- \
+            --fixture=all --selftest --out=user://eval_results.json \
+            2>&1 | tee eval_output.log
+          code=$?
+          if [ $code -eq 124 ]; then
+            echo "::error::Evaluation harness timed out. Check for a GDScript parse error in eval/."
+            exit 1
+          fi
+          exit $code
+
+      - name: Confirm the harness still detects planted defects
+        run: |
+          if grep -q "harness detected all" eval_output.log; then
+            grep "harness detected all" eval_output.log
+          else
+            echo "::error::Harness self-test did not pass. A metric that never fires is not a metric."
+            grep -E "SELF-TEST|harness MISSED" -A3 eval_output.log || true
+            exit 1
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval_output.log
+          retention-days: 14

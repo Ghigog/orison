@@ -1,0 +1,136 @@
+{
+  "fixture": {
+    "name": "minimal",
+    "description": "Three characters, two locations, clean frontmatter, canonical headings. The smoke-test vault: if anything fails here, the problem is not the vault.",
+    "file_count": 5,
+    "vault_root": "characters, locations"
+  },
+  "entities": [
+    {
+      "name": "Elara Voss",
+      "type": "character",
+      "required_fields": [
+        "biography",
+        "personality",
+        "appearance",
+        "goals"
+      ],
+      "expect_gender_contains": "she"
+    },
+    {
+      "name": "Bram Holt",
+      "type": "character",
+      "required_fields": [
+        "biography",
+        "personality",
+        "appearance",
+        "goals"
+      ],
+      "expect_gender_contains": "he"
+    },
+    {
+      "name": "The Kettle",
+      "type": "character",
+      "required_fields": [
+        "biography",
+        "appearance"
+      ],
+      "expect_properties": {
+        "is_creature": true,
+        "can_speak": false,
+        "humanoid": false
+      }
+    },
+    {
+      "name": "Thornwick Archive",
+      "type": "location",
+      "required_fields": []
+    },
+    {
+      "name": "Stonebridge",
+      "type": "location",
+      "required_fields": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "Thornwick Archive",
+      "to": "Stonebridge",
+      "why": "Both locations wiki-link to each other via the mill road.",
+      "bidirectional": true
+    }
+  ],
+  "retrieval": [
+    {
+      "query": "tell me about thornwick archive",
+      "relevant": [
+        "Thornwick Archive"
+      ],
+      "k": 5,
+      "control": true,
+      "why": "POSITIVE CONTROL. The query embeds the node's full label verbatim, which is the only shape the current lexical check can match (KnowledgeGraphManager.gd:179 asks whether the QUERY contains the LABEL, not the reverse). If this passes while the natural-language queries below all return nothing, the graph is demonstrably loaded and the inverted containment is proven to be the cause rather than a wiring fault in the harness. Do not delete: it is what makes the zero scores below trustworthy."
+    },
+    {
+      "query": "who keeps the archive",
+      "relevant": [
+        "Elara Voss",
+        "Thornwick Archive"
+      ],
+      "k": 5,
+      "why": "Direct name-free description match. Should succeed on keyword search alone."
+    },
+    {
+      "query": "who collects the toll at the bridge",
+      "relevant": [
+        "Bram Holt",
+        "Stonebridge"
+      ],
+      "k": 5,
+      "why": "Requires connecting 'toll post' to the guard who mans it."
+    },
+    {
+      "query": "Thornwick",
+      "relevant": [
+        "Thornwick Archive",
+        "Elara Voss",
+        "The Kettle"
+      ],
+      "k": 5,
+      "why": "Proper-noun query. Tag-based association should pull all three. This is the case dense-only embeddings handle worst and BM25 handles best; it is the reason migration_plan.md 3.4 specifies hybrid retrieval."
+    },
+    {
+      "query": "what floods",
+      "relevant": [
+        "Stonebridge"
+      ],
+      "k": 5,
+      "why": "Single-hit precision check. Retrieving Thornwick Archive here is a false positive despite the mill race."
+    }
+  ],
+  "pronoun_checks": [
+    {
+      "character": "Elara Voss",
+      "expect_any": [
+        "she",
+        "her"
+      ],
+      "forbid": [
+        "he ",
+        "him ",
+        "his "
+      ]
+    },
+    {
+      "character": "Bram Holt",
+      "expect_any": [
+        "he",
+        "him",
+        "his"
+      ],
+      "forbid": [
+        "she ",
+        "her "
+      ]
+    }
+  ]
+}

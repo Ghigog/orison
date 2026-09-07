@@ -1,0 +1,165 @@
+{
+  "fixture": {
+    "name": "messy",
+    "description": "Deliberately hostile. Every file breaks the ingest path in a specific documented way. This is the fixture that matters: real personal vaults look like this, not like minimal/.",
+    "file_count": 8,
+    "vault_root": "10_Entities/characters, 10_Entities/places, 30_Systems/lore, notes"
+  },
+
+  "hostile_cases": [
+    {
+      "file": "10_Entities/characters/King Yuna.md",
+      "breaks": "Headings are bold and numerically prefixed (`**1. History**`). Normalising them by stripping only spaces, underscores and hyphens yields `**1.history**`, which matches no alias, and the section is discarded.",
+      "reference": "rag_architecture.md Bug 1"
+    },
+    {
+      "file": "10_Entities/characters/Mira of the Fens.md",
+      "breaks": "No frontmatter at all. Type must come from the folder heuristic. Also carries a callout and an inline hashtag that must survive."
+    },
+    {
+      "file": "10_Entities/characters/Sergeant Adah.md",
+      "breaks": "Contains a fenced code block whose body is `---` delimited YAML. Naive frontmatter detection reads the fence as a second frontmatter block and truncates the file."
+    },
+    {
+      "file": "10_Entities/characters/Lord Anneke.md",
+      "breaks": "No gender field. The name carries a strong feminine statistical prior while the title and body are masculine. A model with no correction will produce she/her.",
+      "reference": "rag_architecture.md Bug 3"
+    },
+    {
+      "file": "10_Entities/places/Saltmarsh Landing.md",
+      "breaks": "Has a `## Smells Like` section matching no canonical field. Must be retained and retrievable rather than dropped.",
+      "reference": "rag_architecture.md 1.1 Everything Must Be Ingested"
+    },
+    {
+      "file": "30_Systems/lore/The Salt Tithe.md",
+      "breaks": "Wiki-links to [[The Chancellor]], an entity that has no file. A dangling link must not abort compilation or create a phantom character."
+    },
+    {
+      "file": "notes/misc scratch.md",
+      "breaks": "No type, no name, no heading structure, in a folder with no type heuristic. Must not be discarded and must not be misclassified as a character."
+    }
+  ],
+
+  "entities": [
+    {
+      "name": "King Yuna",
+      "type": "character",
+      "required_fields": ["biography", "personality", "appearance", "goals"],
+      "expect_gender_contains": "he",
+      "why_gender": "No gender field. Must be inferred from the title 'King' and the body, never from the name."
+    },
+    {
+      "name": "Lord Anneke",
+      "type": "character",
+      "required_fields": ["biography"],
+      "expect_gender_contains": "he",
+      "why_gender": "The critical case. Title and body are unambiguously masculine; the name is not."
+    },
+    {
+      "name": "Sergeant Adah",
+      "type": "character",
+      "required_fields": ["biography", "personality"],
+      "expect_gender_contains": "she",
+      "expect_properties": { "power": 3, "courage": 4, "wisdom": 1 }
+    },
+    { "name": "Mira of the Fens", "type": "character", "required_fields": ["biography"] },
+    { "name": "Saltmarsh Landing", "type": "location", "required_fields": [] },
+    { "name": "Fen Marches", "type": "location", "required_fields": [] },
+    { "name": "The Salt Tithe", "type": "lore", "required_fields": [] }
+  ],
+
+  "must_not_exist": [
+    {
+      "name": "The Chancellor",
+      "why": "Referenced by a dangling wiki-link only. Compilation must tolerate it without inventing an entity."
+    }
+  ],
+
+  "ingest_must_retain": [
+    {
+      "source": "10_Entities/characters/King Yuna.md",
+      "substring": "salt throne at nineteen",
+      "why": "Body of a bold-numeric heading section. Losing this is Bug 1 recurring."
+    },
+    {
+      "source": "10_Entities/characters/King Yuna.md",
+      "substring": "abolished before he dies",
+      "why": "The goals section, under a heading named 'What He Wants' rather than 'Goals'."
+    },
+    {
+      "source": "10_Entities/places/Saltmarsh Landing.md",
+      "substring": "Rot, tar, and woodsmoke",
+      "why": "Non-canonical section. Must land in an overflow bucket, not the bin."
+    },
+    {
+      "source": "10_Entities/characters/Sergeant Adah.md",
+      "substring": "loyal to individuals rather than institutions",
+      "why": "Appears AFTER the code fence. If fence handling is wrong, everything past it is truncated."
+    },
+    {
+      "source": "10_Entities/characters/Mira of the Fens.md",
+      "substring": "where the old causeway surfaces",
+      "why": "Inside a `> [!secret]` callout. Must be ingested, and is the payload for the multi-hop retrieval case below."
+    },
+    {
+      "source": "notes/misc scratch.md",
+      "substring": "both were at the granary",
+      "why": "Untyped loose note. The data lake principle says this is still retrievable."
+    }
+  ],
+
+  "edges": [
+    { "from": "Lord Anneke", "to": "Fen Marches", "why": "Explicit wiki-link plus 'Held for the crown by'." },
+    { "from": "Mira of the Fens", "to": "Saltmarsh Landing", "why": "Explicit wiki-link." },
+    { "from": "The Salt Tithe", "to": "Saltmarsh Landing", "why": "Riots began at the granary there." }
+  ],
+
+  "retrieval": [
+    {
+      "query": "who knows about the hidden causeway",
+      "relevant": ["Mira of the Fens"],
+      "k": 5,
+      "why": "Payload sits inside a callout block. Fails outright if callouts are dropped at ingest."
+    },
+    {
+      "query": "why do people resent the crown",
+      "relevant": ["The Salt Tithe"],
+      "k": 5,
+      "why": "Thematic, no shared proper noun with the source. Dense embeddings should beat BM25 here; the inverse of the Thornwick case in minimal/."
+    },
+    {
+      "query": "Saltmarsh",
+      "relevant": ["Saltmarsh Landing", "Mira of the Fens", "The Salt Tithe"],
+      "k": 5,
+      "why": "Rare proper noun, also an alias. BM25 should beat dense here."
+    },
+    {
+      "query": "who was at the granary",
+      "relevant": ["Sergeant Adah", "Mira of the Fens", "The Salt Tithe"],
+      "k": 5,
+      "why": "Multi-hop. The connection lives only in an untyped scratch note. Hardest case in the set; expected to fail before migration_plan.md 3.4 lands."
+    },
+    {
+      "query": "who rules the coast",
+      "relevant": ["King Yuna"],
+      "k": 5,
+      "why": "Depends on the bold-numeric heading body having survived ingest."
+    }
+  ],
+
+  "pronoun_checks": [
+    {
+      "character": "Lord Anneke",
+      "expect_any": ["he", "him", "his"],
+      "forbid": ["she ", "her ", "hers"],
+      "why": "The headline regression test. rag_architecture.md Bug 3."
+    },
+    {
+      "character": "King Yuna",
+      "expect_any": ["he", "him", "his"],
+      "forbid": ["she ", "her ", "hers"],
+      "why": "The original reported instance of the bug."
+    },
+    { "character": "Sergeant Adah", "expect_any": ["she", "her"], "forbid": ["he ", "him ", "his "] }
+  ]
+}
