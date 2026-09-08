@@ -1,8 +1,8 @@
 # Orison Migration Plan
 
-> **Status**: Phase 0 complete and merged. Phase 1 in progress: fixtures and
-> harness built, structural baseline recorded in [eval_baseline.md](eval_baseline.md),
-> narrative baseline pending a recorded cassette.
+> **Status**: Phases 0 and 1 complete. Structural and narrative baselines
+> recorded in [eval_baseline.md](eval_baseline.md) against real local models.
+> Phase 2 (Rust workspace and inference layer) is next.
 > **Date**: September 2026
 > **Supersedes**: the platform assumptions in [proposal.md](proposal.md) (Pillar 3, "Zero-Dependency Portability" via GDScript). The product pillars in that document still hold; the implementation strategy does not.
 > **Companion documents**: [orison_audit.md](orison_audit.md) (June 2026 code audit, largely remediated), [rag_architecture.md](rag_architecture.md) (retrieval philosophy, still authoritative).
@@ -319,8 +319,8 @@ Run the entire harness against the existing GDScript engine and commit the numbe
 **Phase 1 exit criteria**
 - [x] Three fixture vaults with ground-truth retrieval labels.
 - [x] Deterministic suite runs in CI (replay mode; no model needed).
-- [ ] Judge suite runs on demand.
-- [ ] `docs/eval_baseline.md` records Godot-build numbers for every metric.
+- [ ] Judge suite runs on demand. *(deliberately deferred; see eval_baseline.md)*
+- [x] `docs/eval_baseline.md` records Godot-build numbers for every metric.
 
 ---
 
@@ -649,6 +649,7 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | **Phase 1** | Godot build | **Fixed** (recall 0.00-0.20 -> 0.88-1.00) |
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
 | B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
+| B-16 | Character extraction never used JsonRepair, so any fenced JSON response failed | **Critical** | **Phase 1** | Godot build | **Fixed** (fields empty -> all populated) |
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 
@@ -716,6 +717,50 @@ See §3.4.
 ### B-10: Stale model recommendations
 
 `README.md` recommends Llama 3.1 8B and Llama 3.2 3B; `rag_architecture.md` references `gemma4:e4b`. Current guidance for an 8GB consumer GPU centres on Qwen3 8B at Q4_K_M. More important than the specific name: **model identifiers must be configuration with a recommended default profile, never constants in code.** They will be stale again within a year, and the migration should make that a settings update rather than a code change.
+
+### B-16: Character extraction never called JsonRepair
+
+**Severity: critical. This is the actual root cause of Bug 2, and it was a
+one-line integration miss, not a prompt problem.**
+
+`VaultCompiler._extract_character_data_via_llm` parsed the model's reply with
+`JSON.new().parse()` directly. The file referenced `JsonRepair` **zero times**,
+despite `JsonRepair.extract_json` existing for exactly this purpose and already
+stripping markdown code fences at `JsonRepair.gd:117`.
+
+Models fence their JSON by default. In a live run against `gemma4:e2b`, **every
+single character failed to parse**, and in every case the payload inside the
+fence was perfectly valid:
+
+```
+WARNING: [VaultCompiler] Failed to parse LLM response JSON for King Yuna. Response was: ```json
+{
+  "biography": "Yuna took the salt throne at nineteen after his three older brothers drowned...",
+  "personality": "Blunt to the point of rudeness. Dislikes ceremony and cuts speeches short.",
+  ...
+}
+```
+```
+
+Every character therefore compiled with no personality, no appearance and no
+goals, on any model that fences its output. Combined with B-14 (raw source
+discarded), that data was then unrecoverable.
+
+[rag_architecture.md](rag_architecture.md) Bug 2 diagnosed this symptom in June
+as "extracted fields are never used in the NPC prompt" and attributed it to the
+prompt's CHARACTER PROFILE block being too thin. That was treating a downstream
+symptom: the fields were empty because extraction silently failed on every file.
+
+**Fixed.** Extraction now routes through `JsonRepair.extract_json`. Verified by
+replaying the recorded baseline cassette, which contains the real fenced
+responses: `entity_fields_populated` went from 7 empty fields on `minimal` and 4
+on `messy` to all populated on both.
+
+**Why the harness caught it and six months of play did not**: the failure was a
+`push_warning`, invisible outside the editor, and the compiled campaign looked
+structurally fine. Every entity was present. Only their contents were empty, and
+nothing asserted on contents until there was a fixture with known-correct
+expected fields.
 
 ### B-15: A dead model degrades silently and reports success
 

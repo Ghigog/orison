@@ -4,42 +4,44 @@
 > [migration_plan.md](migration_plan.md) cannot be declared complete until the
 > Rust engine meets or beats every figure here.
 >
-> **Recorded**: 7 September 2026, against `main` at the close of Phase 0, then
-> re-measured after fixing the two critical defects the harness surfaced (B-13,
-> B-14). Both sets of numbers are kept: the port must beat the *fixed* figures.
-> **Engine**: Godot / GDScript, ~19,600 lines. Verified identical on 4.6 and 4.7
-> (46/46 unit tests and byte-identical eval results on both); CI runs 4.7.
+> **Recorded**: 7-8 September 2026 against `main`, in three passes: as found at
+> the close of Phase 0, after fixing the defects the harness surfaced (B-13,
+> B-14, B-16), and finally live against real local models. The port must beat the
+> *fixed* figures.
+> **Engine**: Godot / GDScript, ~19,600 lines. Identical results on 4.6 and 4.7;
+> CI runs 4.7.
+> **Models** (live run): Director `gemma4:e2b`, Actor `llama3.2:3b`, embeddings
+> `nomic-embed-text`, via Ollama on an Apple Silicon MacBook Air. Quote no
+> narrative number without these; a baseline is meaningless without the models
+> that produced it.
 > **Harness**: `eval/EvalRunner.tscn`. See [Running it](#running-it).
 
 ---
 
 ## Read this before quoting any number below
 
-The harness has two modes, and they measure completely different things.
+The harness runs in two modes and they measure different things.
 
 | Mode | What it proves | Status |
 |---|---|---|
-| **Replay, synthetic cassette** | The *harness* works. Model responses are canned. | Recorded below. |
-| **Replay, recorded cassette** | The *engine* works. Model responses are real, captured once from Ollama. | **Not yet recorded.** |
-| **Live** | Same as above, but calls Ollama directly and writes a cassette. | Requires a machine with Ollama. |
+| **Replay, synthetic cassette** | The *harness* works. Responses are canned and deliberately defective. | Runs in CI. |
+| **Replay, recorded cassette** | The *engine* works, deterministically. | `eval/cassettes/baseline.json` |
+| **Live** | Same, calling Ollama directly and recording a cassette. | Recorded 8 Sep. |
 
-**Everything in this document is from the synthetic cassette**, because the
-environment it was produced in has no Ollama and no local models. That is not a
-gap in the harness; it is the reason the harness has a record/replay mode at all.
+Narrative figures below are from a **live run against real models**, not the
+synthetic cassette. Structural figures are from replay, which isolates the
+lexical retrieval path.
 
-What this means in practice:
+Two caveats that matter:
 
-- **Structural metrics are real.** Compilation, entity extraction, edge
-  extraction and retrieval do not depend on model output for their *shape*, and
-  the retrieval numbers in particular are genuine and damning.
-- **Narrative metrics are not yet measured.** Schema validity, pronoun
-  consistency, loop detection and forbidden phrasing currently run against
-  deliberately defective canned text whose only job is to prove the metrics fire.
-- **One metric is actively misleading under synthetic replay** and is flagged
-  inline below: `entity_fields_populated`.
-
-Filling in the narrative half is one command on a machine with Ollama. See
-[What is still missing](#what-is-still-missing).
+- **The recorded cassette is now stale against `main`.** It keys on full prompts,
+  and the B-16 fix changed those prompts by populating character fields that were
+  previously empty. That is the intended brittleness: a cassette recorded against
+  different prompts is not evidence about the current ones. Re-record before
+  quoting narrative numbers as current.
+- **Retrieval differs between modes.** Replay stubs embeddings out; the live run
+  had `nomic-embed-text`, activating the dense half of the rank fusion. Both are
+  recorded below and the difference is itself a finding.
 
 ---
 
@@ -78,11 +80,20 @@ Retrieval was measured, found to be almost entirely non-functional, fixed, and
 re-measured. Both states are recorded: the first is what the harness found, the
 second is the bar the Rust port must actually beat.
 
-| Fixture | Mean recall (as found) | Mean recall (after fix) | Queries returning nothing |
-|---|---:|---:|---|
-| `minimal` | 0.200 | **1.000** | 4 of 5 → 0 |
-| `messy` | 0.000 | **0.933** | 5 of 5 → 0 |
-| `large` | 0.000 | **0.875** | 4 of 4 → 0 |
+| Fixture | As found | After fix (lexical only) | Live (+ embeddings) |
+|---|---:|---:|---:|
+| `minimal` | 0.200 | **1.000** | **1.000** |
+| `messy` | 0.000 | **0.933** | **1.000** |
+| `large` | 0.000 | **0.875** | not run live |
+
+Queries returning nothing went from 13 of 14 to zero.
+
+**Hybrid retrieval earns its place, measurably.** Adding `nomic-embed-text` took
+`messy` from 0.933 to 1.000, and specifically fixed `"who was at the granary"`,
+which went 0.67 → 1.00. That is the multi-hop case whose connecting fact lives
+only in an untyped scratch note: lexical scoring could not reach it and dense
+retrieval could. That single query is the clearest empirical argument in this
+document for the fusion design in Phase 3.4.
 
 **As found, 13 of 14 queries retrieved literally zero nodes.** The single success
 was a positive control deliberately written to embed a node's full label verbatim.
@@ -169,30 +180,59 @@ quality rather than destroying data.
 
 ## Narrative baseline
 
-**Not yet measured.** The figures the harness currently prints for
-`schema_validity`, `pronoun_consistency`, `loop_detection` and
-`forbidden_phrasing` come from the synthetic cassette, which contains one
-deliberately planted defect per metric. They are a self-test, not a measurement.
+Measured live, 8 September 2026. Nine scripted turns: four as Bram Holt
+(`minimal`), five as Lord Anneke (`messy`).
 
-The self-test passes: the harness detected all four planted defect classes. That
-matters more than it sounds. A metric that never fires is indistinguishable from
-a metric that always passes, and this suite is the thing the whole migration is
-graded on. `--selftest` runs in CI so the harness cannot rot into a rubber stamp.
-
-| Metric | Planted defect | Detected |
+| Metric | Result | Notes |
 |---|---|---|
-| `schema_validity` | Conversational prefix before the JSON object | yes |
-| `pronoun_consistency` | `she` used for a he/him character | yes |
-| `loop_detection` | Dialogue byte-identical to an earlier turn | yes |
-| `forbidden_phrasing` | Third-person self-reference; leaked affinity score | yes |
+| **Schema validity** | **9/9 (1.000)** | Every response parsed strictly, without `JsonRepair`. |
+| **Pronoun consistency** | Clean on `messy`; 1 flag on `minimal` | The flag is a probable false positive, see below. |
+| **Loop detection** | Clean | Including a deliberately repeated player question. |
+| **Forbidden phrasing** | Clean | No third-person self-reference, no leaked affinity. |
+| **Turn latency p50** | **21.2 s / 20.2 s** | The number that should worry you. |
 
-One near-miss worth recording, because it is the kind of thing that quietly
-destroys trust in an eval suite: the pronoun metric originally used substring
-matching, and `"she was"` contains `"he "`. It flagged every correctly-gendered
-feminine line as an error. It now uses word-boundary matching. A metric that
-cries wolf is worse than no metric, because people learn to ignore it.
+### Bug 3 did not reproduce
 
----
+This is the headline narrative result. `messy` runs five turns as **Lord Anneke**,
+constructed as the hardest possible pronoun trap: no gender field, a title and
+body that are unambiguously masculine, a name carrying a strong feminine prior,
+and a final player line that says "her" about a third party to bait an echo.
+
+`llama3.2:3b` handled all five turns cleanly.
+
+The single flag is on `minimal` turn 3, where Bram Holt is asked who keeps the
+archive. Elara Voss keeps it and is a woman, so "she" in that narration is
+probably correct. This is the documented residual limitation of the metric: it
+cannot distinguish a wrong pronoun for the speaker from a right one for a third
+party. **Treat any single pronoun flag as needing a human read**, not as a defect.
+
+Bug 3 was diagnosed in June against a model receiving *empty* character data,
+because extraction was silently failing (B-16). With fields actually populated,
+the gender line reaches the prompt and the model uses it. Worth re-testing after
+re-recording, but the June diagnosis may simply have been downstream of B-16.
+
+### Schema validity at 9/9 is a real finding
+
+Every response parsed on the first attempt, strictly, with no repair. The harness
+deliberately does **not** route transcript responses through `JsonRepair`,
+because scoring post-repair output would hide the defect being measured.
+
+That is evidence `JsonRepair` is not load-bearing for the character agent on this
+model, which lowers the risk of the Phase 2.4 constrained-decoding work: it is
+formalising something that already mostly holds rather than fixing something
+broken. Note the contrast with the *extraction* path, where the same absence of
+repair was catastrophic (B-16) because that path used a stricter parser.
+
+### Latency is the worst number in this document
+
+**p50 ~20 s per turn** on a 3B model, and 157 s / 283 s to compile five and eight
+notes respectively. Effectively all of it is inference.
+
+Twenty seconds per conversational turn is not a playable experience, and it is
+the strongest evidence yet for the Phase 2 inference work. The engine calls
+`/api/generate` with a monolithic prompt rebuilt every turn, so there is no KV
+cache reuse whatsoever (B-2). Cache-stable prompt ordering and `/api/chat` exist
+precisely to fix this. Treat 20 s as the number Phase 2 must beat.
 
 ## What is still missing
 
