@@ -648,6 +648,7 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | Open |
 | B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | **Phase 1** | Godot build | **Fixed** (recall 0.00-0.20 -> 0.88-1.00) |
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
+| B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 
@@ -715,6 +716,41 @@ See §3.4.
 ### B-10: Stale model recommendations
 
 `README.md` recommends Llama 3.1 8B and Llama 3.2 3B; `rag_architecture.md` references `gemma4:e4b`. Current guidance for an 8GB consumer GPU centres on Qwen3 8B at Q4_K_M. More important than the specific name: **model identifiers must be configuration with a recommended default profile, never constants in code.** They will be stale again within a year, and the migration should make that a settings update rather than a code change.
+
+### B-15: A dead model degrades silently and reports success
+
+**Severity: critical. Found by the first real live recording run.**
+
+The configured Director model (`gemma4:e4b`) was not installed. Every call
+returned HTTP 404. The engine's response:
+
+- `VaultCompiler._extract_character_data_via_llm` logs a `push_warning` and
+  returns an empty result, so every character compiles with blank fields.
+- `_generate_raptor_summaries` prints
+  `"RAPTOR summaries generated successfully. L1 count: 3, L2 count: 1"`
+  unconditionally, **after all four of its summary calls 404'd**. The counts are
+  from the round-robin fallback path.
+- Compilation reports success. Nothing surfaces to the user.
+
+So a campaign compiled against a missing Director model looks like it worked and
+produces characters with no personality, no appearance, no goals, and fallback
+summaries instead of RAPTOR ones. `push_warning` is invisible outside the editor
+(the same problem as B-1's discarded overflow warning).
+
+This is worth more than its immediate cause. The configured model here is the one
+named in `rag_architecture.md`, so it is plausible the Director has been silently
+non-functional for some time, which would independently explain gameplay feeling
+flat regardless of prompt quality.
+
+**Fix**: Phase 2.2. The backend trait verifies model availability at connection
+time and surfaces an unreachable model as a typed error the caller must handle,
+not a warning. Success messages must be conditional on the work actually
+succeeding.
+
+**Mitigated now** in the eval harness, which preflights every configured model
+and refuses to start a live recording run if one does not answer. A baseline
+recorded against a dead model is worse than no baseline, because it looks
+complete.
 
 ### B-13: Lexical retrieval is inverted and searches nothing
 

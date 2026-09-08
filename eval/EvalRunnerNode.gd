@@ -68,6 +68,9 @@ func _ready() -> void:
 
 	if _opts["live"]:
 		_install_recording_proxy()
+		if not await _preflight_models():
+			get_tree().quit(1)
+			return
 	else:
 		_load_cassette()
 		_install_replay_mock()
@@ -222,6 +225,41 @@ func _write_cassette(interim: bool = false) -> void:
 		print("\n[eval] Recorded cassette written to %s (%d responses)"
 			% [ProjectSettings.globalize_path(path), _recorded.size()])
 		print("[eval] Copy it to eval/cassettes/baseline.json and commit it.")
+
+
+## Verifies every configured model actually answers before a long live run.
+##
+## The first real recording run wasted its Director half because `gemma4:e4b`
+## was not installed: every call returned HTTP 404, VaultCompiler logged a
+## push_warning and carried on with empty fields, and RAPTOR still printed
+## "summaries generated successfully". The run looked like it worked. A baseline
+## recorded that way is worse than no baseline, so this refuses to start.
+func _preflight_models() -> bool:
+	var models := {
+		"Director / world builder": LLMClient.world_builder_model,
+		"Character agent": LLMClient.character_model,
+	}
+	var failures: Array[String] = []
+	for role in models:
+		var model := str(models[role])
+		var res := await _send_async_with("ping", model)
+		if not bool(res[0]):
+			failures.append("%s: '%s' -> %s" % [role, model, res[2]])
+		else:
+			print("[eval] preflight OK: %s = %s" % [role, model])
+
+	if failures.is_empty():
+		return true
+
+	printerr("")
+	printerr("[eval] ABORTING: a configured model did not answer.")
+	for f in failures:
+		printerr("        " + f)
+	printerr("")
+	printerr("        Check `ollama list` against the models in client_config.json.")
+	printerr("        Recording against an unreachable model produces a cassette that")
+	printerr("        looks complete and measures nothing.")
+	return false
 
 
 # ==============================================================================
@@ -559,13 +597,26 @@ func _run_transcript_suite(fixture: String, compiled: Dictionary) -> void:
 
 		var dialogue := str(parsed.get("dialogue", ""))
 		var narration := str(parsed.get("narration", ""))
-		var blob := (dialogue + " " + narration).to_lower()
 
-		# 2. Pronoun consistency (rag_architecture.md Bug 3). Word-bounded, since
-		#    "she was" contains "he ".
+		# 2. Pronoun consistency (rag_architecture.md Bug 3).
+		#
+		#    NARRATION ONLY, and word-bounded. Two false-positive traps here, both
+		#    of which this metric originally fell into:
+		#
+		#    a) "she was" contains "he ", so substring matching flags every
+		#       correctly-gendered feminine line. Hence _contains_word.
+		#    b) Dialogue is the character SPEAKING, where referring to a third
+		#       party of another gender is completely correct. The first live run
+		#       flagged Bram Holt for saying "she" about Elara, who keeps the
+		#       archive and is a woman. That is right, not wrong.
+		#
+		#    Bug 3 manifests as the narrator using the wrong pronoun for the
+		#    speaking character, which lands in `narration`. Residual limitation:
+		#    narration that describes a third party of another gender can still
+		#    false-positive. Check flagged turns by hand before believing them.
 		for rule in expected_pronouns:
-			if _contains_word(blob, str(rule)):
-				pronoun_errors.append("turn %d: forbidden '%s'" % [i, str(rule).strip_edges()])
+			if _contains_word(narration.to_lower(), str(rule)):
+				pronoun_errors.append("turn %d narration: forbidden '%s'" % [i, str(rule).strip_edges()])
 
 		# 3. Loop detection.
 		var norm := dialogue.strip_edges().to_lower()
@@ -604,8 +655,12 @@ func _run_transcript_suite(fixture: String, compiled: Dictionary) -> void:
 
 ## Wraps the callback-style LLM API in something awaitable.
 func _send_async(prompt: String) -> Array:
+	return await _send_async_with(prompt, LLMClient.character_model)
+
+
+func _send_async_with(prompt: String, model: String) -> Array:
 	var carrier := EvalSignalCarrier.new()
-	LLMClient.send_custom_request(prompt, LLMClient.character_model,
+	LLMClient.send_custom_request(prompt, model,
 		func(success: bool, text: String, err: String):
 			carrier.done.call_deferred(success, text, err),
 		300.0, LLMClient.RequestPriority.HIGH, false, LLMClient.ROLE_CHARACTER)
