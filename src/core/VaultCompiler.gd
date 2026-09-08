@@ -922,9 +922,20 @@ func _extract_character_data_via_llm(body: String, char_name: String) -> Diction
 		push_warning("[VaultCompiler] LLM character data extraction failed for %s" % char_name)
 		return result
 		
-	var json = JSON.new()
-	if json.parse(state["response_text"]) == OK and json.data is Dictionary:
-		var data = json.data
+	# Route through JsonRepair rather than JSON.parse directly.
+	#
+	# JsonRepair exists precisely for this and strips markdown code fences
+	# (JsonRepair.gd:117), yet this path never called it. Models fence their JSON
+	# by default: a live run against gemma4:e2b failed to parse EVERY character,
+	# and in each case the payload inside the ```json fence was perfectly valid.
+	# The result was characters compiled with no personality, appearance or goals
+	# on any model that fences, which is most of them.
+	#
+	# This is the real root cause of rag_architecture.md Bug 2 ("extracted fields
+	# never reach the NPC prompt"). It was never a prompt problem. See
+	# migration_plan.md B-16.
+	var data := JsonRepair.extract_json(state["response_text"])
+	if not data.get("parsing_failed", false):
 		for key in data.keys():
 			var lower_key = key.to_lower()
 			if lower_key == "biography" or lower_key == "history" or lower_key == "backstory":
