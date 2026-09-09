@@ -18,3 +18,20 @@ thiserror = "1"
 futures = "0.3"
 futures-core = "0.3"
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+# Phase 3. rusqlite is pinned to 0.39 because rusqlite_migration 2.5 links
+# against exactly that version, and two `libsqlite3-sys` majors cannot coexist
+# in one binary (both declare `links = "sqlite3"`). rusqlite_migration 2.6
+# requires rustc 1.95; the committed lockfile holds 2.5 so the toolchain floor
+# stays where the rest of the workspace is.
+rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite_migration = "2.5"
+sqlite-vec = "0.1"
+petgraph = "0.6"
+tantivy = "0.26"
+# linfa 0.8 builds against ndarray 0.16. Taking a newer ndarray here compiles
+# each crate fine and then fails to hand an `ndarray::Array2` to `KMeans::fit`,
+# because they are different types with the same name.
+ndarray = "0.16"
+linfa = "0.8"
+linfa-clustering = "0.8"

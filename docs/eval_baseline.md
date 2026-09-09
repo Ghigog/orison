@@ -367,6 +367,152 @@ transcript to judge.
 
 ---
 
+## Phase 3 measurement
+
+Phase 3 replaces the data layer: SQLite state, the ported ingest pipeline, the
+`petgraph` knowledge graph, hybrid retrieval, RAPTOR and chunking. Like Phase 2
+it grades itself with `cargo test`, because the eval harness port is Phase 5's
+job. Unlike Phase 2 it has real data to test against — `ground_truth.json` is
+already plain, language-neutral JSON — so the structural numbers below are
+measured, not asserted.
+
+```bash
+cargo test -p orison-core                                    # everything below
+cargo test -p orison-core --test retrieval_quality -- --nocapture   # the tables
+```
+
+### Retrieval — recall against the Godot baseline
+
+Measured at each query's own `k` from `ground_truth.json` (5 for `minimal` and
+`messy`, 10 for `large`), which is the same basis as the Godot figures.
+
+| Fixture | Godot (fixed, lexical) | Rust BM25 | Rust BM25 + graph expansion |
+|---|---:|---:|---:|
+| `minimal` | 1.000 | **1.000** | **1.000** |
+| `messy` | 0.933 | **1.000** | **1.000** |
+| `large` | 0.875 | 0.875 | **1.000** |
+
+No query returns empty on any fixture, against 13 of 14 as found in Phase 1.
+
+### The two documented hard queries
+
+Both are closed, not merely re-tested. They were recorded as targets rather than
+blockers, and both needed the multi-hop reasoning the Godot design does not do.
+
+| Query | Godot | Rust | What carried it |
+|---|---:|---:|---|
+| `messy` / `"who was at the granary"` | 0.67 | **1.00** | Real BM25. The connecting fact is in an untyped scratch note, which term-overlap scoring could not surface and IDF-weighted BM25 does. |
+| `large` / `"who keeps the accord"` | 0.50 | **1.00** | Prose-name edges plus graph expansion. The chapel note says nothing about accords, so no scoring of its text can reach it; only the edge can. |
+
+### Each stage's contribution
+
+The handoff asks for stages to be earned rather than adopted on faith. What each
+one actually did:
+
+| Stage | Effect | Kept? |
+|---|---|---|
+| BM25 (`tantivy`) | `messy` 0.933 → 1.000 on its own; fixes the granary query outright. Real IDF and length normalisation are the difference — the Phase 1 fix had neither, and on `large` 170 of 207 files share a handful of surnames. | Yes |
+| Prose-name edges (ingest) | `large` 0.875 → 1.000. Without them the accord query stays at the documented 0.50 and `large` cannot beat its baseline. | Yes |
+| Graph expansion | The stage that spends those edges. Seeded from the top 2 results at 1 hop, not from every match at 1 degree the way `retrieve_context` did. | Yes |
+| Reciprocal rank fusion | Structurally required for the dense half; with BM25 alone it is a no-op that preserves order. | Yes |
+| Cross-encoder rerank | **Not built.** No model was reachable to be one; see below. | — |
+| Passage rerank (the stand-in) | **Moves no recall on any fixture.** Moves MRR on `messy`, 0.900 → 1.000. | Yes, with the null result recorded |
+
+**The reranker's null result, stated plainly.** Every relevant result these
+queries can reach is already inside the top `k` before reranking, so a set
+measure at `k` cannot see the stage at all. That is why MRR was added: recall and
+precision are set measures and a reranker reorders. It is kept because its cost
+is one pass over candidates already in hand and because the precision problem it
+targets is real at a scale no fixture here reaches — not because the plan lists
+it.
+
+**It is not a cross-encoder and does not claim to be.** A cross-encoder is a
+model, and no weights were reachable from the environment this was built in.
+Shipping something named for a model it does not have would repeat Phase 2's
+`LlamaCppBackend`. `PassageReranker` scores a candidate's best window rather than
+its whole text, which targets the same failure the cross-encoder is wanted for:
+the 74-of-207 result recorded above happens because a whole-note score rewards a
+long note for containing a query term anywhere in it.
+
+### Precision, measured for the first time
+
+The Godot build has no precision figure, and this document records the one
+anecdote — 1 relevant note in 74 returned — as the known weak point. Numbers now
+exist for it:
+
+| Fixture | BM25 | + graph expansion |
+|---|---:|---:|
+| `minimal` | 0.460 | 0.410 |
+| `messy` | 0.440 | 0.360 |
+| `large` | 0.325 | 0.225 |
+
+**Graph expansion costs precision everywhere it is used.** That is a trade, and
+it is stated as one: recall is the exit criterion and the accord query is a
+documented target, so it is the right trade here, but a future phase with a
+precision budget should revisit the expansion seeds before anything else.
+
+### Ingest
+
+| Metric | Godot | Rust |
+|---|---|---|
+| `messy` required source substrings | 6 of 6 | **6 of 6** |
+| `messy` silently dropped sections | not measurable | **0** |
+
+Dropped sections are checked by coverage, not by a counter: every parsed
+section's text must be findable on the entity it came from. A counter
+incremented by hand cannot fire on the bug it is meant to catch.
+
+Ingest also no longer needs a model. The Godot pipeline made one LLM call per
+character file inside its first pass, so a vault could not be compiled at all
+without a live endpoint, and a fenced JSON response (B-16) left the character
+with nothing. Deterministic section parsing fills the canonical fields; a model
+can only top up what the source did not say.
+
+### RAPTOR
+
+Cluster-count shape matches the Godot build exactly:
+
+| Fixture | Candidates | L1 | L2 |
+|---|---:|---:|---:|
+| `messy` | 6 | 3 | 1 |
+| `large` | 200 | 40 | 8 |
+
+`max(3, ceil(n/5))` and `max(1, ceil(l1/5))`. Membership is not compared:
+`linfa-clustering` will not reproduce a hand-rolled ten-iteration k-means and is
+not expected to.
+
+### What still needs a live model
+
+Gated and skipping loudly, per the Phase 1 lesson about metrics that never fire:
+
+- `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_EMBED_MODEL` →
+  `tests/retrieval_dense.rs`. A chat model identifier is not an embedding model
+  identifier, which is why this is a second variable rather than a reuse of
+  `ORISON_TEST_OLLAMA_MODEL`. The dense stage's *contribution to recall is
+  therefore unmeasured*: every retrieval figure above is the lexical and
+  structural half of the pipeline only. `eval_baseline.md`'s live Godot run
+  showed embeddings taking `messy` from 0.933 to 1.000, so there is reason to
+  expect it helps; nobody has run it here.
+- RAPTOR summary *quality*. The hierarchy's shape is verified without a model;
+  whether the summaries are any good is a different question and needs one.
+
+### Two findings worth recording
+
+**`ground_truth.json` overstates one rationale.** The `large` fixture says BM25
+"cannot" carry `"what stopped the boundary war"` because the query shares no rare
+term with the target. It does, at rank 1: the note contains the phrase "boundary
+war" verbatim. BM25 needs a *distinctive* term, not a globally rare one. The
+query is still a good dense test and the `why` field is worth keeping — with that
+sentence corrected.
+
+**There are no long notes in the fixture set.** The longest file in `large` is 53
+words. `large` is a scale fixture, built to break brute-force vector search, and
+nothing in it exercises multi-chunk behaviour at the default chunk size. The
+chunking parameters (§3.6) are therefore mechanism-verified and not
+corpus-tuned; tuning them needs documents that do not exist here yet.
+
+---
+
 ## Running it
 
 ```bash

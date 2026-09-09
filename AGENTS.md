@@ -100,6 +100,20 @@ inference encode a lot of hard-won knowledge about real, messy vaults.
 for entities, relationships and tags, and does the retrieval that feeds prompts.
 Do not reintroduce parallel entity dictionaries elsewhere.
 
+**The Rust core.** `crates/orison-core` is the migration target and is built
+alongside the Godot build, not instead of it yet. It has no UI and no platform
+assumptions. Run its suite with `cargo test --workspace`; CI runs `cargo fmt
+--check`, `cargo clippy --workspace --all-targets -- -D warnings` and the tests.
+Everything in it runs without a model or a network by default. Cases that need a
+live endpoint are gated on environment variables and **skip loudly** rather than
+silently passing:
+
+| Variable | Gates |
+|---|---|
+| `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL` | Phase 2's live chat conformance cases |
+| `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_EMBED_MODEL` | The dense half of retrieval (a chat model id is not an embedding model id) |
+| `--features llama-cpp` | `LlamaCppBackend`; builds llama.cpp from source, so it is off by default |
+
 **Turn loop.** `GameLoopController` orchestrates a turn: player input through
 `PlayerInputParser`, an agentic Director research loop over the knowledge graph,
 a streaming Character Agent response parsed by `LLMStreamParser`, emotion updates
@@ -187,7 +201,9 @@ purged once and must not come back.
 | Document | What it is |
 |---|---|
 | [docs/migration_plan.md](docs/migration_plan.md) | The plan off Godot. Phases, exit criteria, defect register. |
-| [docs/handoff_phase0.md](docs/handoff_phase0.md) | Executable brief for the current phase. |
+| [docs/handoff_phase4.md](docs/handoff_phase4.md) | Executable brief for the current phase (orchestration and the turn loop). |
+| [docs/handoff_phase3.md](docs/handoff_phase3.md) | The completed data-layer brief. Useful as the record of what `orison-core` now provides. |
+| [docs/handoff_phase0.md](docs/handoff_phase0.md) | The original Phase 0 brief, kept as history. |
 | [docs/rag_architecture.md](docs/rag_architecture.md) | Retrieval philosophy, Director/Actor rationale, June diagnosis. Authoritative. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Subsystem layout and turn-flow diagrams. |
 | [design_philosophy.md](design_philosophy.md) | Colour tokens, typography, spacing, motion. |
