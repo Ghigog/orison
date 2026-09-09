@@ -146,6 +146,93 @@ pub struct DirectorResponse {
     pub dice_roll: DiceRoll,
 }
 
+/// A medium-term summary of a stretch of conversation (§4.4).
+///
+/// A struct with one field rather than a bare string, because the request is
+/// schema-constrained: `MemoryManager` asked for a paragraph in prose and then
+/// had to check the answer against the literal string `"null"`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SessionSummaryResponse {
+    /// Objective third-person, a few sentences.
+    pub summary: String,
+}
+
+/// The character's long-term memory, rewritten to absorb new summaries.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DistilledMemoryResponse {
+    /// One or two paragraphs, integrating the existing memory with what is
+    /// new rather than replacing it.
+    pub memory: String,
+}
+
+/// A character's resting disposition, deduced from their biography.
+///
+/// The Godot build asked for this in prose and parsed the answer with
+/// `JsonRepair`; here the sampler is constrained to the shape. Its purpose is
+/// `characters.base_emotion`, which is what a character decays back toward
+/// between scenes.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BaselineDisposition {
+    pub base_emotion: Emotion,
+    pub base_intensity: f32,
+    pub reason: String,
+}
+
+/// One response that does both jobs (§4.2, arm C).
+///
+/// The Director/Actor split exists because a 3B Actor could not also do
+/// Director work. This type is what "one 8B model, one call per turn"
+/// requires: the union of both schemas, so a single constrained response
+/// carries the character's line *and* the world state it changed.
+///
+/// It is deliberately the union rather than a redesign. The arms have to be
+/// comparable, and a combined schema that also improved the fields would
+/// measure two changes at once. `narration` appears once because in this arm
+/// there is one narrator; splitting it would be the redesign.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CombinedTurnResponse {
+    pub thinking: String,
+    pub narration: String,
+    pub dialogue: String,
+    pub emotional_update: EmotionalUpdate,
+    pub escalation_signal: EscalationSignal,
+    pub memory_updates: MemoryUpdates,
+    #[serde(default)]
+    pub plot_updates: HashMap<String, bool>,
+    #[serde(default)]
+    pub inventory_updates: Vec<InventoryUpdate>,
+    pub choices: Vec<Choice>,
+    pub dice_roll: DiceRoll,
+}
+
+impl CombinedTurnResponse {
+    /// The Actor's half, so everything downstream of a two-call turn works
+    /// unchanged.
+    pub fn as_character(&self) -> CharacterResponse {
+        CharacterResponse {
+            thinking: self.thinking.clone(),
+            narration: self.narration.clone(),
+            dialogue: self.dialogue.clone(),
+            emotional_update: self.emotional_update.clone(),
+            escalation_signal: self.escalation_signal,
+        }
+    }
+
+    /// The Director's half. `narration` is left empty: this arm has already
+    /// narrated in the character response, and returning it twice would log
+    /// the same beat to the transcript twice.
+    pub fn as_director(&self) -> DirectorResponse {
+        DirectorResponse {
+            narration: String::new(),
+            memory_updates: self.memory_updates.clone(),
+            plot_updates: self.plot_updates.clone(),
+            inventory_updates: self.inventory_updates.clone(),
+            choices: self.choices.clone(),
+            dice_roll: self.dice_roll.clone(),
+        }
+    }
+}
+
 /// The Director ReAct loop's per-step response, ported from
 /// `SystemPrompts.get_director_react_system_prompt()` for completeness
 /// against §2.4's exit bar. **Superseded by native tool calling (§2.6):**

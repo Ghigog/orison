@@ -216,3 +216,21 @@ pub struct ChunkRow {
     pub char_start: i64,
     pub char_end: i64,
 }
+
+/// One medium-term summary of a stretch of conversation with a character
+/// (§4.4).
+///
+/// `covers_from` and `covers_to` are `history_logs.id` bounds: the lines this
+/// summary stands in for. They are the provenance, and they are why the
+/// transcript can keep the originals rather than being rewritten without them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSummary {
+    pub id: i64,
+    pub entity_id: String,
+    pub summary: String,
+    pub created_at: String,
+    pub covers_from: i64,
+    pub covers_to: i64,
+    /// Whether this summary has already been folded into long-term memory.
+    pub distilled: bool,
+}

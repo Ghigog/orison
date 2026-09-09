@@ -509,10 +509,11 @@ Port `PromptBuilder.gd` and `SystemPrompts.gd` into `prompt/`. The boundary betw
 Retain the `<player_message>` delimiter treatment for injection resistance. It is the right approach, and role separation reinforces it.
 
 **Phase 4 exit criteria**
-- [ ] A full turn executes end to end against both backends.
-- [ ] Director/Actor experiment concluded, decision recorded in Appendix D.
-- [ ] Cancellation verified under test.
-- [ ] Judge-suite scores meet or exceed the Godot baseline.
+- [x] A full turn executes end to end against `OllamaBackend`, in `tests/turn_loop.rs`, against a loopback stand-in that speaks the real protocol. **`LlamaCppBackend` is untested here**: it is behind `--features llama-cpp`, which builds llama.cpp from source, and no environment has yet run it. "Both backends" is not met and Phase 5 must not treat it as met.
+- [x] Cancellation verified under test, from the server's side of the socket rather than by checking a flag (`tests/turn_cancellation.rs`).
+- [ ] Director/Actor experiment concluded, decision recorded in Appendix D. **Arms and scoring are built; no model has run them.** See [Appendix D](#appendix-d--decisions-and-open-questions).
+- [ ] Judge-suite scores meet or exceed the Godot baseline. The judge suite is Phase 5's; the deterministic transcript metrics are ported and run.
+- [ ] Turn latency p50 measured against the ~20 s baseline. The harness is `tests/turn_latency.rs`; it needs a machine with the model the baseline was recorded on.
 
 ---
 
@@ -926,11 +927,65 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
 | D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
-| D-4 | Director/Actor split | **Open**: resolved by the Phase 4.2 experiment. |
+| D-4 | Director/Actor split | **Open, harness built, awaiting a machine with models.** See below. |
 | D-5 | Frontend framework inside Tauri | **Open**: defer to Phase 6. Not load-bearing. |
 | D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
 | D-8 | Reranker model | **Open**: which cross-encoder is small enough to run locally without materially hurting turn latency. Measure in Phase 3.4. |
+
+### D-4 — the Director/Actor experiment, as it stands
+
+The three arms are built and the scoring is built. What is missing is a
+machine with the models on it; the environment Phase 4 was written in had no
+Ollama, so nothing about the arms has been measured and nothing below should
+be read as a result.
+
+**The arms are configuration, not code paths**, which the handoff asks for
+explicitly and which B-10 makes more than a style preference: a build that
+branched on a model name would be wrong the moment both roles were configured
+to the same model, and that configuration is arm B.
+
+| Arm | Configuration | Code path |
+|---|---|---|
+| A | Director 8B + Actor 3B, two calls | `TurnProfile::TwoCalls`, two backends |
+| B | One 8B model, two system prompts, two calls | `TurnProfile::TwoCalls`, one backend twice |
+| C | One 8B model, one call, `CombinedTurnResponse` | `TurnProfile::SingleCall` |
+
+**To run it**, on a machine with the models pulled:
+
+```bash
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_EXPERIMENT_DIRECTOR_MODEL=<8b-model> \
+ORISON_EXPERIMENT_ACTOR_MODEL=<3b-model> \
+ORISON_EXPERIMENT_SINGLE_MODEL=<8b-model> \
+  cargo test -p orison-core --test director_actor_experiment -- --nocapture
+```
+
+It prints one row per arm per fixture: schema validity, pronoun flags,
+verbatim repeats, forbidden phrasing, p50 and p95 latency, a quality composite
+and quality per second. The metrics are the same five
+`eval/EvalRunnerNode.gd` records, so the numbers are comparable with the Godot
+narrative baseline rather than merely plausible. The scoring is unit-tested
+against transcripts that should trigger each metric, and the whole harness is
+exercised against a loopback stand-in in `cargo test`, so a live run tests the
+models rather than the harness.
+
+**What the experiment cannot settle**, stated so the eventual decision is not
+overclaimed: quality here is a deterministic composite of defect rates. It
+catches the failures that have actually happened in this project — Bug 3's
+pronouns, conversation loops, leaked stats, empty responses — and it says
+nothing about whether a scene was any good. The judge suite that would is
+Phase 5's. If two arms come out close on quality per second, that is a tie the
+judge suite has to break, not a result.
+
+**One argument that has already changed**, and it favours C. §2.6 says
+`search_knowledge_graph` should be a deterministic pre-pass rather than a tool
+call. Phase 3 built that pre-pass and it needs no model: `retrieve()` without
+a dense index returns in microseconds. A large part of the Director's original
+job was research it can no longer justify doing conversationally, and the
+`ReActSignalCarrier` that existed only to make a callback awaitable is not
+ported. That lowers the cost of collapsing the split but is not by itself a
+reason to; it is the reason C is worth measuring rather than dismissing.
 
 ---
 

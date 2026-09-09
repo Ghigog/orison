@@ -17,7 +17,7 @@ use super::error::StateError;
 
 /// The schema version this build writes. Bumped by adding an `M::up` below,
 /// never by editing one that has shipped.
-pub const CURRENT_SCHEMA_VERSION: usize = 2;
+pub const CURRENT_SCHEMA_VERSION: usize = 3;
 
 static REGISTER_VEC: Once = Once::new();
 
@@ -49,7 +49,7 @@ fn register_vector_extension() {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1), M::up(V2)])
+    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3)])
 }
 
 /// Version 1: the whole Godot save document, normalised.
@@ -205,6 +205,46 @@ CREATE TABLE chunks (
     PRIMARY KEY (campaign_id, id)
 );
 CREATE INDEX idx_chunks_entity ON chunks(campaign_id, entity_id, ordinal);
+"#;
+
+/// Version 3: session memory (§4.4).
+///
+/// Two decisions worth stating, because both differ from the Godot build.
+///
+/// `history_logs.compacted` marks a transcript line as already summarised
+/// rather than deleting it. `MemoryManager._apply_medium_term_summary()`
+/// rebuilds `history_logs` without the summarised entries — the transcript
+/// loses them permanently, and a summary is a lossy replacement for what it
+/// replaced. Rows are cheap (§3.1), so the transcript keeps everything and the
+/// prompt reads only what is not yet compacted.
+///
+/// `session_summaries` is a table rather than a JSON array on the character
+/// row, and it carries the history id range each summary covers. That range is
+/// the provenance: a summary can point at the lines it came from, which is the
+/// same argument as `chunks.char_start`.
+///
+/// Note what is *not* here. Biography stays on the graph entity and never
+/// enters this table. [rag_architecture.md §1.5] is emphatic that biography
+/// and session memory are different things, and the schema is where that
+/// separation is cheapest to enforce.
+///
+/// [rag_architecture.md §1.5]: ../../../../docs/rag_architecture.md
+const V3: &str = r#"
+ALTER TABLE history_logs ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_history_live ON history_logs(campaign_id, compacted, id);
+
+CREATE TABLE session_summaries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    entity_id   TEXT NOT NULL,
+    summary     TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    covers_from INTEGER NOT NULL,
+    covers_to   INTEGER NOT NULL,
+    distilled   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_session_summaries_entity
+    ON session_summaries(campaign_id, entity_id, distilled, id);
 "#;
 
 /// Open (creating if needed) a campaign database at `path` and bring it to
