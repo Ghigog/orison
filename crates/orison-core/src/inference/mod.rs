@@ -5,6 +5,10 @@
 
 pub mod backend;
 pub mod error;
+#[cfg(feature = "llama-cpp")]
+pub mod grammar;
+#[cfg(feature = "llama-cpp")]
+pub mod llamacpp;
 pub mod ollama;
 pub mod schema;
 pub mod types;
@@ -16,3 +20,6 @@ pub use types::{
     Capabilities, ChatDelta, ChatMessage, ChatRequest, ChatResponse, DoneReason, HealthStatus,
     KeepAlive, ModelHealth, ResponseFormat, Role, SamplingOptions, ToolCall, ToolDefinition,
 };
+
+#[cfg(feature = "llama-cpp")]
+pub use llamacpp::LlamaCppBackend;

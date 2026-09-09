@@ -1,15 +1,18 @@
 //! Backend conformance suite (§2.2, §2.3).
 //!
-//! `OllamaBackend` and `LlamaCppBackend` (behind `--features llama-cpp`, a
-//! later task) are required to pass the same suite; that shared suite is as
-//! much the deliverable as either implementation. Cases that need a live
-//! model endpoint are gated behind environment variables, mirroring how
+//! `OllamaBackend` and `LlamaCppBackend` (behind `--features llama-cpp`) are
+//! required to pass the same suite; that shared suite is as much the
+//! deliverable as either implementation. Cases that need a live model
+//! endpoint are gated behind environment variables, mirroring how
 //! `eval/EvalRunnerNode.gd` gates its own `--live` mode: they skip loudly
 //! rather than silently passing when nothing is configured, so a run that
 //! reports success never means "nothing was actually exercised."
 //!
 //! - `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL`: a live Ollama
 //!   with that model pulled.
+//! - `ORISON_TEST_GGUF_MODEL` (only with `--features llama-cpp`): reserved
+//!   for `LlamaCppBackend` conformance cases. Not yet exercised here — see
+//!   `crate::inference::llamacpp`'s module doc for why.
 //!
 //! Everything else in this file runs unconditionally in `cargo test`, no
 //! network or model required — per the Phase 1 lesson this handoff calls
