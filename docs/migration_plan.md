@@ -509,10 +509,11 @@ Port `PromptBuilder.gd` and `SystemPrompts.gd` into `prompt/`. The boundary betw
 Retain the `<player_message>` delimiter treatment for injection resistance. It is the right approach, and role separation reinforces it.
 
 **Phase 4 exit criteria**
-- [ ] A full turn executes end to end against both backends.
-- [ ] Director/Actor experiment concluded, decision recorded in Appendix D.
-- [ ] Cancellation verified under test.
-- [ ] Judge-suite scores meet or exceed the Godot baseline.
+- [x] A full turn executes end to end against `OllamaBackend`, in `tests/turn_loop.rs`, against a loopback stand-in that speaks the real protocol. **`LlamaCppBackend` is untested here**: it is behind `--features llama-cpp`, which builds llama.cpp from source, and no environment has yet run it. "Both backends" is not met and Phase 5 must not treat it as met.
+- [x] Cancellation verified under test, from the server's side of the socket rather than by checking a flag (`tests/turn_cancellation.rs`).
+- [ ] Director/Actor experiment concluded, decision recorded in Appendix D. **Arms and scoring are built; no model has run them.** See [Appendix D](#appendix-d--decisions-and-open-questions).
+- [ ] Judge-suite scores meet or exceed the Godot baseline. The judge suite is Phase 5's; the deterministic transcript metrics are ported and run.
+- [ ] Turn latency p50 measured against the ~20 s baseline. The harness is `tests/turn_latency.rs`; it needs a machine with the model the baseline was recorded on.
 
 ---
 

@@ -513,6 +513,114 @@ corpus-tuned; tuning them needs documents that do not exist here yet.
 
 ---
 
+## Phase 4 measurement
+
+Phase 4 builds the turn loop. Two numbers this document has been carrying as
+outstanding become measurable for the first time, and **neither has been
+measured yet**: the environment Phase 4 was built in had no Ollama and no real
+vault. What exists is the harness for each, exercised against a loopback
+stand-in so that a live run tests the models rather than the harness.
+
+Say so plainly rather than quoting a number: **turn latency p50 on the Rust
+stack is unknown**, and so is dense retrieval's contribution to recall.
+
+### What is measured, and holds
+
+Everything below runs in `cargo test` with no model and no network.
+
+| Property | How it is checked |
+|---|---|
+| Cancellation actually stops the request | `tests/turn_cancellation.rs` asserts the *server* saw the connection close mid-response, with an uncancelled control case in the same file |
+| The queue's sequential guarantee | `tests/turn_queue.rs` runs the jobs, where `test_llm_request_queue` inspects the bookkeeping and clears the queue before anything executes |
+| A turn runs end to end | `tests/turn_loop.rs`, against `OllamaBackend` talking to a loopback stand-in — the shipping path, including `/api/chat`, NDJSON framing and constrained decoding |
+| Cache-stable ordering, at the wire | The same file compares two consecutive request bodies byte for byte |
+| RAG006 and RAG003 | `tests/emotion.rs` |
+| Token-based compaction | `tests/memory.rs`: 40 short turns do not compact, 20 long ones do |
+| Biography and session memory stay apart | `tests/memory.rs`, asserted on the request body |
+| The prompt-module boundary | `tests/prompt_boundary.rs` |
+
+Two defects were found by these rather than by reading, both in the
+cache-stability work and both invisible to a unit test:
+
+- The player's line was sent wrapped in `<player_message>` delimiters and
+  replayed as bare text once it became history, so the shared prefix ended
+  where the history began — the KV cache was invalidated on every turn, which
+  is the opposite of §2.7's purpose.
+- The emotional profile sat inside the character card, which is the *first*
+  message of every request. Emotion moves nearly every turn, so the cache was
+  invalidated from token zero. Identity and volatile state are now separate
+  blocks, ordered apart.
+
+### Turn latency — the harness, and how to run it
+
+```bash
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
+  cargo test -p orison-core --test turn_latency -- --nocapture
+```
+
+Use **the model the baseline was recorded on**. Running this against an 8B
+model measures a change of model and a change of engine at once, and the
+result cannot be attributed to either.
+
+It runs the same transcripts as the narrative baseline above, twice each, and
+prints per-turn prompt tokens, time to first token, total latency, p50, p95,
+and the ratio against the recorded Godot p50 (21.2 s on `minimal`, 20.2 s on
+`messy`). p95 is printed because Phase 5's migration gate is p95.
+
+**The cache evidence, and its limits.** Each turn's prompt is longer than the
+last. If time to first token stays flat while prompt tokens climb, the backend
+is not re-processing the prefix; if it climbs with them, the ordering work is
+not reaching this backend and that is a finding. Neither is proof on its own —
+a warm model and a cold one differ by more than this — which is why the
+per-turn table is printed rather than a verdict.
+
+### Dense retrieval's contribution — unchanged from Phase 3
+
+Still gated, still unmeasured, still the reason every retrieval figure above is
+the lexical and structural half only:
+
+```bash
+ollama pull nomic-embed-text
+
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_EMBED_MODEL=nomic-embed-text \
+  cargo test -p orison-core --test retrieval_dense -- --nocapture
+```
+
+### The Director/Actor experiment — built, not run
+
+See [migration_plan.md](migration_plan.md) Appendix D for the arms, the
+command, and what the experiment can and cannot settle. The scoring is the
+same five metrics as the narrative baseline above, so the numbers are
+comparable.
+
+### A real vault — the fastest way to find out whether any of this is right
+
+```bash
+ORISON_TEST_VAULT=/path/to/vault \
+  cargo test -p orison-core --test real_vault -- --nocapture
+```
+
+No vault content is printed — counts, and note paths where a file needs
+looking at. The one inviolable constraint applies to test output too.
+
+It reports what the fixtures cannot: how many notes the classifier leaves
+untyped, how many links dangle, how many characters have frontmatter that
+disagrees with their headings, whether any note is long enough to chunk more
+than once, and what retrieval costs at that scale with and without graph
+expansion. One assertion is hard rather than informational —
+`unaccounted_sections` must be empty, because "nothing is silently discarded"
+is an invariant, not a target.
+
+The open questions it speaks to, all recorded in the Phase 4 handoff:
+precision after graph expansion at a real scale; whether the passage reranker
+earns its place; whether chunk size and overlap survive documents longer than
+53 words; whether `sqlite-vec` holds up past 207 nodes; and whether RAPTOR's
+cluster counts scale.
+
+---
+
 ## Running it
 
 ```bash

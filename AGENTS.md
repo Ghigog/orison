@@ -110,11 +110,21 @@ silently passing:
 
 | Variable | Gates |
 |---|---|
-| `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL` | Phase 2's live chat conformance cases |
+| `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL` | Phase 2's live chat conformance cases, a live turn, and `tests/turn_latency.rs` |
 | `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_EMBED_MODEL` | The dense half of retrieval (a chat model id is not an embedding model id) |
+| `ORISON_EXPERIMENT_DIRECTOR_MODEL` + `_ACTOR_MODEL` + `_SINGLE_MODEL` | The Director/Actor experiment (migration plan §4.2) |
+| `ORISON_TEST_VAULT` | `tests/real_vault.rs`: ingest a real Obsidian vault and report. Prints counts and note paths, never vault content |
 | `--features llama-cpp` | `LlamaCppBackend`; builds llama.cpp from source, so it is off by default |
 
-**Turn loop.** `GameLoopController` orchestrates a turn: player input through
+**The Rust core's turn loop.** `crates/orison-core/src/turn/` is the port:
+`state` owns which transitions are legal, `queue` sequential execution and
+real cancellation, `engine` the turn itself. `emotion/` is the single home of
+the model in [docs/emotions.md](docs/emotions.md); `memory/` owns the three
+tiers and never touches a biography; `prompt/` splits into `templates` (every
+word the model is told, and it may not read state) and `assembly` (typed state
+into blocks). `tests/prompt_boundary.rs` enforces that split.
+
+**Turn loop (Godot).** `GameLoopController` orchestrates a turn: player input through
 `PlayerInputParser`, an agentic Director research loop over the knowledge graph,
 a streaming Character Agent response parsed by `LLMStreamParser`, emotion updates
 via `EmotionEngine`, and memory compaction via `MemoryManager`.
