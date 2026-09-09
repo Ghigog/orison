@@ -17,6 +17,10 @@
 //! below that assert on Godot-build defect numbers (B-6, B-15) are written
 //! so that reverting the fix they check would fail them.
 
+use orison_core::inference::tools::{
+    self, GetCharacterProfileArgs, GetLocationDetailArgs, GetRelationshipArgs, ToolArgs,
+    ToolDispatcher,
+};
 use orison_core::inference::{
     ChatMessage, ChatRequest, HealthStatus, InferenceBackend, InferenceError, KeepAlive,
     OllamaBackend, ResponseFormat,
@@ -119,4 +123,83 @@ async fn live_ollama_chat_honours_schema_constrained_decoding() {
         "response must parse as CharacterResponse: schema-constrained decoding was not honoured",
     );
     assert!(!parsed.thinking.is_empty());
+}
+
+// ---------------------------------------------------------------------
+// Native tool calling (§2.6).
+// ---------------------------------------------------------------------
+
+/// §2.6: the tool set offered to the Director is the three tools suited to
+/// unpredictable lookups, not the original four — `search_knowledge_graph`
+/// is deliberately excluded here; the handoff moves it to a deterministic
+/// Phase 3 pre-pass rather than a model-chosen tool call.
+#[test]
+fn director_tool_set_is_three_tools_and_excludes_search_knowledge_graph() {
+    let defs = tools::director_tools();
+    let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(names.len(), 3, "tool count must stay in the 3-5 range");
+    assert!(names.contains(&GetCharacterProfileArgs::NAME));
+    assert!(names.contains(&GetLocationDetailArgs::NAME));
+    assert!(names.contains(&GetRelationshipArgs::NAME));
+    assert!(
+        !names.contains(&"search_knowledge_graph"),
+        "search_knowledge_graph must become a Phase 3 pre-pass, not a tool call"
+    );
+}
+
+struct MockDispatcher;
+
+#[async_trait::async_trait]
+impl ToolDispatcher for MockDispatcher {
+    async fn get_character_profile(&self, args: GetCharacterProfileArgs) -> String {
+        format!("profile for {}", args.character_name)
+    }
+    async fn get_location_detail(&self, args: GetLocationDetailArgs) -> String {
+        format!("detail for {}", args.location_name)
+    }
+    async fn get_relationship(&self, args: GetRelationshipArgs) -> String {
+        format!(
+            "relationship between {} and {}",
+            args.entity_a, args.entity_b
+        )
+    }
+}
+
+/// A model's tool call is decoded into the exact typed struct its name
+/// promises, and dispatched to the matching handler — "typed and validated
+/// by code, not parsed from prose" (§2.6's exit bar), demonstrated without
+/// needing a live model to actually emit the call.
+#[tokio::test]
+async fn tool_calls_are_typed_and_dispatched_by_name() {
+    let dispatcher = MockDispatcher;
+    let call = orison_core::inference::ToolCall {
+        id: Some("call-1".to_string()),
+        name: GetCharacterProfileArgs::NAME.to_string(),
+        arguments: serde_json::json!({ "character_name": "Elowen" }),
+    };
+
+    let result = tools::dispatch(&dispatcher, &call).await;
+    assert_eq!(result.unwrap().unwrap(), "profile for Elowen");
+
+    let unknown_call = orison_core::inference::ToolCall {
+        id: None,
+        name: "not_a_real_tool".to_string(),
+        arguments: serde_json::json!({}),
+    };
+    assert!(tools::dispatch(&dispatcher, &unknown_call).await.is_none());
+}
+
+/// A tool call whose arguments don't match its own declared schema is a
+/// typed decode error, not a silently empty/default struct.
+#[tokio::test]
+async fn malformed_tool_call_arguments_are_a_typed_error() {
+    let dispatcher = MockDispatcher;
+    let call = orison_core::inference::ToolCall {
+        id: None,
+        name: GetRelationshipArgs::NAME.to_string(),
+        // Missing `entity_b`, which `GetRelationshipArgs` requires.
+        arguments: serde_json::json!({ "entity_a": "Elowen" }),
+    };
+    let result = tools::dispatch(&dispatcher, &call).await;
+    assert!(matches!(result, Some(Err(InferenceError::Decode(_)))));
 }

@@ -11,6 +11,7 @@ pub mod grammar;
 pub mod llamacpp;
 pub mod ollama;
 pub mod schema;
+pub mod tools;
 pub mod types;
 
 pub use backend::InferenceBackend;
