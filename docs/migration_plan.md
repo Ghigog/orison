@@ -511,9 +511,9 @@ Retain the `<player_message>` delimiter treatment for injection resistance. It i
 **Phase 4 exit criteria**
 - [x] A full turn executes end to end against `OllamaBackend`, in `tests/turn_loop.rs`, against a loopback stand-in that speaks the real protocol. **`LlamaCppBackend` is untested here**: it is behind `--features llama-cpp`, which builds llama.cpp from source, and no environment has yet run it. "Both backends" is not met and Phase 5 must not treat it as met.
 - [x] Cancellation verified under test, from the server's side of the socket rather than by checking a flag (`tests/turn_cancellation.rs`).
-- [ ] Director/Actor experiment concluded, decision recorded in Appendix D. **Arms and scoring are built; no model has run them.** See [Appendix D](#appendix-d--decisions-and-open-questions).
+- [x] Director/Actor experiment concluded, decision recorded in Appendix D. See [Appendix D](#appendix-d--decisions-and-open-questions).
 - [ ] Judge-suite scores meet or exceed the Godot baseline. The judge suite is Phase 5's; the deterministic transcript metrics are ported and run.
-- [ ] Turn latency p50 measured against the ~20 s baseline. The harness is `tests/turn_latency.rs`; it needs a machine with the model the baseline was recorded on.
+- [x] Turn latency p50 measured against the ~20 s baseline: **worse, not better** — 0.39x and 0.48x of the Godot p50 on `minimal` and `messy`. See [eval_baseline.md](eval_baseline.md#turn-latency--measured). This does not pass Phase 5's gate and must be the first thing Phase 5 investigates, not deferred alongside the CLI work.
 
 ---
 
@@ -927,18 +927,56 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
 | D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
-| D-4 | Director/Actor split | **Open, harness built, awaiting a machine with models.** See below. |
+| D-4 | Director/Actor split | **Decided**: keep the split (arm A), pending a human read of two flagged narrations. See below. |
 | D-5 | Frontend framework inside Tauri | **Open**: defer to Phase 6. Not load-bearing. |
 | D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
 | D-8 | Reranker model | **Open**: which cross-encoder is small enough to run locally without materially hurting turn latency. Measure in Phase 3.4. |
 
-### D-4 — the Director/Actor experiment, as it stands
+### D-4 — the Director/Actor experiment, measured
 
-The three arms are built and the scoring is built. What is missing is a
-machine with the models on it; the environment Phase 4 was written in had no
-Ollama, so nothing about the arms has been measured and nothing below should
-be read as a result.
+Run 9 Sep on Apple Silicon, Director/Single `qwen2.5:7b-instruct` (7B, the
+closest available to the 8B class this experiment calls for — no true 8B
+model was on hand; re-run with one before treating this as final), Actor
+`llama3.2:3b`.
+
+| Arm | Fixture | parsed | prn | rep | bad | p50 | p95 | quality | q/sec |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| A: split | minimal | 4/4 | 1 | 0 | 0 | 20.8 s | 39.1 s | 0.938 | **0.0420** |
+| A: split | messy | 5/5 | 2 | 0 | 0 | 24.2 s | 64.3 s | 0.900 | **0.0268** |
+| B: one model, two calls | minimal | 4/4 | 0 | 0 | 0 | 39.0 s | 99.1 s | 1.000 | 0.0191 |
+| B: one model, two calls | messy | 5/5 | 0 | 0 | 0 | 35.2 s | 54.7 s | 1.000 | **0.0268** |
+| C: one model, one call | minimal | 4/4 | 0 | 0 | 0 | 55.6 s | 102.3 s | 1.000 | 0.0154 |
+| C: one model, one call | messy | 5/5 | 0 | 0 | 0 | 61.2 s | 69.6 s | 1.000 | 0.0166 |
+
+Per the rule this handoff set in advance — adopt whichever wins on
+quality-per-second — **arm A wins**: outright on `minimal`, tied with B on
+`messy`, and never behind. That makes the split the mechanical decision.
+
+**The catch, stated so it isn't buried under the winning number.** Arm A is
+the only arm with pronoun flags — 1 on `minimal`, 2 on `messy` — which is
+exactly why its quality composite (0.938 / 0.900) trails B and C's clean
+1.000. The scoring's own legend is explicit that a pronoun flag needs a human
+read: "the metric cannot tell a wrong pronoun for the speaker from a right one
+for a third party." Both flagged narrations describe a woman using she/her in
+a scene with another woman present — plausibly correct, plausibly the
+cross-model consistency problem this handoff warned the split costs. Read
+these before trusting the decision:
+
+> `minimal` turn 3: "She's been here for nineteen years, ever since the
+> flooding of the lower library at Ashmere. It's a bit of a trek up to
+> Thornwick, but she's been happy to have this place as her home."
+
+> `messy` turn 1: "Sergeant Adah stepped forward from the nearby jetty, her
+> eyes narrowing slightly as she took in the traveler's worn leather satchel.
+> She eyed Lord Anneke with a mixture of curiosity and wariness, her hand
+> resting on the hilt of her sword at her side."
+
+If a read finds these wrong, that is the split's cross-model consistency
+problem showing up exactly where predicted, and the mechanical
+quality-per-second win does not settle the question by itself — re-open D-4.
+If they read as correct (both refer to the one woman named in each passage),
+the split stands as decided.
 
 **The arms are configuration, not code paths**, which the handoff asks for
 explicitly and which B-10 makes more than a style preference: a build that

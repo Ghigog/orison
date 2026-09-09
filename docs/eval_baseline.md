@@ -515,14 +515,16 @@ corpus-tuned; tuning them needs documents that do not exist here yet.
 
 ## Phase 4 measurement
 
-Phase 4 builds the turn loop. Two numbers this document has been carrying as
-outstanding become measurable for the first time, and **neither has been
-measured yet**: the environment Phase 4 was built in had no Ollama and no real
-vault. What exists is the harness for each, exercised against a loopback
-stand-in so that a live run tests the models rather than the harness.
+Phase 4 builds the turn loop. Two numbers this document had been carrying as
+outstanding — turn latency p50 on the Rust stack, and dense retrieval's
+contribution to recall — are measured below, on a machine with Ollama and a
+real vault. The environment that wrote Phase 4's code had neither; the harness
+for each was exercised only against a loopback stand-in, so the numbers below
+are the first live evidence either way.
 
-Say so plainly rather than quoting a number: **turn latency p50 on the Rust
-stack is unknown**, and so is dense retrieval's contribution to recall.
+**Models for the live run**: `llama3.2:3b` (turn latency, matching the Godot
+baseline's model), `nomic-embed-text` (dense retrieval), and the
+Director/Actor experiment below. Apple Silicon MacBook Air, recorded 9 Sep.
 
 ### What is measured, and holds
 
@@ -551,7 +553,7 @@ cache-stability work and both invisible to a unit test:
   invalidated from token zero. Identity and volatile state are now separate
   blocks, ordered apart.
 
-### Turn latency — the harness, and how to run it
+### Turn latency — measured
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
@@ -559,26 +561,28 @@ ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
   cargo test -p orison-core --test turn_latency -- --nocapture
 ```
 
-Use **the model the baseline was recorded on**. Running this against an 8B
-model measures a change of model and a change of engine at once, and the
-result cannot be attributed to either.
+Run against **the model the baseline was recorded on**, per the harness's own
+requirement — an 8B model here would measure a change of model and a change of
+engine at once, and the result could not be attributed to either.
 
-It runs the same transcripts as the narrative baseline above, twice each, and
-prints per-turn prompt tokens, time to first token, total latency, p50, p95,
-and the ratio against the recorded Godot p50 (21.2 s on `minimal`, 20.2 s on
-`messy`). p95 is printed because Phase 5's migration gate is p95.
+| Fixture | p50 | p95 | Godot p50 | Ratio |
+|---|---:|---:|---:|---:|
+| `minimal` | 54.4 s | 63.2 s | 21.2 s | 0.39x |
+| `messy` | 42.0 s | 52.9 s | 20.2 s | 0.48x |
 
-**The cache evidence, and its limits.** Each turn's prompt is longer than the
-last. If time to first token stays flat while prompt tokens climb, the backend
-is not re-processing the prefix; if it climbs with them, the ordering work is
-not reaching this backend and that is a finding. Neither is proof on its own —
-a warm model and a cold one differ by more than this — which is why the
-per-turn table is printed rather than a verdict.
+**Cache-stable ordering is not paying off on this backend yet.** Time to first
+token rose with prompt length in both fixtures (`minimal`: 25.2 s → 17.1 s
+across turns, noisy rather than flat; `messy` similar) instead of staying flat,
+which per the harness's own reading is the sign the prefix is not being
+reused. p50 came in at roughly **2x the Godot baseline, not faster** — the
+opposite of Phase 2's justification. Phase 5 must not treat p95 latency as
+closed; it is the migration gate and this run fails it. Likely next step:
+confirm the request bodies against `OllamaBackend` actually share a byte-
+identical prefix turn to turn on a live server, not just in `tests/turn_loop.rs`
+against the loopback stand-in — the unit-level guarantee held, the live
+number did not, so the gap is somewhere between the two.
 
-### Dense retrieval's contribution — unchanged from Phase 3
-
-Still gated, still unmeasured, still the reason every retrieval figure above is
-the lexical and structural half only:
+### Dense retrieval's contribution — measured
 
 ```bash
 ollama pull nomic-embed-text
@@ -588,12 +592,33 @@ ORISON_TEST_OLLAMA_EMBED_MODEL=nomic-embed-text \
   cargo test -p orison-core --test retrieval_dense -- --nocapture
 ```
 
-### The Director/Actor experiment — built, not run
+On `messy` (768-dimension embeddings from `nomic-embed-text`):
 
-See [migration_plan.md](migration_plan.md) Appendix D for the arms, the
-command, and what the experiment can and cannot settle. The scoring is the
-same five metrics as the narrative baseline above, so the numbers are
-comparable.
+| | recall | precision | mrr |
+|---|---:|---:|---:|
+| BM25 only | 1.000 | 0.440 | 0.900 |
+| BM25 + dense + RRF | 1.000 | 0.360 | 0.900 |
+
+Recall was already at 1.000 from BM25 alone on this fixture, so the test's
+hard assertion (fusion must not cost recall) passed trivially rather than
+demonstrating a lift — `messy` is not the fixture that will show dense
+retrieval earning its place. What it did show: fusing dense in **cost
+precision** (0.440 → 0.360), the opposite direction from the Godot live run's
+`messy` improvement (0.933 → 1.000 recall) cited above. The rare-proper-noun
+case (B-9) came out strong — `The Quillion Accord` ranked 1st by dense
+similarity for both `"Quillion"` and a paraphrased query with the name absent
+— so dense is not broken, but the precision cost on `messy` is worth tuning
+`RetrievalConfig`'s fusion weights against before trusting it in play.
+
+### The Director/Actor experiment — measured
+
+See [migration_plan.md](migration_plan.md) Appendix D for the full numbers,
+the arms, and the decision recorded from them. Summary: arm A (the current
+split) won or tied on quality-per-second on both fixtures, but its quality
+composite was lower than the two single-model arms because of two pronoun
+flags — which the scoring's own legend says need a human read before being
+counted as real defects, not assumed. Both flagged narrations are quoted in
+Appendix D.
 
 ### A real vault — the fastest way to find out whether any of this is right
 
