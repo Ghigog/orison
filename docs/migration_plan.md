@@ -464,6 +464,8 @@ in its place with its own measurement.
 
 ## Phase 4 — Orchestration and the turn loop
 
+> Executable brief: [handoff_phase4.md](handoff_phase4.md).
+
 **Goal**: a complete turn, end to end, on the new stack.
 
 **Duration estimate**: 3-4 weeks.

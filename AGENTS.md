@@ -201,7 +201,9 @@ purged once and must not come back.
 | Document | What it is |
 |---|---|
 | [docs/migration_plan.md](docs/migration_plan.md) | The plan off Godot. Phases, exit criteria, defect register. |
-| [docs/handoff_phase0.md](docs/handoff_phase0.md) | Executable brief for the current phase. |
+| [docs/handoff_phase4.md](docs/handoff_phase4.md) | Executable brief for the current phase (orchestration and the turn loop). |
+| [docs/handoff_phase3.md](docs/handoff_phase3.md) | The completed data-layer brief. Useful as the record of what `orison-core` now provides. |
+| [docs/handoff_phase0.md](docs/handoff_phase0.md) | The original Phase 0 brief, kept as history. |
 | [docs/rag_architecture.md](docs/rag_architecture.md) | Retrieval philosophy, Director/Actor rationale, June diagnosis. Authoritative. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Subsystem layout and turn-flow diagrams. |
 | [design_philosophy.md](design_philosophy.md) | Colour tokens, typography, spacing, motion. |
