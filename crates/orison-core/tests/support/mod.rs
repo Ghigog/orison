@@ -52,6 +52,10 @@ pub struct Observed {
     /// Every `/api/chat` body, in order. What the cache-stability assertion
     /// compares.
     pub chat_bodies: std::sync::Mutex<Vec<String>>,
+    /// The rendered messages of the previous `/api/chat` request, so the
+    /// stand-in can model a prompt cache instead of pretending there is none.
+    /// See [`evaluated_prompt_tokens`].
+    previous_messages: std::sync::Mutex<Vec<String>>,
 }
 
 impl Observed {
@@ -79,6 +83,53 @@ impl Observed {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
+}
+
+/// What a prompt-caching server would have to evaluate for this request,
+/// given what it was sent last time.
+///
+/// Ollama reports exactly this as `prompt_eval_count`: tokens served from its
+/// own cache are not counted. Modelling it here rather than reporting a flat
+/// zero is what lets `tests/turn_latency.rs`'s harness self-test fail when
+/// the prompt ordering regresses — the previous stand-in could not tell a
+/// cache-stable prompt from a cache-hostile one, which is precisely how a
+/// green wire test coexisted with a live run at 2x the Godot baseline.
+///
+/// Token counts are word counts, matching [`test_tokenizer`].
+fn evaluated_prompt_tokens(previous: &[String], current: &[String]) -> usize {
+    let shared = previous
+        .iter()
+        .zip(current)
+        .take_while(|(a, b)| a == b)
+        .count();
+    current[shared..]
+        .iter()
+        .map(|m| m.split_whitespace().count())
+        .sum()
+}
+
+/// The `role:content` rendering of a request's messages, for prefix
+/// comparison. An unparseable body yields no messages, which reads as "no
+/// cache" rather than as a panic inside the stand-in.
+fn messages_of(body: &str) -> Vec<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    value["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .map(|m| {
+                    format!(
+                        "{}:{}",
+                        m["role"].as_str().unwrap_or(""),
+                        m["content"].as_str().unwrap_or("")
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// A scripted Ollama endpoint.
@@ -180,6 +231,11 @@ impl FakeOllama {
     }
 }
 
+/// The context window `FakeOllama` claims from `/api/show`, matching what
+/// `llama3.2:3b` really advertises. Deliberately far above
+/// `inference::DEFAULT_CONTEXT_LIMIT` so tests can tell the two apart.
+pub const ADVERTISED_CONTEXT_LENGTH: usize = 131_072;
+
 type Responder = Arc<dyn Fn(&str, usize) -> String + Send + Sync>;
 
 async fn serve(
@@ -227,8 +283,16 @@ async fn serve(
     };
 
     if path.ends_with("/api/show") {
+        // What a real small model advertises, not what we would like it to.
+        // `llama3.2:3b` — the model the baseline was recorded on — reports
+        // 131072 here, and the stand-in used to report 8192, which is exactly
+        // the number the backend caps at. A stand-in that agrees with the
+        // code by coincidence cannot catch the code being wrong: Phase 4's
+        // live turn latency was 2x the baseline partly because this figure
+        // was passed straight through as `num_ctx`, and nothing in
+        // `cargo test` could see it.
         let payload = serde_json::json!({
-            "model_info": { "general.context_length": 8192 },
+            "model_info": { "general.context_length": ADVERTISED_CONTEXT_LENGTH },
             "capabilities": ["tools", "completion"],
         })
         .to_string();
@@ -269,6 +333,26 @@ async fn serve(
                 .clone(),
         );
 
+    // Model the server's prompt cache before answering: what it would have to
+    // evaluate is whatever this request does not share as a prefix with the
+    // last one.
+    let evaluated = {
+        let current = messages_of(
+            &observed
+                .last_chat_body
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
+        );
+        let mut previous = observed
+            .previous_messages
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let evaluated = evaluated_prompt_tokens(&previous, &current);
+        *previous = current;
+        evaluated
+    };
+
     let pieces = split_into(
         &responder(
             &observed
@@ -293,7 +377,7 @@ async fn serve(
             "message": { "role": "assistant", "content": pieces.concat() },
             "done": true,
             "done_reason": "stop",
-            "prompt_eval_count": 0,
+            "prompt_eval_count": evaluated,
             "eval_count": 0,
         })
         .to_string();
@@ -334,13 +418,19 @@ async fn serve(
             _ = tokio::time::sleep(gap) => {}
         }
 
-        let line = serde_json::json!({
+        // Ollama puts its accounting on the final chunk only, so a consumer
+        // that reads it from the first chunk would work here and fail live.
+        let mut line_value = serde_json::json!({
             "model": "stand-in",
             "message": { "role": "assistant", "content": piece },
             "done": i == last,
             "done_reason": if i == last { "stop" } else { "" },
-        })
-        .to_string();
+        });
+        if i == last {
+            line_value["prompt_eval_count"] = serde_json::json!(evaluated);
+            line_value["eval_count"] = serde_json::json!(0);
+        }
+        let line = line_value.to_string();
         if writer
             .write_all(format!("{line}\n").as_bytes())
             .await

@@ -614,11 +614,15 @@ similarity for both `"Quillion"` and a paraphrased query with the name absent
 
 See [migration_plan.md](migration_plan.md) Appendix D for the full numbers,
 the arms, and the decision recorded from them. Summary: arm A (the current
-split) won or tied on quality-per-second on both fixtures, but its quality
-composite was lower than the two single-model arms because of two pronoun
-flags — which the scoring's own legend says need a human read before being
-counted as real defects, not assumed. Both flagged narrations are quoted in
-Appendix D.
+split) won or tied on quality-per-second on both fixtures, and its two
+pronoun flags — the only reason its quality composite trailed the two
+single-model arms — **were read by hand in Phase 5.0 and are both false
+positives**. In each, the flagged pronoun belongs to a correctly-gendered
+third party, not to the transcript character. Discounting them puts arm A's
+quality at 1.000 on both fixtures and makes it the outright winner on both
+rather than winning one and tying the other. D-4 stands: keep the split.
+The unresolved caveat is the model class, not the pronouns — a 7B stood in
+for the 8B arms.
 
 ### A real vault — the fastest way to find out whether any of this is right
 

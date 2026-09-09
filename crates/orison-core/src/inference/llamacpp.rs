@@ -377,6 +377,10 @@ fn generate_streaming(
                 content: None,
                 tool_calls: None,
                 done: true,
+                // In-process decoding keeps its own KV cache and never
+                // re-evaluates a shared prefix, so there is no separate
+                // "evaluated" count to report.
+                evaluated_prompt_tokens: None,
             }));
             return;
         }
@@ -388,6 +392,7 @@ fn generate_streaming(
                         content: Some(piece),
                         tool_calls: None,
                         done: false,
+                        evaluated_prompt_tokens: None,
                     }))
                     .is_err()
                 {
@@ -416,6 +421,7 @@ fn generate_streaming(
         content: None,
         tool_calls: None,
         done: true,
+        evaluated_prompt_tokens: None,
     }));
 }
 

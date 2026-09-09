@@ -246,6 +246,15 @@ pub struct ChatDelta {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub done: bool,
+    /// Prompt tokens the *backend* says it evaluated, when it says so —
+    /// present on the final chunk of an Ollama stream and `None` before it.
+    ///
+    /// This is not the same number as the prompt's length, and the difference
+    /// is the point: a backend reusing a KV-cached prefix evaluates only the
+    /// tokens it has not seen before. Comparing it with the locally counted
+    /// prompt size is a direct measurement of cache reuse, where
+    /// time-to-first-token is only an inference from one.
+    pub evaluated_prompt_tokens: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

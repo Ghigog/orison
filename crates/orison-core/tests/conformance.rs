@@ -23,10 +23,108 @@ use orison_core::inference::tools::{
 };
 use orison_core::inference::{
     ChatMessage, ChatRequest, HealthStatus, InferenceBackend, InferenceError, KeepAlive,
-    OllamaBackend, ResponseFormat,
+    OllamaBackend, OllamaConfig, ResponseFormat, DEFAULT_CONTEXT_LIMIT,
 };
 use orison_core::prompt::schemas::CharacterResponse;
 use std::str::FromStr;
+use std::time::Duration;
+
+mod support;
+use support::{character_response_json, FakeOllama, ADVERTISED_CONTEXT_LENGTH};
+
+async fn stand_in() -> FakeOllama {
+    FakeOllama::start(
+        character_response_json("He nods.", "Aye."),
+        2,
+        Duration::from_millis(1),
+    )
+    .await
+}
+
+/// The served window is capped, and `num_ctx` carries the capped number.
+///
+/// Ollama sizes the runner's KV cache from `num_ctx` at load time regardless
+/// of how much of the window a prompt uses. Passing a model's advertised
+/// maximum straight through therefore buys nothing and costs the whole
+/// allocation — on `llama3.2:3b` that is 131072 tokens of cache for prompts
+/// measured in the low thousands, and it is half of why Phase 4's live turn
+/// latency came in at 2x the engine it was meant to beat.
+#[tokio::test]
+async fn the_served_context_window_is_capped_not_whatever_the_model_advertises() {
+    let server = stand_in().await;
+    let backend = OllamaBackend::connect(server.url(), "stand-in", minimal_tokenizer())
+        .await
+        .expect("connect");
+
+    const {
+        assert!(
+            ADVERTISED_CONTEXT_LENGTH > DEFAULT_CONTEXT_LIMIT,
+            "the stand-in must advertise more than the cap or this proves nothing"
+        )
+    };
+    assert_eq!(
+        backend.context_length(),
+        DEFAULT_CONTEXT_LIMIT,
+        "the advertised window was passed through instead of capped"
+    );
+
+    backend
+        .chat(ChatRequest::new(vec![ChatMessage::user("Hello.")]))
+        .await
+        .expect("chat");
+
+    let body: serde_json::Value =
+        serde_json::from_str(&server.observed.last_chat_body()).expect("a JSON body");
+    assert_eq!(
+        body["options"]["num_ctx"].as_u64(),
+        Some(DEFAULT_CONTEXT_LIMIT as u64),
+        "num_ctx must be the window we actually intend to pay for"
+    );
+}
+
+/// The budget and the request can never disagree, which is the defect B-1
+/// actually names: `context_length()` is what `PromptBudget` sizes against,
+/// and it must be the same number the wire carries.
+#[tokio::test]
+async fn the_prompt_budget_and_num_ctx_are_the_same_number() {
+    let server = stand_in().await;
+    let backend = OllamaBackend::connect_with(
+        server.url(),
+        "stand-in",
+        minimal_tokenizer(),
+        OllamaConfig {
+            context_limit: Some(3000),
+        },
+    )
+    .await
+    .expect("connect");
+
+    assert_eq!(backend.context_length(), 3000);
+    backend
+        .chat(ChatRequest::new(vec![ChatMessage::user("Hello.")]))
+        .await
+        .expect("chat");
+    let body: serde_json::Value =
+        serde_json::from_str(&server.observed.last_chat_body()).expect("a JSON body");
+    assert_eq!(body["options"]["num_ctx"].as_u64(), Some(3000));
+}
+
+/// Raising the cap can never invent capacity the model does not have.
+#[tokio::test]
+async fn a_cap_above_what_the_model_advertises_still_yields_the_model_s_window() {
+    let server = stand_in().await;
+    let backend = OllamaBackend::connect_with(
+        server.url(),
+        "stand-in",
+        minimal_tokenizer(),
+        OllamaConfig {
+            context_limit: Some(ADVERTISED_CONTEXT_LENGTH * 4),
+        },
+    )
+    .await
+    .expect("connect");
+    assert_eq!(backend.context_length(), ADVERTISED_CONTEXT_LENGTH);
+}
 
 fn live_ollama_config() -> Option<(String, String)> {
     let url = std::env::var("ORISON_TEST_OLLAMA_URL").ok()?;

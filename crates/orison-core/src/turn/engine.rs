@@ -66,6 +66,15 @@ pub struct TurnOutcome {
     /// of latency that a person actually feels.
     pub time_to_first_token: Option<Duration>,
     pub prompt_tokens: usize,
+    /// Prompt tokens the backend reported evaluating, when it reports them.
+    ///
+    /// Read against `prompt_tokens`: the two are close when the backend
+    /// re-processed the whole prompt and far apart when it served most of it
+    /// from a cached prefix. This is what §2.7's ordering work is for, and
+    /// measuring it directly is how Phase 5 tells a cache hit from a fast
+    /// machine — `docs/eval_baseline.md`'s Phase 4 run had only
+    /// time-to-first-token to go on and could conclude nothing from it.
+    pub evaluated_prompt_tokens: Option<usize>,
     pub completion_tokens: usize,
     pub retrieved: usize,
     pub director_triggered: bool,
@@ -483,6 +492,7 @@ impl TurnEngine {
             latency: started.elapsed(),
             time_to_first_token: streamed.time_to_first_token,
             prompt_tokens,
+            evaluated_prompt_tokens: streamed.evaluated_prompt_tokens,
             completion_tokens,
             retrieved: lore.count,
             director_triggered,
@@ -711,6 +721,7 @@ impl TurnEngine {
         let mut parser = FieldStreamer::new(&["narration", "dialogue"]);
         let mut text = String::new();
         let mut time_to_first_token = None;
+        let mut evaluated_prompt_tokens = None;
         let mut zone: Option<&'static str> = None;
 
         loop {
@@ -721,6 +732,9 @@ impl TurnEngine {
             };
             let Some(delta) = next else { break };
             let delta = delta?;
+            if let Some(evaluated) = delta.evaluated_prompt_tokens {
+                evaluated_prompt_tokens = Some(evaluated);
+            }
             if let Some(content) = delta.content {
                 if !content.is_empty() {
                     text.push_str(&content);
@@ -755,6 +769,7 @@ impl TurnEngine {
         Ok(Streamed {
             text,
             time_to_first_token,
+            evaluated_prompt_tokens,
         })
     }
 
@@ -1291,6 +1306,7 @@ struct Lore {
 struct Streamed {
     text: String,
     time_to_first_token: Option<Duration>,
+    evaluated_prompt_tokens: Option<usize>,
 }
 
 /// Restores the turn machine however the turn ends, cancellation included.

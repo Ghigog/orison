@@ -400,6 +400,7 @@ mod tests {
             latency: Duration::from_millis(1000),
             time_to_first_token: Some(Duration::from_millis(200)),
             prompt_tokens: 100,
+            evaluated_prompt_tokens: Some(100),
             completion_tokens: 50,
             retrieved: 3,
             director_triggered: false,

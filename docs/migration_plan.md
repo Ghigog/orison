@@ -927,7 +927,7 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
 | D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
-| D-4 | Director/Actor split | **Decided**: keep the split (arm A), pending a human read of two flagged narrations. See below. |
+| D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
 | D-5 | Frontend framework inside Tauri | **Open**: defer to Phase 6. Not load-bearing. |
 | D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
@@ -958,10 +958,7 @@ the only arm with pronoun flags — 1 on `minimal`, 2 on `messy` — which is
 exactly why its quality composite (0.938 / 0.900) trails B and C's clean
 1.000. The scoring's own legend is explicit that a pronoun flag needs a human
 read: "the metric cannot tell a wrong pronoun for the speaker from a right one
-for a third party." Both flagged narrations describe a woman using she/her in
-a scene with another woman present — plausibly correct, plausibly the
-cross-model consistency problem this handoff warned the split costs. Read
-these before trusting the decision:
+for a third party." The two flagged narrations:
 
 > `minimal` turn 3: "She's been here for nineteen years, ever since the
 > flooding of the lower library at Ashmere. It's a bit of a trek up to
@@ -972,11 +969,59 @@ these before trusting the decision:
 > She eyed Lord Anneke with a mixture of curiosity and wariness, her hand
 > resting on the hilt of her sword at her side."
 
-If a read finds these wrong, that is the split's cross-model consistency
-problem showing up exactly where predicted, and the mechanical
-quality-per-second win does not settle the question by itself — re-open D-4.
-If they read as correct (both refer to the one woman named in each passage),
-the split stands as decided.
+### D-4 — the human read, done (Phase 5.0)
+
+**Both flags are false positives. D-4 stands as decided: keep the split.**
+
+The read is not a judgement call, because both fixtures declare who the
+speaker is and what their pronouns are. `forbidden_pronouns` in
+`TranscriptScript` means "pronouns that must not appear in narration *about
+the transcript character*" — not "pronouns that must not appear at all".
+
+- **`minimal`.** `transcript_character` is **Bram Holt**, `gender: male,
+  he/him`, so she/her/hers are forbidden of *him*. The flagged narration
+  answers the script's fourth line, "Who keeps the archive up the road?", and
+  its subject is Elara Voss: nineteen years, the flooding of the lower library
+  at Ashmere, Thornwick — three details taken verbatim from
+  `characters/elara_voss.md`, whose frontmatter is `gender: female, she/her`.
+  Bram is the speaker and takes no pronoun in the passage. A right pronoun for
+  a third party, which is the exact case the legend names.
+
+- **`messy`.** `transcript_character` is **Lord Anneke**, whom the fixture
+  note calls "the pronoun trap": no gender field, an unambiguously masculine
+  body, and a name carrying a strong feminine prior. Every she/her in the
+  flagged narration attaches to Sergeant Adah, `gender: female, she/her`.
+  Lord Anneke is named twice and pronominalised never — so the model did not
+  fall into the trap; it stayed out of it. Also a right pronoun for a third
+  party.
+
+**And the counts are smaller than they look.** `score_turn` raises one flag
+per *distinct forbidden pronoun* matched in a turn, so `messy`'s 2 is one
+narration matching both "she" and "her", not two separate defects. `minimal`'s
+1 is the single "her" in "her home"; "she's" does not match, because
+`contains_word` treats an apostrophe as a word character. Two fixtures, two
+flagged turns, zero defects.
+
+**What this does to the decision.** Discounting both, arm A's quality
+composite is 1.000 on each fixture, level with B and C, and its
+quality-per-second rises to **0.0448** on `minimal` and **0.0298** on `messy`.
+Arm A now wins **outright on both fixtures** rather than winning one and tying
+the other. The cross-model consistency problem the split was warned to cost
+did not appear in this run.
+
+**One thing the earlier framing had wrong**, recorded because the correction
+is the evidence: this appendix described both narrations as "a woman using
+she/her in a scene with another woman present." Neither is. `minimal` has
+exactly one woman in the entire fixture and she is not in the scene, she is
+being described; `messy` pairs a woman with a man. The ambiguity the read was
+asked to resolve was not there to resolve.
+
+**What is still open**, unchanged by the read: the models. `qwen2.5:7b-instruct`
+stood in for the 8B class in both the Director and the single-model arms
+because no true 8B model was on hand. A 7B stand-in flatters the split, since
+the split's cost is paid by the larger model and its benefit by the smaller.
+Re-run with an actual 8B-class model before treating the margin as final. The
+decision is the split; the size of the win is not yet.
 
 **The arms are configuration, not code paths**, which the handoff asks for
 explicitly and which B-10 makes more than a style preference: a build that
