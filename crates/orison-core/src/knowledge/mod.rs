@@ -7,8 +7,10 @@
 //! their own dictionaries and bypassed the graph, giving three sources of truth
 //! that could and did disagree.
 
+pub mod graph;
 pub mod index;
 pub mod types;
 
+pub use graph::KnowledgeGraph;
 pub use index::NameIndex;
 pub use types::{CanonicalField, Edge, EdgeKind, Entity, EntityId, EntityKind, OverflowSection};

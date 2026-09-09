@@ -15,11 +15,11 @@
 //! zero, and [`IngestReport::unaccounted_sections`] proves it by checking
 //! coverage rather than by trusting a counter.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::knowledge::{
-    CanonicalField, Edge, EdgeKind, Entity, EntityId, EntityKind, NameIndex, OverflowSection,
+    CanonicalField, Edge, EdgeKind, Entity, EntityId, EntityKind, KnowledgeGraph, OverflowSection,
 };
 
 use super::assets::{self, AUDIO_KEYS, PORTRAIT_KEYS, SCENERY_KEYS};
@@ -79,10 +79,14 @@ pub struct IngestReport {
     pub notes_without_a_type: usize,
 }
 
+/// What a vault compiled to.
+///
+/// The entities live in the graph, not beside it. §3.3's rule is that the
+/// graph is the only entity store, and an `IngestOutcome` that also carried a
+/// `Vec<Entity>` would be the second one on the day it was written.
 #[derive(Debug, Clone)]
 pub struct IngestOutcome {
-    pub entities: Vec<Entity>,
-    pub edges: Vec<Edge>,
+    pub graph: KnowledgeGraph,
     pub writing_style: String,
     pub report: IngestReport,
 }
@@ -117,40 +121,45 @@ pub fn ingest_documents(
     };
 
     let others: Vec<(&str, &Document)> = parsed.iter().map(|(p, d)| (p.as_str(), d)).collect();
-    let mut entities: Vec<Entity> = Vec::with_capacity(parsed.len());
+    let mut built: Vec<Entity> = Vec::with_capacity(parsed.len());
 
     for (path, doc) in parsed {
         let kind = classify::classify(&doc.frontmatter, path, &options.folder_types);
         if kind == EntityKind::Note {
             report.notes_without_a_type += 1;
         }
-        let entity = build_entity(path, doc, kind, files, &others, &mut report);
-        entities.push(entity);
+        built.push(build_entity(path, doc, kind, files, &others, &mut report));
     }
 
-    if options.promote_scene_fallback && !entities.iter().any(|e| e.kind == EntityKind::Scene) {
-        promote_scene_fallback(&mut entities);
+    if options.promote_scene_fallback && !built.iter().any(|e| e.kind == EntityKind::Scene) {
+        promote_scene_fallback(&mut built);
     }
 
-    let mut index = NameIndex::new();
-    for e in &entities {
-        index.insert(&e.id, &e.label, &e.aliases);
+    let is_character: Vec<bool> = built
+        .iter()
+        .map(|e| e.kind == EntityKind::Character)
+        .collect();
+
+    let mut graph = KnowledgeGraph::new();
+    let mut ids: Vec<EntityId> = Vec::with_capacity(built.len());
+    for entity in built {
+        ids.push(graph.insert(entity));
     }
 
-    let kinds: BTreeMap<EntityId, EntityKind> =
-        entities.iter().map(|e| (e.id.clone(), e.kind)).collect();
-    let edges = build_edges(parsed, &entities, &index, &kinds, &mut report);
+    // Edges resolve through the graph, which owns both name resolution and
+    // entity kinds. There is no second map to keep in step with it.
+    add_edges(parsed, &ids, &mut graph, &mut report);
+
     let writing_style = style::campaign_writing_style(
         &parsed
             .iter()
-            .zip(&entities)
-            .map(|((p, d), e)| (p.as_str(), d, e.kind == EntityKind::Character))
+            .zip(&is_character)
+            .map(|((p, d), is_char)| (p.as_str(), d, *is_char))
             .collect::<Vec<_>>(),
     );
 
     IngestOutcome {
-        entities,
-        edges,
+        graph,
         writing_style,
         report,
     }
@@ -539,42 +548,26 @@ fn promote_scene_fallback(entities: &mut [Entity]) {
     }
 }
 
-fn build_edges(
+fn add_edges(
     parsed: &[(String, Document)],
-    entities: &[Entity],
-    index: &NameIndex,
-    kinds: &BTreeMap<EntityId, EntityKind>,
+    ids: &[EntityId],
+    graph: &mut KnowledgeGraph,
     report: &mut IngestReport,
-) -> Vec<Edge> {
-    let mut edges: Vec<Edge> = Vec::new();
-    let mut seen: BTreeSet<(EntityId, EntityId, String)> = BTreeSet::new();
-    let mut push = |edges: &mut Vec<Edge>, edge: Edge| {
-        let key = (
-            edge.from.clone(),
-            edge.to.clone(),
-            edge.kind.as_str().to_string(),
-        );
-        if edge.from != edge.to && seen.insert(key) {
-            edges.push(edge);
-        }
-    };
+) {
+    // Collected first, then applied, because resolution borrows the graph.
+    let mut pending: Vec<Edge> = Vec::new();
 
-    for ((_, doc), entity) in parsed.iter().zip(entities) {
-        let from = entity.id.clone();
-
+    for ((_, doc), from) in parsed.iter().zip(ids) {
         // Frontmatter `connections:`, between locations.
         if let Some(value) = doc.frontmatter.get("connections") {
             for target in list_of(value) {
-                if let Some(to) = index.resolve(&target) {
-                    push(
-                        &mut edges,
-                        Edge {
-                            from: from.clone(),
-                            to: to.clone(),
-                            kind: EdgeKind::ConnectedTo,
-                            weight: 1.0,
-                        },
-                    );
+                if let Some(to) = graph.resolve(&target) {
+                    pending.push(Edge {
+                        from: from.clone(),
+                        to: to.clone(),
+                        kind: EdgeKind::ConnectedTo,
+                        weight: 1.0,
+                    });
                 }
             }
         }
@@ -582,33 +575,28 @@ fn build_edges(
         // Frontmatter `relationships:`, carrying the author's own wording.
         if let Some(YamlValue::Map(entries)) = doc.frontmatter.get("relationships") {
             for (target, relation) in entries {
-                if let Some(to) = index.resolve(target) {
-                    push(
-                        &mut edges,
-                        Edge {
-                            from: from.clone(),
-                            to: to.clone(),
-                            kind: EdgeKind::Relationship(relation.clone()),
-                            weight: 0.8,
-                        },
-                    );
+                if let Some(to) = graph.resolve(target) {
+                    pending.push(Edge {
+                        from: from.clone(),
+                        to: to.clone(),
+                        kind: EdgeKind::Relationship(relation.clone()),
+                        weight: 0.8,
+                    });
                 }
             }
         }
 
         // Tags that name a location associate with it, as in the Godot build.
-        for tag in &entity.tags {
-            if let Some(to) = index.resolve(tag) {
-                if kinds.get(to) == Some(&EntityKind::Location) {
-                    push(
-                        &mut edges,
-                        Edge {
-                            from: from.clone(),
-                            to: to.clone(),
-                            kind: EdgeKind::AssociatedWith,
-                            weight: 1.0,
-                        },
-                    );
+        let tags = graph.get(from).map(|e| e.tags.clone()).unwrap_or_default();
+        for tag in tags {
+            if let Some(to) = graph.resolve(&tag) {
+                if graph.kind_of(to) == Some(EntityKind::Location) {
+                    pending.push(Edge {
+                        from: from.clone(),
+                        to: to.clone(),
+                        kind: EdgeKind::AssociatedWith,
+                        weight: 1.0,
+                    });
                 }
             }
         }
@@ -616,22 +604,19 @@ fn build_edges(
         // Wiki-links. The Godot build parsed these and used them only for
         // dangling-link detection; here they are the main source of edges.
         for link in &doc.wiki_links {
-            match index.resolve(&link.target) {
+            match graph.resolve(&link.target) {
                 Some(to) => {
-                    let kind = if kinds.get(to) == Some(&EntityKind::Location) {
+                    let kind = if graph.kind_of(to) == Some(EntityKind::Location) {
                         EdgeKind::AssociatedWith
                     } else {
                         EdgeKind::LinksTo
                     };
-                    push(
-                        &mut edges,
-                        Edge {
-                            from: from.clone(),
-                            to: to.clone(),
-                            kind,
-                            weight: 1.0,
-                        },
-                    );
+                    pending.push(Edge {
+                        from: from.clone(),
+                        to: to.clone(),
+                        kind,
+                        weight: 1.0,
+                    });
                 }
                 None => {
                     let dangling = DanglingLink {
@@ -646,7 +631,9 @@ fn build_edges(
         }
     }
 
-    edges
+    for edge in pending {
+        graph.connect(edge);
+    }
 }
 
 fn list_of(value: &YamlValue) -> Vec<String> {

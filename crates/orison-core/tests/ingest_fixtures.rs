@@ -24,11 +24,11 @@ fn ingest(name: &str) -> IngestOutcome {
 }
 
 fn entity<'a>(out: &'a IngestOutcome, label: &str) -> &'a Entity {
-    out.entities
-        .iter()
+    out.graph
+        .entities()
         .find(|e| e.label == label)
         .unwrap_or_else(|| {
-            let known: Vec<&str> = out.entities.iter().map(|e| e.label.as_str()).collect();
+            let known: Vec<&str> = out.graph.entities().map(|e| e.label.as_str()).collect();
             panic!("no entity labelled {label:?}; found {known:?}")
         })
 }
@@ -36,7 +36,10 @@ fn entity<'a>(out: &'a IngestOutcome, label: &str) -> &'a Entity {
 fn has_edge(out: &IngestOutcome, from: &str, to: &str) -> bool {
     let from = EntityId::slug(from);
     let to = EntityId::slug(to);
-    out.edges.iter().any(|e| e.from == from && e.to == to)
+    out.graph
+        .edges()
+        .iter()
+        .any(|e| e.from == from && e.to == to)
 }
 
 // ----------------------------------------------------------------------
@@ -244,7 +247,7 @@ fn a_dangling_wiki_link_is_recorded_and_invents_nothing() {
     // file: compilation must tolerate it without creating a phantom character.
     let out = ingest("messy");
     assert!(
-        !out.entities.iter().any(|e| e.label == "The Chancellor"),
+        !out.graph.entities().any(|e| e.label == "The Chancellor"),
         "a phantom entity was invented for a dangling link"
     );
     assert!(
@@ -346,8 +349,8 @@ fn wiki_links_to_locations_are_association_edges() {
     let out = ingest("messy");
     let from = EntityId::slug("Mira of the Fens");
     let to = EntityId::slug("Saltmarsh Landing");
-    let edge = out
-        .edges
+    let edges = out.graph.edges();
+    let edge = edges
         .iter()
         .find(|e| e.from == from && e.to == to)
         .expect("edge missing");
@@ -398,9 +401,9 @@ fn large_ingests_completely() {
     // retrieval quality against `large` is §3.4's business.
     let out = ingest("large");
     assert_eq!(out.report.notes_seen, 207);
-    assert_eq!(out.entities.len(), 207);
+    assert_eq!(out.graph.len(), 207);
     assert_eq!(out.report.unaccounted_sections, Vec::<String>::new());
-    assert!(out.entities.iter().all(|e| !e.body.trim().is_empty()));
+    assert!(out.graph.entities().all(|e| !e.body.trim().is_empty()));
 
     // The needle the retrieval fixtures are built around must exist and keep
     // its rare proper noun.
@@ -419,7 +422,10 @@ fn the_scene_fallback_is_opt_in() {
     // ingest one, so it is off unless asked for.
     let root = fixture_root("messy");
     let default = ingest_vault(&root, &IngestOptions::default()).unwrap();
-    assert!(!default.entities.iter().any(|e| e.kind == EntityKind::Scene));
+    assert!(!default
+        .graph
+        .entities()
+        .any(|e| e.kind == EntityKind::Scene));
 
     let promoted = ingest_vault(
         &root,
@@ -431,8 +437,8 @@ fn the_scene_fallback_is_opt_in() {
     .unwrap();
     assert_eq!(
         promoted
-            .entities
-            .iter()
+            .graph
+            .entities()
             .filter(|e| e.kind == EntityKind::Scene)
             .count(),
         1
