@@ -162,27 +162,40 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
         "turn two should carry turn one in its history"
     );
 
-    // Everything turn one sent except its volatile tail reappears unchanged
-    // and in the same position. That shared prefix is what a KV-cache-reusing
-    // engine can skip re-processing.
-    let stable = first_messages.len() - 1;
-    for i in 0..stable {
+    // The stable head: instructions plus the character card, then the lore
+    // for a query that has not changed. This is the prefix a KV-cache-reusing
+    // engine can skip re-processing, and it must be byte-identical.
+    for i in 0..2 {
         assert_eq!(
             first_messages[i], second_messages[i],
             "message {i} changed between turns, invalidating the cache prefix"
         );
     }
-    // And turn one's player line becomes turn two's history, still in place.
-    assert_eq!(first_messages[stable], second_messages[stable]);
 
-    // The player's own input is always last: it is the only thing that is new
-    // on every single call.
-    let last = second_messages.last().unwrap();
-    assert_eq!(last["role"], "user");
-    assert!(last["content"]
-        .as_str()
-        .unwrap()
-        .contains("<player_message>"));
+    // Turn one's player line reappears as turn two's history, in the same
+    // wrapping it was sent in — the regression this test found the first time.
+    assert_eq!(
+        first_messages[first_messages.len() - 1],
+        second_messages[2],
+        "the player's line must replay exactly as it was sent"
+    );
+
+    // The two volatile blocks are the last two messages in both requests:
+    // how the character feels, then what the player just said.
+    for messages in [first_messages, second_messages] {
+        let volatile = &messages[messages.len() - 2];
+        assert_eq!(volatile["role"], "system");
+        assert!(volatile["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("EMOTIONAL PROFILE:"));
+        let last = messages.last().unwrap();
+        assert_eq!(last["role"], "user");
+        assert!(last["content"]
+            .as_str()
+            .unwrap()
+            .contains("<player_message>"));
+    }
 }
 
 /// The weaker half, stated so nobody mistakes it for the stronger one: when

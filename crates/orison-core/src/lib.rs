@@ -9,6 +9,7 @@ pub mod prompt;
 
 // Phase 3: ingest, knowledge, retrieval, state.
 // Phase 4: turn, memory.
+pub mod emotion;
 pub mod ingest;
 pub mod knowledge;
 pub mod memory {}

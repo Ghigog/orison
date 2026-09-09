@@ -6,6 +6,7 @@
 //! configured to the same model — the exact configuration §4.2's experiment
 //! tests.
 
+use crate::emotion::EmotionConfig;
 use crate::inference::{KeepAlive, SamplingOptions};
 use crate::prompt::BudgetFractions;
 use crate::retrieval::{MetadataFilter, RetrievalConfig};
@@ -88,6 +89,7 @@ pub struct TurnConfig {
     /// Retrieval for the Director: campaign-level summaries, level 2 (§1.3).
     pub director_retrieval: RetrievalConfig,
     pub director: DirectorPolicy,
+    pub emotion: EmotionConfig,
     pub actor_sampling: SamplingOptions,
     pub director_sampling: SamplingOptions,
     /// How long a model stays resident. The default is bounded; the Godot
@@ -124,6 +126,7 @@ impl Default for TurnConfig {
                 ..RetrievalConfig::default()
             },
             director: DirectorPolicy::default(),
+            emotion: EmotionConfig::default(),
             // Warmer than the Director: the Actor is writing dialogue.
             actor_sampling: SamplingOptions::new(0.8, 0.9),
             director_sampling: SamplingOptions::new(0.7, 0.9),

@@ -146,6 +146,19 @@ pub struct DirectorResponse {
     pub dice_roll: DiceRoll,
 }
 
+/// A character's resting disposition, deduced from their biography.
+///
+/// The Godot build asked for this in prose and parsed the answer with
+/// `JsonRepair`; here the sampler is constrained to the shape. Its purpose is
+/// `characters.base_emotion`, which is what a character decays back toward
+/// between scenes.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BaselineDisposition {
+    pub base_emotion: Emotion,
+    pub base_intensity: f32,
+    pub reason: String,
+}
+
 /// One response that does both jobs (§4.2, arm C).
 ///
 /// The Director/Actor split exists because a 3B Actor could not also do
