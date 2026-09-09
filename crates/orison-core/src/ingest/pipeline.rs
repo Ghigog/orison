@@ -23,6 +23,7 @@ use crate::knowledge::{
 };
 
 use super::assets::{self, AUDIO_KEYS, PORTRAIT_KEYS, SCENERY_KEYS};
+use super::chunk::{chunk_entity, Chunk, ChunkConfig};
 use super::classify::{self, GenderSource};
 use super::error::IngestError;
 use super::markdown::{self, Document};
@@ -56,6 +57,8 @@ pub struct IngestOptions {
     /// sentence rather than in a `[[wiki-link]]`. `tests/retrieval_quality.rs`
     /// measures both ways.
     pub link_mentions: bool,
+    /// How long notes are split for retrieval (§3.6).
+    pub chunking: ChunkConfig,
 }
 
 impl Default for IngestOptions {
@@ -64,6 +67,7 @@ impl Default for IngestOptions {
             folder_types: BTreeMap::new(),
             promote_scene_fallback: false,
             link_mentions: true,
+            chunking: ChunkConfig::default(),
         }
     }
 }
@@ -99,6 +103,8 @@ pub struct IngestReport {
     pub notes_without_a_type: usize,
     /// Edges created from a name written in prose rather than as a link.
     pub mention_edges: usize,
+    /// Retrievable passages produced (§3.6).
+    pub chunks: usize,
 }
 
 /// What a vault compiled to.
@@ -109,6 +115,9 @@ pub struct IngestReport {
 #[derive(Debug, Clone)]
 pub struct IngestOutcome {
     pub graph: KnowledgeGraph,
+    /// Retrievable passages, each carrying the id of the note it came from
+    /// and its character range within that note (§3.6).
+    pub chunks: Vec<Chunk>,
     pub writing_style: String,
     pub report: IngestReport,
 }
@@ -183,8 +192,15 @@ pub fn ingest_documents(
             .collect::<Vec<_>>(),
     );
 
+    let chunks: Vec<Chunk> = graph
+        .entities()
+        .flat_map(|entity| chunk_entity(entity, &options.chunking))
+        .collect();
+    report.chunks = chunks.len();
+
     IngestOutcome {
         graph,
+        chunks,
         writing_style,
         report,
     }

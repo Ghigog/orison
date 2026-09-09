@@ -17,7 +17,7 @@ use super::error::StateError;
 
 /// The schema version this build writes. Bumped by adding an `M::up` below,
 /// never by editing one that has shipped.
-pub const CURRENT_SCHEMA_VERSION: usize = 1;
+pub const CURRENT_SCHEMA_VERSION: usize = 2;
 
 static REGISTER_VEC: Once = Once::new();
 
@@ -49,7 +49,7 @@ fn register_vector_extension() {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1)])
+    Migrations::new(vec![M::up(V1), M::up(V2)])
 }
 
 /// Version 1: the whole Godot save document, normalised.
@@ -183,6 +183,30 @@ CREATE TABLE embedding_owners (
 );
 "#;
 
+/// Version 2: chunks (§3.6).
+///
+/// A separate migration rather than an edit to `V1`, which is the point of
+/// having a migration mechanism: a database written by a build that predates
+/// chunking upgrades in place and keeps its campaign. `tests/state.rs` runs
+/// exactly that path.
+///
+/// `char_start` and `char_end` are offsets into `knowledge_nodes.body`, so a
+/// retrieved chunk can cite the sentence it came from rather than the file.
+const V2: &str = r#"
+CREATE TABLE chunks (
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    id          TEXT NOT NULL,
+    entity_id   TEXT NOT NULL,
+    ordinal     INTEGER NOT NULL,
+    heading     TEXT,
+    text        TEXT NOT NULL,
+    char_start  INTEGER NOT NULL,
+    char_end    INTEGER NOT NULL,
+    PRIMARY KEY (campaign_id, id)
+);
+CREATE INDEX idx_chunks_entity ON chunks(campaign_id, entity_id, ordinal);
+"#;
+
 /// Open (creating if needed) a campaign database at `path` and bring it to
 /// [`CURRENT_SCHEMA_VERSION`].
 pub fn open_connection(path: &Path) -> Result<Connection, StateError> {
@@ -213,6 +237,19 @@ fn configure(conn: &Connection) -> Result<(), StateError> {
     Ok(())
 }
 
+/// Open a database and migrate it only as far as `version`.
+///
+/// For verifying an upgrade path: create a database as an older build would
+/// have, then reopen it normally and check the migration carried the data
+/// forward. Not for ordinary use — [`open_connection`] is.
+pub fn open_at_version(path: &Path, version: usize) -> Result<Connection, StateError> {
+    register_vector_extension();
+    let mut conn = Connection::open(path)?;
+    configure(&conn)?;
+    migrations().to_version(&mut conn, version)?;
+    Ok(conn)
+}
+
 /// The schema version recorded in the database itself.
 pub fn schema_version(conn: &Connection) -> Result<usize, StateError> {
     let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -226,6 +263,15 @@ mod tests {
     #[test]
     fn migrations_are_valid() {
         // rusqlite_migration can prove the set applies forward from empty.
+        assert!(migrations().validate().is_ok());
+    }
+
+    #[test]
+    fn every_migration_applies_and_reverts_cleanly_from_empty() {
+        // `validate()` walks the set forwards from an empty database, which is
+        // what `SaveManager._upgrade_save_state()` had no way to check: it
+        // re-ran parts of its own work on purpose because nothing recorded
+        // what had already been applied.
         assert!(migrations().validate().is_ok());
     }
 

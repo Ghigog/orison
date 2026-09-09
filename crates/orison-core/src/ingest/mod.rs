@@ -23,6 +23,7 @@ pub mod sections;
 pub mod style;
 pub mod yaml;
 
+pub use chunk::{chunk_entity, Chunk, ChunkConfig};
 pub use error::IngestError;
 pub use pipeline::{
     ingest_documents, ingest_vault, DanglingLink, IngestOptions, IngestOutcome, IngestReport,

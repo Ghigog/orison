@@ -200,3 +200,19 @@ pub struct EdgeRow {
     pub relation: String,
     pub weight: f64,
 }
+
+/// A chunk as stored (§3.6).
+///
+/// `char_start` and `char_end` index into the source node's `body`. They are
+/// the provenance: a retrieved passage can point at the sentence it came from,
+/// not merely at the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChunkRow {
+    pub id: String,
+    pub entity_id: String,
+    pub ordinal: i64,
+    pub heading: Option<String>,
+    pub text: String,
+    pub char_start: i64,
+    pub char_end: i64,
+}

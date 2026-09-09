@@ -24,6 +24,7 @@ pub mod error;
 pub mod eval;
 pub mod fusion;
 pub mod pipeline;
+pub mod provenance;
 pub mod rerank;
 pub mod types;
 
@@ -33,5 +34,6 @@ pub use error::RetrievalError;
 pub use eval::{precision_at_k, recall_at_k, reciprocal_rank, QualityReport};
 pub use fusion::{reciprocal_rank_fusion, RankedList, DEFAULT_RRF_K};
 pub use pipeline::{format_context, retrieve, RetrievalConfig, RetrievalResult, StageCounts};
+pub use provenance::{fold_chunk_hits, SourcedHit};
 pub use rerank::{NoRerank, PassageReranker, Reranker};
 pub use types::{MetadataFilter, Scored};

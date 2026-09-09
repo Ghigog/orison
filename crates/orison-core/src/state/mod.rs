@@ -41,9 +41,9 @@ pub mod store;
 pub mod types;
 
 pub use error::StateError;
-pub use schema::{open_connection, schema_version, CURRENT_SCHEMA_VERSION};
+pub use schema::{open_at_version, open_connection, schema_version, CURRENT_SCHEMA_VERSION};
 pub use store::CampaignStore;
 pub use types::{
-    Campaign, CampaignSummary, CharacterState, EdgeRow, EmotionEvent, HistoryEntry, HistoryRole,
-    InventoryItem, NodeRow,
+    Campaign, CampaignSummary, CharacterState, ChunkRow, EdgeRow, EmotionEvent, HistoryEntry,
+    HistoryRole, InventoryItem, NodeRow,
 };

@@ -12,8 +12,8 @@ use std::path::Path;
 use super::error::StateError;
 use super::schema;
 use super::types::{
-    Campaign, CampaignSummary, CharacterState, EdgeRow, EmotionEvent, HistoryEntry, HistoryRole,
-    InventoryItem, NodeRow,
+    Campaign, CampaignSummary, CharacterState, ChunkRow, EdgeRow, EmotionEvent, HistoryEntry,
+    HistoryRole, InventoryItem, NodeRow,
 };
 
 /// A handle on one campaign database file. Cheap to clone conceptually — open
@@ -602,6 +602,97 @@ impl CampaignStore {
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
+}
+
+impl CampaignStore {
+    // ------------------------------------------------------------------
+    // Chunks (§3.6)
+    // ------------------------------------------------------------------
+
+    /// Replace every chunk for the campaign. Chunking is derived from the
+    /// graph, so it is rebuilt wholesale on re-ingest rather than reconciled.
+    pub fn replace_chunks(
+        &mut self,
+        campaign_id: &str,
+        chunks: &[ChunkRow],
+    ) -> Result<(), StateError> {
+        self.require_campaign(campaign_id)?;
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM chunks WHERE campaign_id = ?1",
+            params![campaign_id],
+        )?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO chunks
+                     (campaign_id, id, entity_id, ordinal, heading, text, char_start, char_end)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
+            for c in chunks {
+                stmt.execute(params![
+                    campaign_id,
+                    c.id,
+                    c.entity_id,
+                    c.ordinal,
+                    c.heading,
+                    c.text,
+                    c.char_start,
+                    c.char_end,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn chunks(&self, campaign_id: &str) -> Result<Vec<ChunkRow>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, entity_id, ordinal, heading, text, char_start, char_end
+             FROM chunks WHERE campaign_id = ?1 ORDER BY entity_id, ordinal",
+        )?;
+        let rows = stmt.query_map(params![campaign_id], chunk_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn chunks_of(
+        &self,
+        campaign_id: &str,
+        entity_id: &str,
+    ) -> Result<Vec<ChunkRow>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, entity_id, ordinal, heading, text, char_start, char_end
+             FROM chunks WHERE campaign_id = ?1 AND entity_id = ?2 ORDER BY ordinal",
+        )?;
+        let rows = stmt.query_map(params![campaign_id, entity_id], chunk_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// One chunk by id. What a retrieval hit resolves to when the citation
+    /// needs the passage rather than the note.
+    pub fn chunk(&self, campaign_id: &str, id: &str) -> Result<Option<ChunkRow>, StateError> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT id, entity_id, ordinal, heading, text, char_start, char_end
+                 FROM chunks WHERE campaign_id = ?1 AND id = ?2",
+                params![campaign_id, id],
+                chunk_from_row,
+            )
+            .optional()?;
+        Ok(row)
+    }
+}
+
+fn chunk_from_row(r: &Row<'_>) -> rusqlite::Result<ChunkRow> {
+    Ok(ChunkRow {
+        id: r.get(0)?,
+        entity_id: r.get(1)?,
+        ordinal: r.get(2)?,
+        heading: r.get(3)?,
+        text: r.get(4)?,
+        char_start: r.get(5)?,
+        char_end: r.get(6)?,
+    })
 }
 
 fn campaign_from_row(r: &Row<'_>) -> rusqlite::Result<Campaign> {
