@@ -326,6 +326,10 @@ Run the entire harness against the existing GDScript engine and commit the numbe
 
 ## Phase 2 — Rust workspace and the inference layer
 
+> **Executable brief**: [handoff_phase2.md](handoff_phase2.md). It carries the
+> task order, the measured target (turn latency p50 ~20 s), how to grade a phase
+> the GDScript eval harness cannot yet drive, and the lessons Phase 1 paid for.
+
 **Goal**: a correct, modern inference layer. No game logic yet.
 
 **Duration estimate**: 2-3 weeks.
