@@ -318,6 +318,45 @@ cassette stops matching, which surfaces as a schema failure rather than a silent
 wrong answer. That is intended: a cassette recorded against a different prompt is
 not evidence about the current one. Re-record after prompt changes.
 
+## Phase 2 measurement
+
+Phase 2 replaces the inference layer with a typed Rust core
+(`crates/orison-core`). The GDScript harness above has no Rust engine to
+drive during this phase (see the Phase 2 handoff's "How to measure during
+this phase"), so Phase 2 grades itself with its own conformance suite
+(`crates/orison-core/tests/conformance.rs`) instead:
+
+- `cargo test -p orison-core` (no live model needed): typed-error coverage
+  for an unreachable backend (B-15), the bounded `keep_alive` default
+  (B-6), the three-tool Director set with `search_knowledge_graph`
+  excluded (§2.6), typed tool-call dispatch and its failure mode, budget
+  allocation/overflow (B-1, B-4), cache-stable message ordering (§2.7),
+  and schema round-trips for `CharacterResponse`/`DirectorResponse`/
+  `ReactStep` (§2.4). `cargo test -p orison-core --features llama-cpp`
+  additionally runs the JSON-Schema-to-GBNF grammar converter's tests.
+- `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL` (live Ollama):
+  `health()` reporting `Available`, and a schema-constrained chat round
+  trip via `/api/chat`.
+- `ORISON_TEST_GGUF_MODEL` with `--features llama-cpp`: not yet wired into
+  the suite — `LlamaCppBackend` (§2.3) compiles cleanly against real
+  `llama-cpp-2` APIs (verified in this environment) but has not been run
+  against real weights, since this sandbox has neither a GGUF file nor a
+  network path to fetch one. Verify on a machine with a model before
+  relying on it in place of `OllamaBackend`.
+
+**Turn latency p50 (§2.7) was not re-measured live in this environment.**
+This sandbox has no Ollama server and no GPU, so there is no live 9-turn
+transcript run to report a before/after number against the ~20s baseline
+above — reporting one without actually measuring it would repeat exactly
+the mistake this document warns against ("prove the negative result before
+believing it" / "measure it, don't declare victory on the theory"). What
+*is* verified here is the mechanism the speedup depends on:
+`prompt::ordering` has a test asserting that everything but the player's
+final input is byte-identical between consecutive turns, which is the
+precondition for KV-cache reuse under `/api/chat`. Run
+`cargo test -p orison-core -- --nocapture` plus a live transcript against
+Ollama on a real machine to record the actual number.
+
 ### Not built: the judge suite
 
 Plan §1.3. Scores in-character consistency, use of vault-sourced facts, narrative

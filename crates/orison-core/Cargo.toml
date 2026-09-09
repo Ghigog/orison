@@ -1,0 +1,32 @@
+[package]
+name = "orison-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Orison engine core: inference, ingest, knowledge, retrieval, prompt, turn, memory, state. No UI, no platform assumptions."
+
+[dependencies]
+tokio = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+futures-core = { workspace = true }
+tokenizers = { workspace = true }
+llama-cpp-2 = { version = "0.1", optional = true }
+encoding_rs = { version = "0.8", optional = true }
+
+[features]
+# Off by default: llama-cpp-2 builds llama.cpp from source (cmake + a C++
+# toolchain) and that build is slow and network-dependent. Enable explicitly
+# with `cargo build --features llama-cpp` on a machine set up for it. The
+# conformance suite still compiles either way; the LlamaCpp-specific cases are
+# `#[cfg(feature = "llama-cpp")]` and skipped otherwise.
+llama-cpp = ["dep:llama-cpp-2", "dep:encoding_rs"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
