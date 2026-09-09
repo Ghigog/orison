@@ -13,7 +13,7 @@ use super::error::StateError;
 use super::schema;
 use super::types::{
     Campaign, CampaignSummary, CharacterState, ChunkRow, EdgeRow, EmotionEvent, HistoryEntry,
-    HistoryRole, InventoryItem, NodeRow,
+    HistoryRole, InventoryItem, NodeRow, SessionSummary,
 };
 
 /// A handle on one campaign database file. Cheap to clone conceptually — open
@@ -495,6 +495,171 @@ impl CampaignStore {
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// The same, excluding lines a summary already stands in for (§4.4).
+    ///
+    /// This is what a prompt reads. [`Self::recent_history`] remains the whole
+    /// transcript: compaction shortens the prompt, never the record.
+    pub fn recent_live_history(
+        &self,
+        campaign_id: &str,
+        limit: usize,
+    ) -> Result<Vec<HistoryEntry>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT role, content, timestamp, sender, active_character FROM (
+                 SELECT id, role, content, timestamp, sender, active_character
+                 FROM history_logs WHERE campaign_id = ?1 AND compacted = 0
+                 ORDER BY id DESC LIMIT ?2
+             ) ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map(params![campaign_id, limit as i64], |r| {
+            let role: String = r.get(0)?;
+            Ok(HistoryEntry {
+                role: HistoryRole::from_str_lossy(&role),
+                content: r.get(1)?,
+                timestamp: r.get(2)?,
+                sender: r.get(3)?,
+                active_character: r.get(4)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Uncompacted lines belonging to one character's conversation, oldest
+    /// first, with their row ids.
+    ///
+    /// "Belonging to" means `active_character`, so the player's own lines in
+    /// that conversation come too — a summary of half a dialogue is not a
+    /// summary. `MemoryManager.get_character_history()` also fell back to
+    /// `sender`, for logs written before `active_character` existed; that
+    /// fallback is kept.
+    pub fn character_history(
+        &self,
+        campaign_id: &str,
+        entity_id: &str,
+        limit: usize,
+    ) -> Result<Vec<(i64, HistoryEntry)>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role, content, timestamp, sender, active_character FROM (
+                 SELECT id, role, content, timestamp, sender, active_character
+                 FROM history_logs
+                 WHERE campaign_id = ?1 AND compacted = 0
+                   AND (active_character = ?2 OR (active_character IS NULL AND sender = ?2))
+                 ORDER BY id DESC LIMIT ?3
+             ) ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map(params![campaign_id, entity_id, limit as i64], |r| {
+            let role: String = r.get(1)?;
+            Ok((
+                r.get(0)?,
+                HistoryEntry {
+                    role: HistoryRole::from_str_lossy(&role),
+                    content: r.get(2)?,
+                    timestamp: r.get(3)?,
+                    sender: r.get(4)?,
+                    active_character: r.get(5)?,
+                },
+            ))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Mark an inclusive id range as summarised. Returns how many rows moved.
+    pub fn mark_history_compacted(
+        &self,
+        campaign_id: &str,
+        from_id: i64,
+        to_id: i64,
+    ) -> Result<usize, StateError> {
+        let n = self.conn.execute(
+            "UPDATE history_logs SET compacted = 1
+              WHERE campaign_id = ?1 AND id BETWEEN ?2 AND ?3",
+            params![campaign_id, from_id, to_id],
+        )?;
+        Ok(n)
+    }
+
+    // ------------------------------------------------------------------
+    // Session memory (§4.4)
+    // ------------------------------------------------------------------
+
+    /// Record a medium-term summary. Returns its row id.
+    pub fn add_session_summary(
+        &self,
+        campaign_id: &str,
+        summary: &SessionSummary,
+    ) -> Result<i64, StateError> {
+        self.require_campaign(campaign_id)?;
+        self.conn.execute(
+            "INSERT INTO session_summaries
+                 (campaign_id, entity_id, summary, created_at, covers_from, covers_to, distilled)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                campaign_id,
+                summary.entity_id,
+                summary.summary,
+                summary.created_at,
+                summary.covers_from,
+                summary.covers_to,
+                summary.distilled as i64,
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Summaries for one character, oldest first. `undistilled_only` selects
+    /// the ones not yet folded into long-term memory.
+    pub fn session_summaries(
+        &self,
+        campaign_id: &str,
+        entity_id: &str,
+        undistilled_only: bool,
+    ) -> Result<Vec<SessionSummary>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, entity_id, summary, created_at, covers_from, covers_to, distilled
+             FROM session_summaries
+             WHERE campaign_id = ?1 AND entity_id = ?2 AND (?3 = 0 OR distilled = 0)
+             ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map(
+            params![campaign_id, entity_id, undistilled_only as i64],
+            |r| {
+                let distilled: i64 = r.get(6)?;
+                Ok(SessionSummary {
+                    id: r.get(0)?,
+                    entity_id: r.get(1)?,
+                    summary: r.get(2)?,
+                    created_at: r.get(3)?,
+                    covers_from: r.get(4)?,
+                    covers_to: r.get(5)?,
+                    distilled: distilled != 0,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Mark summaries as folded into long-term memory.
+    ///
+    /// By id rather than "everything for this character", because a summary
+    /// written while a distillation was in flight must not be marked as
+    /// included in it. `MemoryManager` had the same concern and solved it by
+    /// comparing summary *strings*.
+    pub fn mark_summaries_distilled(
+        &self,
+        campaign_id: &str,
+        ids: &[i64],
+    ) -> Result<usize, StateError> {
+        let mut moved = 0;
+        for id in ids {
+            moved += self.conn.execute(
+                "UPDATE session_summaries SET distilled = 1
+                  WHERE campaign_id = ?1 AND id = ?2",
+                params![campaign_id, id],
+            )?;
+        }
+        Ok(moved)
     }
 
     pub fn history_len(&self, campaign_id: &str) -> Result<usize, StateError> {

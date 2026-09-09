@@ -280,8 +280,8 @@ fn graph_rows_round_trip_and_cascade() {
 fn migrations_apply_to_a_database_written_by_an_earlier_run() {
     // A genuine forward upgrade, not a reopen: the database is created at
     // schema version 1, exactly as a build predating §3.6 would have written
-    // it, then opened normally and carried to version 2 with its campaign
-    // intact.
+    // it, then opened normally and carried to the current version with its
+    // campaign intact.
     //
     // This is what `SaveManager._upgrade_save_state()` could not do reliably.
     // It inspected a version string, mutated the loaded dictionary in place,
@@ -317,7 +317,7 @@ fn migrations_apply_to_a_database_written_by_an_earlier_run() {
 
     let upgraded = CampaignStore::open(&path).unwrap();
     assert_eq!(upgraded.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
-    assert_eq!(CURRENT_SCHEMA_VERSION, 2);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 3);
 
     // The campaign survived the upgrade.
     let campaign = upgraded.load_campaign("saltmarsh").unwrap().unwrap();
@@ -325,6 +325,47 @@ fn migrations_apply_to_a_database_written_by_an_earlier_run() {
     assert_eq!(
         upgraded.plot_flag("saltmarsh", "tithe_abolished").unwrap(),
         Some("false".into())
+    );
+
+    // Version 3 added session memory, and the transcript column it added to
+    // an existing table has to have arrived with a default rather than
+    // failing on the rows already there.
+    upgraded
+        .append_history(
+            "saltmarsh",
+            &orison_core::state::HistoryEntry {
+                role: orison_core::state::HistoryRole::Player,
+                content: "I refuse the tithe.".into(),
+                timestamp: "2026-09-09T10:01:00Z".into(),
+                sender: Some("player".into()),
+                active_character: Some("king_yuna".into()),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        upgraded.recent_live_history("saltmarsh", 10).unwrap().len(),
+        1
+    );
+    upgraded
+        .add_session_summary(
+            "saltmarsh",
+            &orison_core::state::SessionSummary {
+                id: 0,
+                entity_id: "king_yuna".into(),
+                summary: "The tithe was refused.".into(),
+                created_at: "2026-09-09T10:02:00Z".into(),
+                covers_from: 1,
+                covers_to: 1,
+                distilled: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        upgraded
+            .session_summaries("saltmarsh", "king_yuna", true)
+            .unwrap()
+            .len(),
+        1
     );
 
     // And what version 2 added now works on it.

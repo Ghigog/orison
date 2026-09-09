@@ -8,6 +8,7 @@
 
 use crate::emotion::EmotionConfig;
 use crate::inference::{KeepAlive, SamplingOptions};
+use crate::memory::MemoryPolicy;
 use crate::prompt::BudgetFractions;
 use crate::retrieval::{MetadataFilter, RetrievalConfig};
 
@@ -90,6 +91,7 @@ pub struct TurnConfig {
     pub director_retrieval: RetrievalConfig,
     pub director: DirectorPolicy,
     pub emotion: EmotionConfig,
+    pub memory: MemoryPolicy,
     pub actor_sampling: SamplingOptions,
     pub director_sampling: SamplingOptions,
     /// How long a model stays resident. The default is bounded; the Godot
@@ -127,6 +129,7 @@ impl Default for TurnConfig {
             },
             director: DirectorPolicy::default(),
             emotion: EmotionConfig::default(),
+            memory: MemoryPolicy::default(),
             // Warmer than the Director: the Actor is writing dialogue.
             actor_sampling: SamplingOptions::new(0.8, 0.9),
             director_sampling: SamplingOptions::new(0.7, 0.9),

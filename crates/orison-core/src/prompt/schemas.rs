@@ -146,6 +146,25 @@ pub struct DirectorResponse {
     pub dice_roll: DiceRoll,
 }
 
+/// A medium-term summary of a stretch of conversation (§4.4).
+///
+/// A struct with one field rather than a bare string, because the request is
+/// schema-constrained: `MemoryManager` asked for a paragraph in prose and then
+/// had to check the answer against the literal string `"null"`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SessionSummaryResponse {
+    /// Objective third-person, a few sentences.
+    pub summary: String,
+}
+
+/// The character's long-term memory, rewritten to absorb new summaries.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DistilledMemoryResponse {
+    /// One or two paragraphs, integrating the existing memory with what is
+    /// new rather than replacing it.
+    pub memory: String,
+}
+
 /// A character's resting disposition, deduced from their biography.
 ///
 /// The Godot build asked for this in prose and parsed the answer with

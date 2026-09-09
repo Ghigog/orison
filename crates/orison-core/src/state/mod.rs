@@ -45,5 +45,5 @@ pub use schema::{open_at_version, open_connection, schema_version, CURRENT_SCHEM
 pub use store::CampaignStore;
 pub use types::{
     Campaign, CampaignSummary, CharacterState, ChunkRow, EdgeRow, EmotionEvent, HistoryEntry,
-    HistoryRole, InventoryItem, NodeRow,
+    HistoryRole, InventoryItem, NodeRow, SessionSummary,
 };

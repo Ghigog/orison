@@ -22,13 +22,16 @@ use futures::StreamExt;
 use tokio::sync::broadcast;
 
 use crate::emotion::{EmotionEngine, EmotionState};
-use crate::inference::{ChatMessage, ChatRequest, InferenceBackend, ResponseFormat};
+use crate::inference::{
+    ChatMessage, ChatRequest, InferenceBackend, InferenceError, ResponseFormat,
+};
 use crate::knowledge::{CanonicalField, EntityId, EntityKind};
+use crate::memory::{CompactionPlan, DistillationPlan, MemoryManager};
 use crate::prompt::budget::{allocate, check_overflow, count_tokens, PromptBudget};
 use crate::prompt::player_input::{parse as parse_player_input, sanitize as sanitize_player_input};
 use crate::prompt::schemas::{
     BaselineDisposition, CharacterResponse, CombinedTurnResponse, DirectorResponse,
-    EscalationSignal, InventoryAction,
+    DistilledMemoryResponse, EscalationSignal, InventoryAction, SessionSummaryResponse,
 };
 use crate::prompt::PromptSections;
 use crate::retrieval::{format_context, retrieve, NoRerank, PassageReranker, Reranker};
@@ -78,6 +81,7 @@ pub struct TurnEngine {
     director: Arc<dyn InferenceBackend>,
     config: TurnConfig,
     emotion: EmotionEngine,
+    memory: MemoryManager,
     queue: Arc<RequestQueue>,
     events: broadcast::Sender<TurnEvent>,
     machine: Mutex<Machine>,
@@ -102,6 +106,7 @@ impl TurnEngine {
             actor,
             director,
             emotion: EmotionEngine::new(config.emotion),
+            memory: MemoryManager::new(config.memory),
             config,
             queue: RequestQueue::spawn(),
             events,
@@ -129,6 +134,10 @@ impl TurnEngine {
 
     pub fn emotion(&self) -> &EmotionEngine {
         &self.emotion
+    }
+
+    pub fn memory(&self) -> &MemoryManager {
+        &self.memory
     }
 
     pub fn queue(&self) -> &Arc<RequestQueue> {
@@ -450,6 +459,7 @@ impl TurnEngine {
         };
 
         self.apply_actor_response(&speaker, &response)?;
+        self.consider_memory_maintenance(&speaker, allocation.history)?;
         let director_triggered = match &beat {
             // The single-call arm has already done the Director's work, in
             // the same response. Applying it here is what makes the arm a
@@ -565,7 +575,7 @@ impl TurnEngine {
     ) -> Result<PromptSections, TurnError> {
         let card = self.character_card(speaker)?;
         let volatile = self.volatile_state(speaker)?;
-        let summaries = session_summaries(campaign);
+        let summaries = self.memory_block(campaign, speaker)?;
         let recent_turns = prior.iter().map(history_to_message).collect();
 
         let instructions = match self.config.profile {
@@ -651,6 +661,38 @@ impl TurnEngine {
             Ok((feeling, affinity))
         })?;
         Ok(self.emotion.profile_block(&label, &feeling, affinity))
+    }
+
+    /// The adventure's memory and this character's, as one block.
+    ///
+    /// Two different things kept visibly distinct: the campaign tiers are what
+    /// *happened*, and the character block is what *this character* recalls of
+    /// it. Neither is their biography, which is in the card at the front of
+    /// the prompt and comes from the vault.
+    fn memory_block(
+        &self,
+        campaign: &Campaign,
+        speaker: &str,
+    ) -> Result<Option<String>, TurnError> {
+        let campaign_id = self.session.campaign_id().to_string();
+        let session_memory = self
+            .session
+            .with_store(|store| self.memory.session_memory(store, &campaign_id, speaker))?;
+        let label = self
+            .session
+            .graph()
+            .get(&EntityId::from_stored(speaker))
+            .map(|e| e.label.clone())
+            .unwrap_or_else(|| speaker.to_string());
+
+        let mut blocks = Vec::new();
+        if let Some(block) = campaign_memory_block(campaign) {
+            blocks.push(block);
+        }
+        if let Some(block) = session_memory.block(&label) {
+            blocks.push(block);
+        }
+        Ok((!blocks.is_empty()).then(|| blocks.join("\n")))
     }
 
     fn count_messages(&self, messages: &[ChatMessage]) -> Result<usize, TurnError> {
@@ -847,6 +889,156 @@ impl TurnEngine {
         Ok(())
     }
 
+    // --------------------------------------------------------------- memory
+
+    /// Queue a summary or a distillation if either is due.
+    ///
+    /// Both are background work at `Low` priority, so a player turn preempts
+    /// them: the alternative is what `MemoryManager` does, which is to fire a
+    /// summarisation model call from inside the turn's own completion callback
+    /// and block the queue behind it.
+    fn consider_memory_maintenance(
+        self: &Arc<Self>,
+        speaker: &str,
+        history_budget: usize,
+    ) -> Result<(), TurnError> {
+        let campaign_id = self.session.campaign_id().to_string();
+        let tokenizer = self.actor.tokenizer();
+        let plan = self.session.with_store(|store| {
+            self.memory
+                .plan_compaction(store, &campaign_id, speaker, history_budget, |text| {
+                    count_tokens(tokenizer, text).unwrap_or(0)
+                })
+        })?;
+        if let Some(plan) = plan {
+            self.spawn_compaction(plan);
+            // Distillation reads the summaries this compaction is about to
+            // add, so it is considered after that lands, not alongside it.
+            return Ok(());
+        }
+
+        let distillation = self
+            .session
+            .with_store(|store| self.memory.plan_distillation(store, &campaign_id, speaker))?;
+        if let Some(plan) = distillation {
+            self.spawn_distillation(plan);
+        }
+        Ok(())
+    }
+
+    fn spawn_compaction(self: &Arc<Self>, plan: CompactionPlan) {
+        let engine = Arc::clone(self);
+        let label = self
+            .session
+            .graph()
+            .get(&EntityId::from_stored(&plan.entity_id))
+            .map(|e| e.label.clone())
+            .unwrap_or_else(|| plan.entity_id.clone());
+
+        let ticket = self.queue.submit(
+            "memory-compaction",
+            Priority::Low,
+            move |cancel| async move {
+                let transcript = engine.memory.format_transcript(&plan.entries, &label);
+                let request = ChatRequest {
+                    sampling: engine.config.director_sampling.clone(),
+                    keep_alive: engine.config.keep_alive,
+                    ..ChatRequest::new(vec![
+                        ChatMessage::system(SUMMARY_INSTRUCTIONS),
+                        ChatMessage::user(format!(
+                            "Character: {label}\n\nDialogue segment:\n{transcript}"
+                        )),
+                    ])
+                    .with_response_format(ResponseFormat::for_type::<SessionSummaryResponse>())
+                };
+                let response = tokio::select! {
+                    biased;
+                    reason = cancel.cancelled() => return Err(TurnError::Cancelled(reason)),
+                    result = engine.actor.chat(request) => result?,
+                };
+                let summary: SessionSummaryResponse = response.parse()?;
+                if summary.summary.trim().is_empty() {
+                    // An empty summary would retire transcript lines and put
+                    // nothing in their place. Leave the lines live.
+                    return Err(TurnError::Inference(InferenceError::Unsupported(
+                        "the summariser returned an empty summary".to_string(),
+                    )));
+                }
+                let campaign_id = engine.session.campaign_id().to_string();
+                let timestamp = engine.session.clock().timestamp();
+                engine.session.with_store(|store| {
+                    engine.memory.apply_compaction(
+                        store,
+                        &campaign_id,
+                        &plan,
+                        &summary.summary,
+                        &timestamp,
+                    )
+                })?;
+                engine.emit(TurnEvent::MemoryUpdated {
+                    entity_id: Some(plan.entity_id.clone()),
+                });
+                Ok(())
+            },
+        );
+        drop(ticket);
+    }
+
+    fn spawn_distillation(self: &Arc<Self>, plan: DistillationPlan) {
+        let engine = Arc::clone(self);
+        let label = self
+            .session
+            .graph()
+            .get(&EntityId::from_stored(&plan.entity_id))
+            .map(|e| e.label.clone())
+            .unwrap_or_else(|| plan.entity_id.clone());
+
+        let ticket = self.queue.submit(
+            "memory-distillation",
+            Priority::Low,
+            move |cancel| async move {
+                let mut prompt = format!("Character: {label}\n\n");
+                if !plan.existing.trim().is_empty() {
+                    prompt.push_str(&format!(
+                        "Existing long-term memory:\n{}\n\n",
+                        plan.existing.trim()
+                    ));
+                }
+                prompt.push_str("New summaries to absorb:\n");
+                for (i, summary) in plan.summaries.iter().enumerate() {
+                    prompt.push_str(&format!("{}. {}\n", i + 1, summary.trim()));
+                }
+
+                let request = ChatRequest {
+                    sampling: engine.config.director_sampling.clone(),
+                    keep_alive: engine.config.keep_alive,
+                    ..ChatRequest::new(vec![
+                        ChatMessage::system(DISTILLATION_INSTRUCTIONS),
+                        ChatMessage::user(prompt),
+                    ])
+                    .with_response_format(ResponseFormat::for_type::<DistilledMemoryResponse>())
+                };
+                let response = tokio::select! {
+                    biased;
+                    reason = cancel.cancelled() => return Err(TurnError::Cancelled(reason)),
+                    result = engine.actor.chat(request) => result?,
+                };
+                let distilled: DistilledMemoryResponse = response.parse()?;
+                let campaign_id = engine.session.campaign_id().to_string();
+                engine.session.with_store(|store| {
+                    engine
+                        .memory
+                        .apply_distillation(store, &campaign_id, &plan, &distilled.memory)
+                })?;
+                engine.emit(TurnEvent::MemoryUpdated {
+                    entity_id: Some(plan.entity_id.clone()),
+                });
+                Ok(())
+            },
+        );
+        drop(ticket);
+    }
+
     // ------------------------------------------------------------- director
 
     /// Decide whether a beat is due, and start composing one if so.
@@ -937,15 +1129,15 @@ impl TurnEngine {
         }
         self.set_director_state(DirectorState::Composing);
 
-        let prior = self
-            .session
-            .with_store(|store| store.recent_history(&campaign.id, self.config.history_window))?;
+        let prior = self.session.with_store(|store| {
+            store.recent_live_history(&campaign.id, self.config.history_window)
+        })?;
 
         let sections = PromptSections {
             system_instructions: DIRECTOR_INSTRUCTIONS.to_string(),
             character_card: Some(director_scene_card(&campaign, speaker)),
             retrieved_lore: (lore.count > 0).then(|| lore.text.clone()),
-            session_summaries: session_summaries(&campaign),
+            session_summaries: campaign_memory_block(&campaign),
             recent_turns: prior.iter().map(history_to_message).collect(),
             // The Director narrates the world, not a character's feelings.
             volatile_state: None,
@@ -1159,7 +1351,7 @@ fn history_to_message(entry: &HistoryEntry) -> ChatMessage {
 }
 
 /// The campaign's three memory tiers, or nothing when they are all empty.
-fn session_summaries(campaign: &Campaign) -> Option<String> {
+fn campaign_memory_block(campaign: &Campaign) -> Option<String> {
     let tiers = [
         ("Short-term", campaign.memory_short_term.trim()),
         ("Medium-term", campaign.memory_medium_term.trim()),
@@ -1266,3 +1458,21 @@ Read the character biography and answer with the emotional disposition this \
 character rests in when nothing in particular is happening to them, and how \
 strongly they hold it. Answer about their baseline, not about any single \
 event in the biography.";
+
+/// Asks for one medium-term summary. The transcript arrives as a user
+/// message, so this stays byte-stable across every compaction.
+const SUMMARY_INSTRUCTIONS: &str = "\
+You are the memory summariser. Summarise the dialogue segment in one compact, \
+objective paragraph of at most four sentences, written in the third person. \
+Keep key events, decisions, actions, reactions and changes in the \
+relationship. Core character traits, relationship status and critical plot \
+points must survive; compress narrative detail, not those.";
+
+/// Asks for long-term memory, integrating rather than replacing.
+const DISTILLATION_INSTRUCTIONS: &str = "\
+You are the memory coordinator. Rewrite the character's long-term memory so \
+that it integrates the existing memory with the new summaries into one \
+coherent narrative of one or two paragraphs, in the objective third person. \
+Keep long-term character development, major milestones, relationship shifts \
+and plot outcomes. Do not discard what the existing memory already \
+established.";
