@@ -9,8 +9,12 @@
 
 pub mod graph;
 pub mod index;
+pub mod raptor;
 pub mod types;
 
 pub use graph::KnowledgeGraph;
 pub use index::NameIndex;
+pub use raptor::{
+    MemberListSummariser, RaptorConfig, RaptorError, RaptorReport, Summariser, Summary,
+};
 pub use types::{CanonicalField, Edge, EdgeKind, Entity, EntityId, EntityKind, OverflowSection};
