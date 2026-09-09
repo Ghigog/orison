@@ -37,5 +37,8 @@ encoding_rs = { version = "0.8", optional = true }
 llama-cpp = ["dep:llama-cpp-2", "dep:encoding_rs"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
+# `net` and `io-util` are for the hand-rolled Ollama stand-in in
+# `tests/support`: the cancellation test has to observe a real socket closing,
+# which is the only way to prove a request actually stopped.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util", "net", "io-util"] }
 tempfile = "3"
