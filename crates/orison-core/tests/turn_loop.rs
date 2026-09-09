@@ -162,21 +162,22 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
         "turn two should carry turn one in its history"
     );
 
-    // The stable head: instructions plus the character card, then the lore
-    // for a query that has not changed. This is the prefix a KV-cache-reusing
-    // engine can skip re-processing, and it must be byte-identical.
-    for i in 0..2 {
+    // Everything before the volatile pair — instructions and card, the lore
+    // for a query that has not changed, world state and memory — is the
+    // prefix a KV-cache-reusing engine can skip, and must be byte-identical.
+    let stable = first_messages.len() - 2;
+    for i in 0..stable {
         assert_eq!(
             first_messages[i], second_messages[i],
             "message {i} changed between turns, invalidating the cache prefix"
         );
     }
 
-    // Turn one's player line reappears as turn two's history, in the same
+    // Turn one's player line reappears immediately after it, in the same
     // wrapping it was sent in — the regression this test found the first time.
     assert_eq!(
         first_messages[first_messages.len() - 1],
-        second_messages[2],
+        second_messages[stable],
         "the player's line must replay exactly as it was sent"
     );
 
