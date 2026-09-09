@@ -209,12 +209,25 @@ impl KnowledgeGraph {
     /// recursion, which re-walked the entire edge array at every step and
     /// revisited nodes it had already seen at a greater depth.
     pub fn within(&self, id: &EntityId, depth: usize) -> Vec<EntityId> {
+        self.within_hops(id, depth)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// The same expansion, keeping how far away each entity was.
+    ///
+    /// Retrieval needs the hop count to decay a neighbour's score with
+    /// distance. Without it, "two hops away" and "adjacent" score alike, and
+    /// the expansion floods the result set — which is half of why the Godot
+    /// build returns 74 of 207 nodes for one query.
+    pub fn within_hops(&self, id: &EntityId, depth: usize) -> Vec<(EntityId, usize)> {
         let Some(&start) = self.index.get(id) else {
             return Vec::new();
         };
         let mut seen: HashMap<NodeIndex, usize> = HashMap::from([(start, 0)]);
         let mut frontier = vec![start];
-        let mut out: Vec<EntityId> = Vec::new();
+        let mut out: Vec<(EntityId, usize)> = Vec::new();
 
         for hop in 1..=depth {
             let mut next = Vec::new();
@@ -224,7 +237,7 @@ impl KnowledgeGraph {
                         continue;
                     }
                     seen.insert(neighbour, hop);
-                    out.push(self.graph[neighbour].id.clone());
+                    out.push((self.graph[neighbour].id.clone(), hop));
                     next.push(neighbour);
                 }
             }

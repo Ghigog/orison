@@ -33,7 +33,7 @@ use super::yaml::YamlValue;
 
 /// Knobs the shell sets. Everything here has a defensible default; nothing here
 /// is a model identifier (B-10).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct IngestOptions {
     /// Folder-to-type mappings the user chose during onboarding. Beats every
     /// heuristic.
@@ -46,6 +46,26 @@ pub struct IngestOptions {
     /// labelled a scene. Off by default; Phase 4 owns scene selection and can
     /// ask for it.
     pub promote_scene_fallback: bool,
+    /// Create `Mentions` edges where one note names another entity in prose
+    /// without linking to it.
+    ///
+    /// On by default because it was measured, not assumed: without it, `large`
+    /// recall sits exactly on the Godot baseline of 0.875 and cannot beat it,
+    /// because `"who keeps the accord"` needs a hop from `The Quillion Accord`
+    /// to `Pale Reach Chapel` and the Accord note names the chapel in a
+    /// sentence rather than in a `[[wiki-link]]`. `tests/retrieval_quality.rs`
+    /// measures both ways.
+    pub link_mentions: bool,
+}
+
+impl Default for IngestOptions {
+    fn default() -> Self {
+        Self {
+            folder_types: BTreeMap::new(),
+            promote_scene_fallback: false,
+            link_mentions: true,
+        }
+    }
 }
 
 /// A wiki-link pointing at a note that does not exist.
@@ -77,6 +97,8 @@ pub struct IngestReport {
     /// Worth a human read; see `rag_architecture.md` Bug 3.
     pub gender_conflicts: Vec<EntityId>,
     pub notes_without_a_type: usize,
+    /// Edges created from a name written in prose rather than as a link.
+    pub mention_edges: usize,
 }
 
 /// What a vault compiled to.
@@ -149,6 +171,9 @@ pub fn ingest_documents(
     // Edges resolve through the graph, which owns both name resolution and
     // entity kinds. There is no second map to keep in step with it.
     add_edges(parsed, &ids, &mut graph, &mut report);
+    if options.link_mentions {
+        report.mention_edges = link_mentions(&ids, &mut graph);
+    }
 
     let writing_style = style::campaign_writing_style(
         &parsed
@@ -634,6 +659,99 @@ fn add_edges(
     for edge in pending {
         graph.connect(edge);
     }
+}
+
+/// Link entities that one note names in its prose without linking to.
+///
+/// Longest name first, whole-word only, and a matched span is consumed so
+/// `"Aldous Vantareth the Younger"` never also counts as a mention of
+/// `"Aldous Vantareth"`. `large` has 170 character files sharing a handful of
+/// surnames, which is what makes that rule load-bearing rather than tidy.
+///
+/// A pair that any other edge already connects is left alone: an explicit link
+/// is better evidence and there is no point recording the same relationship
+/// twice with different strengths.
+fn link_mentions(ids: &[EntityId], graph: &mut KnowledgeGraph) -> usize {
+    /// Below this, a name is too short to be a confident match in prose.
+    const MIN_NAME_LEN: usize = 4;
+
+    let mut names: Vec<(String, EntityId)> = Vec::new();
+    for id in ids {
+        let Some(entity) = graph.get(id) else {
+            continue;
+        };
+        for name in std::iter::once(&entity.label).chain(entity.aliases.iter()) {
+            let name = name.trim().to_lowercase();
+            if name.chars().count() < MIN_NAME_LEN {
+                continue;
+            }
+            names.push((name, id.clone()));
+        }
+    }
+    names.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
+
+    let mut pending: Vec<Edge> = Vec::new();
+    for id in ids {
+        let Some(entity) = graph.get(id) else {
+            continue;
+        };
+        let haystack = entity.searchable_text().to_lowercase();
+        let mut claimed: Vec<(usize, usize)> = Vec::new();
+
+        for (name, target) in &names {
+            if target == id {
+                continue;
+            }
+            let mut from = 0;
+            while let Some(offset) = haystack[from..].find(name.as_str()) {
+                let start = from + offset;
+                let end = start + name.len();
+                from = end;
+                if !is_word_boundary(&haystack, start, end) {
+                    continue;
+                }
+                if claimed.iter().any(|(s, e)| start < *e && end > *s) {
+                    continue;
+                }
+                claimed.push((start, end));
+                if !pending.iter().any(|e| &e.from == id && &e.to == target) {
+                    pending.push(Edge {
+                        from: id.clone(),
+                        to: target.clone(),
+                        kind: EdgeKind::Mentions,
+                        weight: 0.5,
+                    });
+                }
+                break;
+            }
+        }
+    }
+
+    let mut added = 0;
+    for edge in pending {
+        let already_connected = graph.edges_of(&edge.from).iter().any(|e| {
+            (e.from == edge.from && e.to == edge.to) || (e.from == edge.to && e.to == edge.from)
+        });
+        if already_connected {
+            continue;
+        }
+        if graph.connect(edge) {
+            added += 1;
+        }
+    }
+    added
+}
+
+fn is_word_boundary(text: &str, start: usize, end: usize) -> bool {
+    let before_ok = text[..start]
+        .chars()
+        .next_back()
+        .is_none_or(|c| !c.is_alphanumeric());
+    let after_ok = text[end..]
+        .chars()
+        .next()
+        .is_none_or(|c| !c.is_alphanumeric());
+    before_ok && after_ok
 }
 
 fn list_of(value: &YamlValue) -> Vec<String> {

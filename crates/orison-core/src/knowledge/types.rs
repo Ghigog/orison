@@ -148,6 +148,15 @@ pub enum EdgeKind {
     AssociatedWith,
     /// A plain wiki-link.
     LinksTo,
+    /// One note names another entity in its prose, without linking to it.
+    ///
+    /// Added because the measurement asked for it, not on principle: `large`'s
+    /// `"who keeps the accord"` needs the hop from `The Quillion Accord` to
+    /// `Pale Reach Chapel`, and the Accord note names the chapel in a sentence
+    /// rather than in a `[[wiki-link]]`. Real vaults link inconsistently; the
+    /// Godot build could only ever see the links that were written as links.
+    /// Weighted below an explicit link, because it is weaker evidence.
+    Mentions,
     /// Frontmatter `relationships:`, carrying the author's own wording.
     Relationship(String),
     /// A RAPTOR summary to the nodes it summarises (§3.5).
@@ -160,6 +169,7 @@ impl EdgeKind {
             EdgeKind::ConnectedTo => "connected_to",
             EdgeKind::AssociatedWith => "associated_with",
             EdgeKind::LinksTo => "links_to",
+            EdgeKind::Mentions => "mentions",
             EdgeKind::Relationship(r) => r,
             EdgeKind::Summarises => "summarises",
         }
@@ -173,6 +183,7 @@ impl EdgeKind {
             "connected_to" => EdgeKind::ConnectedTo,
             "associated_with" => EdgeKind::AssociatedWith,
             "links_to" => EdgeKind::LinksTo,
+            "mentions" => EdgeKind::Mentions,
             "summarises" => EdgeKind::Summarises,
             other => EdgeKind::Relationship(other.to_string()),
         }

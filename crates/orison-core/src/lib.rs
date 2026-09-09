@@ -12,6 +12,6 @@ pub mod prompt;
 pub mod ingest;
 pub mod knowledge;
 pub mod memory {}
-pub mod retrieval {}
+pub mod retrieval;
 pub mod state;
 pub mod turn {}
