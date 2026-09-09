@@ -95,20 +95,68 @@ impl FakeOllama {
         Self::scripted(vec![content], chunks, gap).await
     }
 
+    /// How many chunks the current response was split into. Only meaningful
+    /// once a request has been served.
+    pub fn chunks_for(&self, content: &str, chunks: usize) -> usize {
+        split_into(content, chunks).len()
+    }
+
     /// Serve a different response to each `/api/chat` request, in order. The
     /// last one repeats once the script runs out, so a test only has to
     /// script the requests it cares about.
     pub async fn scripted(responses: Vec<String>, chunks: usize, gap: Duration) -> Self {
+        let responses = Arc::new(responses);
+        Self::responding(
+            move |_body, nth| responses[nth.min(responses.len() - 1)].clone(),
+            chunks,
+            gap,
+        )
+        .await
+    }
+
+    /// Choose the response by the schema the request asked for.
+    ///
+    /// The §4.2 arms make two kinds of call, and on the two-call arms the
+    /// Director's runs in the background — so which request arrives second is
+    /// a race. Answering by schema rather than by arrival order removes the
+    /// race from the test instead of papering over it with a sleep.
+    pub async fn by_schema(
+        character: String,
+        director: String,
+        combined: String,
+        chunks: usize,
+        gap: Duration,
+    ) -> Self {
+        Self::responding(
+            move |body, _nth| {
+                // The request carries the JSON Schema generated from the type
+                // the caller will deserialise into, so its property names say
+                // which response is wanted.
+                let asks_character = body.contains("thinking");
+                let asks_director = body.contains("dice_roll");
+                match (asks_character, asks_director) {
+                    (true, true) => combined.clone(),
+                    (true, false) => character.clone(),
+                    _ => director.clone(),
+                }
+            },
+            chunks,
+            gap,
+        )
+        .await
+    }
+
+    async fn responding(
+        responder: impl Fn(&str, usize) -> String + Send + Sync + 'static,
+        chunks: usize,
+        gap: Duration,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind a loopback port");
         let addr = listener.local_addr().expect("local addr");
         let observed = Arc::new(Observed::default());
-        let scripts: Arc<Vec<Vec<String>>> =
-            Arc::new(responses.iter().map(|r| split_into(r, chunks)).collect());
-        observed
-            .chunks_scripted
-            .store(scripts[0].len(), Ordering::SeqCst);
+        let responder: Responder = Arc::new(responder);
 
         let serving = Arc::clone(&observed);
         tokio::spawn(async move {
@@ -117,9 +165,9 @@ impl FakeOllama {
                     return;
                 };
                 let observed = Arc::clone(&serving);
-                let scripts = Arc::clone(&scripts);
+                let responder = Arc::clone(&responder);
                 tokio::spawn(async move {
-                    let _ = serve(socket, scripts, gap, observed).await;
+                    let _ = serve(socket, responder, chunks, gap, observed).await;
                 });
             }
         });
@@ -132,9 +180,12 @@ impl FakeOllama {
     }
 }
 
+type Responder = Arc<dyn Fn(&str, usize) -> String + Send + Sync>;
+
 async fn serve(
     socket: tokio::net::TcpStream,
-    scripts: Arc<Vec<Vec<String>>>,
+    responder: Responder,
+    chunks: usize,
     gap: Duration,
     observed: Arc<Observed>,
 ) -> io::Result<()> {
@@ -218,7 +269,17 @@ async fn serve(
                 .clone(),
         );
 
-    let pieces = scripts[nth.min(scripts.len() - 1)].clone();
+    let pieces = split_into(
+        &responder(
+            &observed
+                .last_chat_body
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
+            nth,
+        ),
+        chunks,
+    );
     observed
         .chunks_scripted
         .store(pieces.len(), Ordering::SeqCst);
@@ -330,6 +391,24 @@ pub fn character_response_json(narration: &str, dialogue: &str) -> String {
     .to_string()
 }
 
+/// A well-formed combined response, for the §4.2 single-call arm.
+pub fn combined_response_json(narration: &str, dialogue: &str) -> String {
+    let mut character: serde_json::Value =
+        serde_json::from_str(&character_response_json(narration, dialogue)).unwrap();
+    let director: serde_json::Value = serde_json::from_str(&director_response_json("")).unwrap();
+    let object = character.as_object_mut().unwrap();
+    for key in [
+        "memory_updates",
+        "plot_updates",
+        "inventory_updates",
+        "choices",
+        "dice_roll",
+    ] {
+        object.insert(key.to_string(), director[key].clone());
+    }
+    serde_json::to_string(&character).unwrap()
+}
+
 pub fn director_response_json(narration: &str) -> String {
     serde_json::json!({
         "narration": narration,
@@ -418,4 +497,80 @@ pub fn test_session() -> (Session, Arc<std::sync::Mutex<CampaignStore>>) {
         Arc::new(FixedClock::default()),
     );
     (session, store)
+}
+
+/// A campaign built from one of the repository's fixture vaults, with the
+/// transcript script that fixture defines.
+///
+/// `ground_truth.json` already carries `transcript_character`,
+/// `transcript_script` and `transcript_forbidden_pronouns` — the same fields
+/// `eval/EvalRunnerNode.gd` reads — so the §4.2 arms are scored on exactly
+/// the transcripts the Godot narrative baseline was recorded on.
+pub fn fixture_session(
+    fixture: &str,
+) -> (
+    Session,
+    Arc<std::sync::Mutex<CampaignStore>>,
+    orison_core::turn::TranscriptScript,
+) {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/vaults")
+        .join(fixture);
+    let ground_truth: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("ground_truth.json")).unwrap())
+            .expect("ground_truth.json parses");
+
+    let outcome =
+        orison_core::ingest::ingest_vault(&root, &orison_core::ingest::IngestOptions::default())
+            .expect("ingest the fixture vault");
+    let graph = outcome.graph;
+
+    let character_label = ground_truth["transcript_character"]
+        .as_str()
+        .expect("fixture defines a transcript character");
+    let character_id = graph
+        .resolve(character_label)
+        .unwrap_or_else(|| panic!("{character_label} is not in the compiled graph"))
+        .clone();
+
+    let script = orison_core::turn::TranscriptScript {
+        character: character_label.to_string(),
+        forbidden_pronouns: ground_truth["transcript_forbidden_pronouns"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        lines: ground_truth["transcript_script"]
+            .as_array()
+            .expect("fixture defines a transcript script")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+    };
+
+    let mut store = CampaignStore::open_in_memory().expect("in-memory campaign store");
+    let campaign_id = format!("eval-{fixture}");
+    let mut campaign = Campaign::new(
+        &campaign_id,
+        format!("Eval {fixture}"),
+        "2026-01-01T00:00:00Z",
+    );
+    campaign.active_character = character_id.as_str().to_string();
+    campaign.writing_style = outcome.writing_style.clone();
+    store.save_campaign(&campaign).expect("save campaign");
+    graph.save(&mut store, &campaign_id).expect("save graph");
+
+    let lexical = LexicalIndex::build(&graph).expect("build lexical index");
+    let store = Arc::new(std::sync::Mutex::new(store));
+    let session = Session::new(
+        &campaign_id,
+        Arc::clone(&store),
+        Arc::new(graph),
+        Arc::new(lexical),
+        Arc::new(FixedClock::default()),
+    );
+    (session, store, script)
 }

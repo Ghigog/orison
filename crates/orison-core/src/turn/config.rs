@@ -10,6 +10,35 @@ use crate::inference::{KeepAlive, SamplingOptions};
 use crate::prompt::BudgetFractions;
 use crate::retrieval::{MetadataFilter, RetrievalConfig};
 
+/// How many model calls a turn makes (§4.2).
+///
+/// The experiment has three arms, and only two of them are code:
+///
+/// - **A**, the current split (Director 8B + Actor 3B), and **B**, one 8B
+///   model with two system prompts, are the *same* code path. They differ in
+///   which backends are configured, which is exactly the handoff's
+///   requirement that the arms be configuration profiles rather than three
+///   code paths — and the reason is B-10: a build that branched on a model
+///   name would be wrong the moment both roles were configured to the same
+///   model, which is arm B.
+/// - **C** is [`TurnProfile::SingleCall`]: one model, one call, one combined
+///   schema.
+///
+/// Phase 3 changed the case for C. §2.6 says `search_knowledge_graph` should
+/// be a deterministic pre-pass rather than a tool call, and that pre-pass now
+/// exists and needs no model — so a large part of the Director's original job
+/// is research it can no longer justify doing conversationally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TurnProfile {
+    /// The Actor answers; the Director composes the next beat separately, in
+    /// the background, at low priority. Arms A and B.
+    #[default]
+    TwoCalls,
+    /// One call answers as the character and updates world state, using
+    /// `CombinedTurnResponse`. Arm C.
+    SingleCall,
+}
+
 /// When the background Director runs.
 ///
 /// The Godot build fires it when `turns_since_last_director >= 2` and no
@@ -43,6 +72,8 @@ impl Default for DirectorPolicy {
 
 #[derive(Debug, Clone)]
 pub struct TurnConfig {
+    /// Which §4.2 arm this engine is running.
+    pub profile: TurnProfile,
     /// Tokens held back from the context window for the response. Subtracted
     /// from `InferenceBackend::context_length()`, which is queried from the
     /// backend and never hardcoded (B-1).
@@ -67,6 +98,7 @@ pub struct TurnConfig {
 impl Default for TurnConfig {
     fn default() -> Self {
         Self {
+            profile: TurnProfile::default(),
             response_reserve: 1024,
             fractions: BudgetFractions {
                 system: 0.30,
