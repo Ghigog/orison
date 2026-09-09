@@ -13,5 +13,5 @@ pub mod ingest {}
 pub mod knowledge {}
 pub mod memory {}
 pub mod retrieval {}
-pub mod state {}
+pub mod state;
 pub mod turn {}
