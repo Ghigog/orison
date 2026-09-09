@@ -171,8 +171,13 @@ used, and quietly detested. Most who enter it do not leave in one year.
                 "relevant": ["The Quillion Accord"],
                 "k": 10,
                 "why": ("Needle in a haystack. 'Quillion' appears in exactly one note out of "
-                        f"{notes} and nowhere in the query. Dense retrieval must carry this one; "
-                        "BM25 cannot, since the query shares no rare term with the target."),
+                        f"{notes} and nowhere in the query, so this is the paraphrase half of "
+                        "the pair with the query below and should favour dense retrieval. Note "
+                        "that BM25 also answers it, at rank 1: the target note contains the "
+                        "phrase 'boundary war' verbatim, and BM25 needs a distinctive term "
+                        "rather than a globally rare one. An earlier version of this field "
+                        "claimed BM25 could not, which measurement disproved. See "
+                        "docs/eval_baseline.md, 'Phase 3 measurement'."),
             },
             {
                 "query": "Quillion",

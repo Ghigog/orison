@@ -443,10 +443,22 @@ Levels 0/1/2 as described in [rag_architecture.md §1.3](rag_architecture.md), p
 The current design embeds whole nodes. Introduce explicit chunking with overlap for long notes, and record chunk-to-note provenance so retrieved context can cite its source note. This matters for both retrieval precision and for eventually showing the player *why* the story knows something.
 
 **Phase 3 exit criteria**
-- [ ] `messy/` fixture ingests with zero silently dropped sections.
-- [ ] Retrieval recall@5 exceeds the Godot baseline in `eval_baseline.md`.
-- [ ] Each retrieval stage's contribution measured and recorded.
-- [ ] Knowledge graph is the only entity store; no parallel dictionaries exist.
+- [x] `messy/` fixture ingests with zero silently dropped sections.
+- [x] Retrieval recall exceeds the Godot baseline in `eval_baseline.md` on every
+      fixture: `minimal` 1.000, `messy` 0.933 -> 1.000, `large` 0.875 -> 1.000,
+      measured at each query's own `k`. Both documented hard queries closed.
+- [x] Each retrieval stage's contribution measured and recorded, including the
+      reranker's null result on recall. See
+      [eval_baseline.md](eval_baseline.md), "Phase 3 measurement".
+- [x] Knowledge graph is the only entity store; no parallel dictionaries exist.
+      `tests/knowledge_graph.rs` greps the crate for them.
+
+Two caveats on those ticks, recorded rather than buried. The dense half of the
+retrieval pipeline is built and unit-tested but its *contribution to recall is
+unmeasured*, because it needs a live embedding model; every figure above is the
+lexical and structural half only. And the cross-encoder the pipeline specifies
+was not built: no model weights were reachable, and a model-free stand-in ships
+in its place with its own measurement.
 
 ---
 
@@ -648,8 +660,8 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-8 | Up to 5 sequential Director calls before narration begins | Major | Phase 2.6 | Port | Open |
 | B-10 | Stale model recommendations hardcoded rather than configured | Major | Phase 2.2 | Port | Open |
 | B-5 | Frame-coupled HTTP streaming | Moderate | Phase 2.2 | Port | Open |
-| B-9 | Dense-only retrieval on a proper-noun-dense corpus | Major | Phase 3.4 | Port | Open |
-| B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | Open |
+| B-9 | Dense-only retrieval on a proper-noun-dense corpus | Major | Phase 3.4 | Port | **Fixed** (BM25 via `tantivy` fused with dense ANN; `"Quillion"` retrieves at rank 1 with no model) |
+| B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | **Fixed** (`sqlite-vec` ANN in the campaign database) |
 | B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | **Phase 1** | Godot build | **Fixed** (recall 0.00-0.20 -> 0.88-1.00) |
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
 | B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
