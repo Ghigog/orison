@@ -17,3 +17,6 @@ thiserror = { workspace = true }
 futures = { workspace = true }
 futures-core = { workspace = true }
 tokenizers = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
