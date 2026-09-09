@@ -203,3 +203,33 @@ jobs:
           name: eval-results
           path: eval_output.log
           retention-days: 14
+
+  rust:
+    name: Rust workspace (orison-core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Phase 2 of the migration plan. `llama-cpp-2` (the LlamaCppBackend,
+    # §2.3) is deliberately left out of this job: it builds llama.cpp from
+    # source via cmake and a C++ toolchain, which is slow and not what this
+    # job is for. Build it with `--features llama-cpp` on a machine set up
+    # for it. Nothing here needs a live Ollama: the conformance suite's
+    # live-backend cases are gated behind env vars this job does not set,
+    # the same pattern the eval harness above uses for --live.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
