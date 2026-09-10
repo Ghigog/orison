@@ -233,6 +233,7 @@ purged once and must not come back.
 | Document | What it is |
 |---|---|
 | [docs/migration_plan.md](docs/migration_plan.md) | The plan off Godot. Phases, exit criteria, defect register. |
+| [docs/first_run.md](docs/first_run.md) | How to play the Rust engine, and the four runs that close Phase 5's gate. |
 | [docs/handoff_phase5.md](docs/handoff_phase5.md) | Executable brief for the current phase (the headless playable milestone). |
 | [docs/handoff_phase4.md](docs/handoff_phase4.md) | The completed orchestration brief. |
 | [docs/handoff_phase3.md](docs/handoff_phase3.md) | The completed data-layer brief. Useful as the record of what `orison-core` now provides. |

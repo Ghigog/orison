@@ -10,7 +10,8 @@ For details on the project design, developer/agent guides, and backlog tracking,
 
 - **[Migration Plan](docs/migration_plan.md)**: Ordered plan for moving off Godot to a Rust core with a Tauri 2 desktop shell, with phase-by-phase exit criteria.
 - **[Evaluation Baseline](docs/eval_baseline.md)**: The measured numbers the migration is graded against, and the defects the harness found.
-- **[Phase 2 Handoff](docs/handoff_phase2.md)**: Executable brief for the current phase, the Rust inference layer.
+- **[First Run](docs/first_run.md)**: How to play a campaign in a terminal on the Rust engine, and the four measurements that close Phase 5's migration gate.
+- **[Phase 5 Handoff](docs/handoff_phase5.md)**: Executable brief for the current phase, the headless playable milestone.
 - **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
 - **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
 - **[Agent Guide](AGENTS.md)**: Canonical guidance for developers and AI agents: constraints, layout, rules, and how to run the suite.
@@ -23,10 +24,27 @@ For details on the project design, developer/agent guides, and backlog tracking,
 
 ## Getting Started
 
-### Prerequisites
-- [Godot Engine 4.x](https://godotengine.org/) (Standard or Mono/C# version depending on final architecture).
+There are two builds in this repository. The Godot one is the reference
+implementation and is under feature freeze; the Rust one is the migration
+target and, as of Phase 5, is playable in a terminal.
 
-### Setup
+### The Rust engine (playable, headless)
+
+Needs [Rust](https://rustup.rs/) and a local [Ollama](https://ollama.com/) with a model pulled.
+
+```bash
+ollama pull llama3.2:3b
+cargo run --release -p orison-cli -- new --title "Thornwick" --vault fixtures/vaults/minimal
+cargo run --release -p orison-cli -- play thornwick --actor-model llama3.2:3b
+```
+
+See **[docs/first_run.md](docs/first_run.md)** for what to try, how to point it
+at your own vault, and the measurements Phase 5 still needs.
+
+### The Godot build (reference implementation)
+
+Prerequisites: [Godot Engine 4.x](https://godotengine.org/) (Standard or Mono/C# version depending on final architecture).
+
 1. Clone the repository.
 2. Open Godot Engine.
 3. Import the project by selecting the `project.godot` file in this directory.

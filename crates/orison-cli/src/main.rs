@@ -194,7 +194,8 @@ async fn run() -> Result<(), CliError> {
             shell.prompt();
             let played = shell.run(BufReader::new(std::io::stdin().lock())).await?;
             engine.shutdown();
-            println!("\n{} turns played.", played.len());
+            let n = played.len();
+            println!("\n{n} turn{} played.", if n == 1 { "" } else { "s" });
         }
     }
     Ok(())
