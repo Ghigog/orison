@@ -533,11 +533,11 @@ Then run the full evaluation harness and compare against `docs/eval_baseline.md`
 - [x] A campaign is playable start to finish through the CLI. *(`crates/orison-cli`. `tests/play.rs` creates a campaign, imports a vault, travels the mill road both ways, changes who it is addressing, holds three turns and reloads with the transcript intact — through `Shell::run`, the same function the binary hands `stdin` to.)*
 - [x] Every deterministic metric meets or exceeds the Godot baseline. *(Retrieval recall 1.000 on all three fixtures against a 0.875-0.933 baseline; ingest 6/6 required substrings against 3/6; schema validity 100%. `crates/orison-cli/tests/harness.rs` runs the transcript suite through the CLI itself.)*
 - [ ] Judge scores meet or exceed the baseline. **Suite built, not yet run.** `turn::judge` implements the §1.3 rubric and `harness.rs` runs it, gated on `ORISON_TEST_JUDGE_MODEL`. There is also no Godot judge baseline to compare against — Phase 1 deferred building the suite, so the baseline it would have recorded does not exist. Both halves need one machine with two models on it.
-- [ ] p95 turn latency is no worse than the baseline. **Two causes found and fixed (B-17, B-18); the confirming run has not happened.** Phase 4 measured 63.2 s / 52.9 s against 21.2 s / 20.2 s. Neither fix could be verified where it was written, because that machine had no Ollama. `tests/turn_latency.rs` now reports cache reuse as a measured fraction rather than an inference, so the re-run answers the question instead of hinting at it.
+- [ ] p95 turn latency is no worse than the baseline. **Run, and not met.** `minimal` clears it (p95 15.1 s against 21.2 s); `messy` misses by half again (p95 30.9 s against 20.2 s). Phase 4's 63.2 s / 52.9 s improved by 5.0x and 2.1x, but measured cache reuse reads **0%** on every turn of both fixtures, so B-18's `num_ctx` cap is carrying the whole gain and B-17's cache-stable ordering is not reaching the backend. Whether that 0% is the cache or the metric is unresolved and is the next thing to settle; see [eval_baseline.md](eval_baseline.md#turn-latency--the-live-re-run-phase-56).
 
 **If these are not met, do not proceed to Phase 6.** Fix the engine or reconsider the plan. A prettier shell over a worse engine is the failure mode this ordering exists to prevent.
 
-**What closing the gate now needs** is one machine with Ollama, `llama3.2:3b` and a larger model, and three commands — `turn_latency`, `director_actor_experiment`, and `orison-cli`'s `harness`. Everything else in this phase is done and green. See eval_baseline.md, "Phase 5 measurement", for the commands and for what each one would settle.
+**What closing the gate now needs** is the `messy` p95, which is a real regression against the baseline rather than a missing measurement, and the judge suite on a machine with two models. `turn_latency` has been run; see eval_baseline.md. See eval_baseline.md, "Phase 5 measurement", for the commands and for what each one would settle.
 
 ---
 
@@ -675,6 +675,7 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-16 | Character extraction never used JsonRepair, so any fenced JSON response failed | **Critical** | **Phase 1** | Godot build | **Fixed** (fields empty -> all populated) |
 | B-17 | Retrieved lore ordered ahead of the growing transcript, so the KV-cache prefix broke every turn | **Critical** | **Phase 5.0** | **Port** | **Fixed** (lore moved into the volatile tail) |
 | B-18 | `OllamaBackend` asked for the model's full advertised context window as `num_ctx` | **Critical** | **Phase 5.0** | **Port** | **Fixed** (capped at `DEFAULT_CONTEXT_LIMIT`, overridable) |
+| B-19 | A Director beat writes back the campaign row it read before its model call, reverting any move or change of speaker made while it composed | **Critical** | **Phase 5.6** | **Port** | **Fixed** (`compose_beat` reloads after the call; `tests/movement.rs`) |
 
 **B-17 and B-18 are the first two defects in this register that the port
 introduced rather than inherited**, which is why they are worth the same
@@ -684,6 +685,19 @@ Phase 4's live turn latency landing at roughly 2x the engine it was meant to
 beat. Neither was found by reading. They were found by asking why a measured
 number disagreed with a passing test, which is the only reason this register
 has entries at all.
+
+**B-19 is the third, and it was found by playing rather than by measuring.** A
+beat composed in the background wrote back the campaign row it had read before
+its model call, so a `/go` or a `/talk` made while the Director was thinking
+was silently reverted: a session that walked to Thornwick Archive and changed
+speaker reopened at Stonebridge. `save_campaign` writes the whole row, and
+`compose_beat` was the one caller whose read and write straddled an `await`.
+
+The reason no test could have caught it is worth recording separately:
+`FakeOllama` answered a non-streamed `/api/chat` — the path the Director uses —
+in microseconds, which closes the entire window in which a player can act while
+a beat composes. A stand-in that is faster than the thing it stands in for
+cannot exercise concurrency. It now waits what the streamed path would wait.
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 

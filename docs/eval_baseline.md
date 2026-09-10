@@ -701,6 +701,53 @@ Cache reuse is a measured fraction now, not an inference from
 time-to-first-token. Phase 4 could only say "TTFT rose, so probably no
 reuse"; a re-run can say what fraction of the prompt the server skipped.
 
+### Turn latency — the live re-run (Phase 5.6)
+
+Run on a MacBook Air against a local Ollama, `llama3.2:3b`, the model the
+baseline was recorded on. Director disabled, so this is the Actor turn alone,
+which is what the Godot figure measured.
+
+| Fixture | Godot p50 | Rust p50 | Rust p95 | Phase 4 p50 | Mean reuse after turn 0 |
+|---|---:|---:|---:|---:|---:|
+| `minimal` | 21200 ms | 12570 ms | 15083 ms | 63200 ms | **0%** |
+| `messy` | 20200 ms | 25028 ms | 30887 ms | 52900 ms | **0%** |
+
+**The gate is p95 against the baseline, and `messy` does not meet it.**
+`minimal` clears it with room (15.1 s against 21.2 s); `messy` misses by half
+again (30.9 s against 20.2 s). Phase 5 does not exit on these numbers.
+
+**The improvement over Phase 4 is real and large — 5.0x on `minimal`, 2.1x on
+`messy` — and none of it is attributable to B-17.** Reuse reads 0% on every
+turn of both fixtures. `evaluated` tracks `sent` at a constant ~1.11 ratio
+from the first turn to the last, which is the chat template's per-message
+overhead on top of a full re-evaluation, and time-to-first-token climbs with
+the prompt (2760 ms to 12630 ms on `minimal`) exactly as re-processing would.
+So B-18's `num_ctx` cap is carrying the entire gain, and the cache-stable
+ordering that Phase 5.0 was mostly about is not reaching this backend at all.
+
+**Two readings survive this data, and one command separates them.** Either
+the prefix genuinely is not being reused, or `prompt_eval_count` reports the
+full prompt whether or not it was cached, and the metric this section
+introduced is measuring nothing. The discriminator is `prompt_eval_duration`
+on three requests sharing one long system prefix: if the count stays flat
+while the duration collapses, reuse is working and the count is lying.
+`tests/prefix_cache.rs` runs exactly that, straight at `/api/chat` with no
+engine involved, and names which of the three readings the numbers support:
+
+```bash
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
+  cargo test -p orison-core --test prefix_cache -- --nocapture
+```
+
+Until that is run, "0% reuse" is an observation about `prompt_eval_count`,
+not yet a finding about the cache — and this document is not going to record a third
+structural defect on the strength of a number whose meaning is unestablished.
+
+The stand-in reports 75% mean reuse over the same transcripts, so it and the
+live server now disagree. That disagreement is the finding; which of them is
+wrong is the open question.
+
 ### The stand-in was flattering the code in three places
 
 Phase 4's lesson — "a test that passes against a stand-in is evidence about

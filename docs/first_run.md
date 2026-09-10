@@ -141,10 +141,16 @@ a real count.
 
 ## What still has to be measured
 
-Four commands. They need Ollama and two models, and they are the reason this
+Five commands. They need Ollama and two models, and they are the reason this
 document exists — nothing else in Phase 5 is outstanding.
 
 ### 1. Turn latency. This is the gate.
+
+> **Run, and the gate is not met.** `minimal` clears it at p95 15.1 s;
+> `messy` misses at 30.9 s against 20.2 s. Reuse read **0%** on every turn of
+> both. The numbers and what they mean are in
+> [eval_baseline.md](eval_baseline.md#turn-latency--the-live-re-run-phase-56).
+> Re-run it after any change to prompt assembly or the backend.
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
@@ -173,6 +179,18 @@ turn |      sent | evaluated |  reused |      ttft |     total
 
 Phase 4 had only time-to-first-token to read and could not tell those apart.
 That is the change that matters most in this phase.
+
+**When reuse reads zero, run this next.** A zero can mean the prefix is not
+being reused, or that this Ollama reports the full `prompt_eval_count`
+whether it cached the prompt or not. The latency table cannot tell those
+apart; three requests sharing one system prefix can, and the test says which
+reading its own numbers support:
+
+```bash
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
+  cargo test -p orison-core --test prefix_cache -- --nocapture
+```
 
 ### 2. The judge suite, and its first numbers
 

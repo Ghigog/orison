@@ -1355,7 +1355,14 @@ impl TurnEngine {
         };
         let beat: DirectorResponse = response.parse()?;
 
-        let mut next = campaign.clone();
+        // Reload rather than write back the snapshot taken before the call.
+        // `save_campaign` writes the whole row, and the call above is ten to
+        // thirty seconds of model time during which the player is free to
+        // `/go` somewhere else or `/talk` to somebody else. Writing the
+        // pre-call snapshot reverts whatever they did, silently, which is
+        // B-19. `consume_pending_scene` already reloads for this reason;
+        // this is the one place that straddles an `await` and did not.
+        let mut next = self.load_campaign()?;
         next.pending_scene = Some(
             serde_json::to_string(&beat)
                 .map_err(|e| TurnError::Inference(crate::inference::InferenceError::Decode(e)))?,

@@ -11,8 +11,11 @@ use std::time::Duration;
 
 use orison_core::inference::InferenceBackend;
 use orison_core::inference::OllamaBackend;
-use orison_core::turn::{TurnConfig, TurnEngine, TurnError};
-use support::{character_response_json, fixture_session, test_tokenizer, FakeOllama};
+use orison_core::turn::{DirectorState, TurnConfig, TurnEngine, TurnError};
+use support::{
+    character_response_json, combined_response_json, director_response_json, fixture_session,
+    test_tokenizer, FakeOllama,
+};
 
 async fn engine() -> Arc<TurnEngine> {
     let server = FakeOllama::start(
@@ -156,4 +159,109 @@ async fn who_is_present_follows_the_graph_and_excludes_what_cannot_speak() {
         "Bram holds the toll post at Stonebridge: {here:?}"
     );
     assert!(!here.contains(&"The Kettle".to_string()));
+}
+
+/// B-19: a beat composed while the player walks away must not walk them back.
+///
+/// `compose_beat` runs fire-and-forget after the Actor's turn resolves, and
+/// its model call is ten to thirty seconds of real time. `save_campaign`
+/// writes the whole campaign row, so a beat that writes back the snapshot it
+/// took *before* that call reverts every state change the player made while
+/// it was thinking — where they are standing and who they are addressing.
+///
+/// Found by playing: a session that moved to Thornwick Archive, changed
+/// speaker and took a turn reopened at Stonebridge, addressing the character
+/// the move had left behind.
+#[tokio::test]
+async fn a_beat_composed_in_the_background_does_not_revert_a_move() {
+    // Slow enough that the move below lands inside the Director's call, which
+    // is the race. `by_schema` answers the Actor and the Director each with
+    // the shape its request asked for.
+    let server = FakeOllama::by_schema(
+        character_response_json("He nods.", "Aye, five coppers."),
+        director_response_json("The mill wheel slows."),
+        combined_response_json("He nods.", "Aye."),
+        12,
+        Duration::from_millis(60),
+    )
+    .await;
+    let backend: Arc<dyn InferenceBackend> = Arc::new(
+        OllamaBackend::connect(server.url(), "stand-in", test_tokenizer())
+            .await
+            .expect("connect"),
+    );
+    let (session, _store, _script) = fixture_session("minimal");
+
+    let mut config = TurnConfig::default();
+    // A beat on the very first turn, so the window under test opens at once.
+    config.director.enabled = true;
+    config.director.turn_threshold = 1;
+    config.director.cooldown_turns = 0;
+    let engine = TurnEngine::new(session, Arc::clone(&backend), backend, config);
+
+    engine.move_to_location("Stonebridge").expect("travel");
+    engine.select_character("bram_holt").expect("select");
+
+    let outcome = engine.player_input("What's the toll?").await.expect("turn");
+    assert!(
+        outcome.director_triggered,
+        "the race needs a beat in flight; none was composed"
+    );
+
+    // Wait for the beat to reach its model call. `Composing` is set after
+    // `compose_beat` has read the campaign row and before it awaits the
+    // model, which is precisely the window a stale write-back would lose.
+    // Moving before the job starts proves nothing: it would read the row
+    // after the move and write the right thing by luck.
+    for _ in 0..400 {
+        if engine.director_state() == DirectorState::Composing {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        engine.director_state(),
+        DirectorState::Composing,
+        "the beat never reached its model call, so the race was never opened"
+    );
+
+    // The player walks on while the Director is still thinking. This is the
+    // ordinary case, not a contrived one: the beat takes longer than reading
+    // the reply does.
+    engine
+        .move_to_location("Thornwick Archive")
+        .expect("travel while the beat composes");
+    engine.select_character("elara_voss").expect("select");
+
+    // Let the beat land.
+    for _ in 0..200 {
+        if engine.director_state() == DirectorState::Ready {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        engine.director_state(),
+        DirectorState::Ready,
+        "the beat never finished, so the race was never run"
+    );
+
+    assert_eq!(
+        engine.current_location().unwrap().map(|e| e.label),
+        Some("Thornwick Archive".to_string()),
+        "the beat wrote back a stale campaign row and moved the player back"
+    );
+    let speaking: Option<String> = engine
+        .session()
+        .with_store(|store| {
+            Ok(store
+                .load_campaign(engine.session().campaign_id())?
+                .map(|c| c.active_character))
+        })
+        .expect("read the campaign row");
+    assert_eq!(
+        speaking.as_deref(),
+        Some("elara_voss"),
+        "the beat wrote back a stale campaign row and changed who is speaking"
+    );
 }
