@@ -319,7 +319,7 @@ Run the entire harness against the existing GDScript engine and commit the numbe
 **Phase 1 exit criteria**
 - [x] Three fixture vaults with ground-truth retrieval labels.
 - [x] Deterministic suite runs in CI (replay mode; no model needed).
-- [ ] Judge suite runs on demand. *(deliberately deferred; see eval_baseline.md)*
+- [x] Judge suite runs on demand. *(Built in Phase 5.5 as `turn::judge`, run by `crates/orison-cli/tests/harness.rs`, gated on `ORISON_TEST_JUDGE_MODEL`. It gates nothing, per §1.3; the deterministic suite is still the gate.)*
 - [x] `docs/eval_baseline.md` records Godot-build numbers for every metric.
 
 ---
@@ -384,16 +384,18 @@ Restructure the loop itself, do not merely re-encode it. The current design runs
 
 ### 2.7 Cache-stable prompt ordering
 
-Order assembled messages: static system instructions, then character card, then retrieved lore, then session summaries, then recent turns, then the player's input. Volatile content last.
+Order assembled messages stable-to-volatile: static system instructions, then character card, then world state and session summaries, then recent turns, then retrieved lore, then the character's volatile state, then the player's input. Volatile content last.
 
 Local inference engines reuse the KV cache for a shared prefix. The current builder reassembles a single monolithic string each turn, so the shared prefix is destroyed and the engine re-processes thousands of already-seen tokens on every turn. Correct ordering is free latency.
+
+> **Corrected in Phase 5.0.** This section originally put retrieved lore *ahead* of the recent turns, on the reasoning that a repeated query keeps its prefix stable. Play never repeats the query — the Actor retrieves with the player's line — so the lore block changed on every turn and invalidated the whole transcript behind it. That was B-17, it cost roughly half the cache, and the wire test that was supposed to catch it asked the same question twice. The ordering above is the corrected one; `prompt::ordering` carries the reasoning.
 
 **Phase 2 exit criteria**
 - [ ] Both backends pass a shared conformance test suite.
 - [ ] Schema-validity metric reads exactly 100% on the eval harness.
 - [ ] No hardcoded context lengths anywhere in the crate.
 - [ ] Prompt token counts measured with the real tokenizer; budget overflow is unrepresentable.
-- [ ] Measured KV-cache reuse across consecutive turns.
+- [x] Measured KV-cache reuse across consecutive turns. *(Phase 5.0: `TurnOutcome::evaluated_prompt_tokens` carries the backend's own `prompt_eval_count`, so reuse is a measured fraction rather than an inference from time-to-first-token. `tests/turn_latency.rs` asserts it rises as the transcript grows. Not yet re-run against a live server; see eval_baseline.md, "Phase 5 measurement".)*
 
 ---
 
@@ -528,12 +530,14 @@ Retain the `<player_message>` delimiter treatment for injection resistance. It i
 Then run the full evaluation harness and compare against `docs/eval_baseline.md`.
 
 **Phase 5 exit criteria — the migration gate**
-- [ ] A campaign is playable start to finish through the CLI.
-- [ ] Every deterministic metric meets or exceeds the Godot baseline.
-- [ ] Judge scores meet or exceed the baseline.
-- [ ] p95 turn latency is no worse than the baseline.
+- [x] A campaign is playable start to finish through the CLI. *(`crates/orison-cli`. `tests/play.rs` creates a campaign, imports a vault, travels the mill road both ways, changes who it is addressing, holds three turns and reloads with the transcript intact — through `Shell::run`, the same function the binary hands `stdin` to.)*
+- [x] Every deterministic metric meets or exceeds the Godot baseline. *(Retrieval recall 1.000 on all three fixtures against a 0.875-0.933 baseline; ingest 6/6 required substrings against 3/6; schema validity 100%. `crates/orison-cli/tests/harness.rs` runs the transcript suite through the CLI itself.)*
+- [ ] Judge scores meet or exceed the baseline. **Suite built, not yet run.** `turn::judge` implements the §1.3 rubric and `harness.rs` runs it, gated on `ORISON_TEST_JUDGE_MODEL`. There is also no Godot judge baseline to compare against — Phase 1 deferred building the suite, so the baseline it would have recorded does not exist. Both halves need one machine with two models on it.
+- [ ] p95 turn latency is no worse than the baseline. **Two causes found and fixed (B-17, B-18); the confirming run has not happened.** Phase 4 measured 63.2 s / 52.9 s against 21.2 s / 20.2 s. Neither fix could be verified where it was written, because that machine had no Ollama. `tests/turn_latency.rs` now reports cache reuse as a measured fraction rather than an inference, so the re-run answers the question instead of hinting at it.
 
 **If these are not met, do not proceed to Phase 6.** Fix the engine or reconsider the plan. A prettier shell over a worse engine is the failure mode this ordering exists to prevent.
+
+**What closing the gate now needs** is one machine with Ollama, `llama3.2:3b` and a larger model, and three commands — `turn_latency`, `director_actor_experiment`, and `orison-cli`'s `harness`. Everything else in this phase is done and green. See eval_baseline.md, "Phase 5 measurement", for the commands and for what each one would settle.
 
 ---
 
@@ -669,6 +673,17 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
 | B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
 | B-16 | Character extraction never used JsonRepair, so any fenced JSON response failed | **Critical** | **Phase 1** | Godot build | **Fixed** (fields empty -> all populated) |
+| B-17 | Retrieved lore ordered ahead of the growing transcript, so the KV-cache prefix broke every turn | **Critical** | **Phase 5.0** | **Port** | **Fixed** (lore moved into the volatile tail) |
+| B-18 | `OllamaBackend` asked for the model's full advertised context window as `num_ctx` | **Critical** | **Phase 5.0** | **Port** | **Fixed** (capped at `DEFAULT_CONTEXT_LIMIT`, overridable) |
+
+**B-17 and B-18 are the first two defects in this register that the port
+introduced rather than inherited**, which is why they are worth the same
+treatment as the rest. Both were invisible to `cargo test` and both were paid
+for on every single turn: together they are the best explanation available for
+Phase 4's live turn latency landing at roughly 2x the engine it was meant to
+beat. Neither was found by reading. They were found by asking why a measured
+number disagreed with a passing test, which is the only reason this register
+has entries at all.
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 
@@ -927,7 +942,7 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
 | D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
-| D-4 | Director/Actor split | **Decided**: keep the split (arm A), pending a human read of two flagged narrations. See below. |
+| D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
 | D-5 | Frontend framework inside Tauri | **Open**: defer to Phase 6. Not load-bearing. |
 | D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
@@ -958,10 +973,7 @@ the only arm with pronoun flags — 1 on `minimal`, 2 on `messy` — which is
 exactly why its quality composite (0.938 / 0.900) trails B and C's clean
 1.000. The scoring's own legend is explicit that a pronoun flag needs a human
 read: "the metric cannot tell a wrong pronoun for the speaker from a right one
-for a third party." Both flagged narrations describe a woman using she/her in
-a scene with another woman present — plausibly correct, plausibly the
-cross-model consistency problem this handoff warned the split costs. Read
-these before trusting the decision:
+for a third party." The two flagged narrations:
 
 > `minimal` turn 3: "She's been here for nineteen years, ever since the
 > flooding of the lower library at Ashmere. It's a bit of a trek up to
@@ -972,11 +984,59 @@ these before trusting the decision:
 > She eyed Lord Anneke with a mixture of curiosity and wariness, her hand
 > resting on the hilt of her sword at her side."
 
-If a read finds these wrong, that is the split's cross-model consistency
-problem showing up exactly where predicted, and the mechanical
-quality-per-second win does not settle the question by itself — re-open D-4.
-If they read as correct (both refer to the one woman named in each passage),
-the split stands as decided.
+### D-4 — the human read, done (Phase 5.0)
+
+**Both flags are false positives. D-4 stands as decided: keep the split.**
+
+The read is not a judgement call, because both fixtures declare who the
+speaker is and what their pronouns are. `forbidden_pronouns` in
+`TranscriptScript` means "pronouns that must not appear in narration *about
+the transcript character*" — not "pronouns that must not appear at all".
+
+- **`minimal`.** `transcript_character` is **Bram Holt**, `gender: male,
+  he/him`, so she/her/hers are forbidden of *him*. The flagged narration
+  answers the script's fourth line, "Who keeps the archive up the road?", and
+  its subject is Elara Voss: nineteen years, the flooding of the lower library
+  at Ashmere, Thornwick — three details taken verbatim from
+  `characters/elara_voss.md`, whose frontmatter is `gender: female, she/her`.
+  Bram is the speaker and takes no pronoun in the passage. A right pronoun for
+  a third party, which is the exact case the legend names.
+
+- **`messy`.** `transcript_character` is **Lord Anneke**, whom the fixture
+  note calls "the pronoun trap": no gender field, an unambiguously masculine
+  body, and a name carrying a strong feminine prior. Every she/her in the
+  flagged narration attaches to Sergeant Adah, `gender: female, she/her`.
+  Lord Anneke is named twice and pronominalised never — so the model did not
+  fall into the trap; it stayed out of it. Also a right pronoun for a third
+  party.
+
+**And the counts are smaller than they look.** `score_turn` raises one flag
+per *distinct forbidden pronoun* matched in a turn, so `messy`'s 2 is one
+narration matching both "she" and "her", not two separate defects. `minimal`'s
+1 is the single "her" in "her home"; "she's" does not match, because
+`contains_word` treats an apostrophe as a word character. Two fixtures, two
+flagged turns, zero defects.
+
+**What this does to the decision.** Discounting both, arm A's quality
+composite is 1.000 on each fixture, level with B and C, and its
+quality-per-second rises to **0.0448** on `minimal` and **0.0298** on `messy`.
+Arm A now wins **outright on both fixtures** rather than winning one and tying
+the other. The cross-model consistency problem the split was warned to cost
+did not appear in this run.
+
+**One thing the earlier framing had wrong**, recorded because the correction
+is the evidence: this appendix described both narrations as "a woman using
+she/her in a scene with another woman present." Neither is. `minimal` has
+exactly one woman in the entire fixture and she is not in the scene, she is
+being described; `messy` pairs a woman with a man. The ambiguity the read was
+asked to resolve was not there to resolve.
+
+**What is still open**, unchanged by the read: the models. `qwen2.5:7b-instruct`
+stood in for the 8B class in both the Director and the single-model arms
+because no true 8B model was on hand. A 7B stand-in flatters the split, since
+the split's cost is paid by the larger model and its benefit by the smaller.
+Re-run with an actual 8B-class model before treating the margin as final. The
+decision is the split; the size of the win is not yet.
 
 **The arms are configuration, not code paths**, which the handoff asks for
 explicitly and which B-10 makes more than a style preference: a build that

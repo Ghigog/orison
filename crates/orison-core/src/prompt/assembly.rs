@@ -194,11 +194,15 @@ impl<'a> TurnPrompt<'a> {
     /// | Block | Slot | Why |
     /// |---|---|---|
     /// | Instructions, character card, player card | first | fixed for a scene |
-    /// | Retrieved lore | after | changes with the query |
-    /// | World state, memory | after that | changes occasionally |
+    /// | World state, memory | after | changes occasionally |
     /// | Transcript | after that | appends, never rewrites |
+    /// | Retrieved lore | last but two | the query is the player's line, so it changes every turn |
     /// | Emotional profile | last but one | changes most turns |
     /// | The player's line | last | new every single call |
+    ///
+    /// Lore was ordered ahead of the transcript until Phase 5.0, on the
+    /// reasoning that a repeated query keeps its prefix stable. Play does not
+    /// repeat the query. See [`super::ordering`].
     pub fn sections(self) -> PromptSections {
         let speech = self.speech.resolve();
         let instructions = if self.combined {

@@ -30,6 +30,53 @@ pub struct OllamaBackend {
     capabilities: Capabilities,
 }
 
+/// The largest context this backend will ask a model to serve unless told
+/// otherwise, in tokens.
+///
+/// **Why there is a ceiling at all.** Ollama sizes the runner's KV cache from
+/// `num_ctx` when the model loads, not from how many tokens the prompt
+/// actually uses, and it charges that memory whether the window is filled or
+/// not. `/api/show` reports what a model *can* serve, which for `llama3.2:3b`
+/// is 131072 — sixteen times the 8192 the Godot baseline was recorded at, and
+/// tens of gigabytes of KV cache for a 3B model. Passing the advertised
+/// figure straight through is how Phase 4's live turn latency came in at
+/// roughly 2x the engine it was supposed to beat (`docs/eval_baseline.md`,
+/// "Turn latency — measured"): the machine could not hold the cache, layers
+/// spilled off the GPU, and every turn paid for it.
+///
+/// **Why this number.** 8192 is what `LLMClient.world_builder_context` and
+/// `character_context` send, so a Rust turn and a Godot turn are served the
+/// same window and the latency comparison measures the engine rather than the
+/// allocation. It is a default, not a constant in the B-1 sense: it is
+/// overridable per backend through [`OllamaConfig::context_limit`], it is
+/// never selected by comparing a model name, and whatever it resolves to is
+/// the single number that feeds both `num_ctx` and
+/// [`InferenceBackend::context_length`] — so the prompt budget and the served
+/// window can never disagree, which is the defect B-1 actually names.
+pub const DEFAULT_CONTEXT_LIMIT: usize = 8192;
+
+/// Fallback when `/api/show` reports no context length at all.
+const UNKNOWN_CONTEXT_LENGTH: usize = 4096;
+
+/// Connection options for [`OllamaBackend::connect_with`].
+#[derive(Debug, Clone)]
+pub struct OllamaConfig {
+    /// Cap on the served context window. The backend uses the smaller of
+    /// this and what the model advertises, so raising it can never exceed
+    /// what the model supports. `None` means "whatever the model advertises",
+    /// which is the shape that caused the regression above — take it
+    /// deliberately, on a machine with the memory for it.
+    pub context_limit: Option<usize>,
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            context_limit: Some(DEFAULT_CONTEXT_LIMIT),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct OllamaChatRequest<'a> {
     model: &'a str,
@@ -145,8 +192,11 @@ struct OllamaChatResponse {
     message: OllamaMessage,
     #[serde(default)]
     done: bool,
+    /// Prompt tokens Ollama actually evaluated. Tokens served from its own
+    /// prompt cache are not counted here, which is what makes this the
+    /// honest cache-reuse signal. Absent on every chunk but the last.
     #[serde(default)]
-    prompt_eval_count: usize,
+    prompt_eval_count: Option<usize>,
     #[serde(default)]
     eval_count: usize,
 }
@@ -174,11 +224,22 @@ impl OllamaBackend {
     /// Connect to `base_url` for `model`, loading `tokenizer` (the model's
     /// real tokenizer, per §2.5 — never a `length / 4` estimate) and
     /// querying the backend for its actual context length (never hardcoded,
-    /// per B-1).
+    /// per B-1), capped at [`DEFAULT_CONTEXT_LIMIT`].
     pub async fn connect(
         base_url: impl Into<String>,
         model: impl Into<String>,
         tokenizer: Tokenizer,
+    ) -> Result<Self, InferenceError> {
+        Self::connect_with(base_url, model, tokenizer, OllamaConfig::default()).await
+    }
+
+    /// [`connect`](Self::connect) with an explicit context ceiling. See
+    /// [`OllamaConfig::context_limit`] for what raising or removing it costs.
+    pub async fn connect_with(
+        base_url: impl Into<String>,
+        model: impl Into<String>,
+        tokenizer: Tokenizer,
+        config: OllamaConfig,
     ) -> Result<Self, InferenceError> {
         let base_url = base_url.into();
         let model = model.into();
@@ -206,12 +267,19 @@ impl OllamaBackend {
         }
 
         let show: OllamaShowResponse = resp.json().await?;
-        let context_length = show
+        // What the model can serve, and then what we are willing to pay for.
+        // Both halves matter: never hardcode the model's window (B-1), and
+        // never allocate the whole of it just because it exists.
+        let advertised = show
             .model_info
             .iter()
             .find(|(k, _)| k.ends_with(".context_length"))
             .and_then(|(_, v)| v.as_u64())
-            .unwrap_or(4096) as usize;
+            .unwrap_or(UNKNOWN_CONTEXT_LENGTH as u64) as usize;
+        let context_length = match config.context_limit {
+            Some(limit) => advertised.min(limit.max(1)),
+            None => advertised,
+        };
 
         let capabilities = Capabilities {
             tools: show.capabilities.iter().any(|c| c == "tools"),
@@ -255,6 +323,9 @@ impl OllamaBackend {
             options: OllamaOptions {
                 temperature: req.sampling.temperature,
                 top_p: req.sampling.top_p,
+                // The same number `context_length()` hands the prompt budget.
+                // One field, one source: B-1 is what happens when a request
+                // and a budget disagree about the window.
                 num_ctx: self.context_length,
             },
             keep_alive: req.keep_alive,
@@ -306,7 +377,7 @@ impl InferenceBackend for OllamaBackend {
         Ok(ChatResponse {
             message: from_ollama_message(parsed.message),
             done_reason,
-            prompt_tokens: parsed.prompt_eval_count,
+            prompt_tokens: parsed.prompt_eval_count.unwrap_or(0),
             completion_tokens: parsed.eval_count,
         })
     }
@@ -370,6 +441,7 @@ impl InferenceBackend for OllamaBackend {
                                         .collect()
                                 }),
                                 done: parsed.done,
+                                evaluated_prompt_tokens: parsed.prompt_eval_count,
                             })),
                             Err(e) => deltas.push(Err(e.into())),
                         }

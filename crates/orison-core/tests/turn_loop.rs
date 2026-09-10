@@ -20,6 +20,11 @@ use support::{
     character_response_json, director_response_json, test_session, test_tokenizer, FakeOllama,
 };
 
+/// How many messages at the back of a request are new on every call: the
+/// retrieved lore, the emotional profile, and the player's line. Mirrors
+/// `PromptSections::volatile_tail_len` for the shape these tests build.
+const VOLATILE_TAIL: usize = 3;
+
 async fn backend(server: &FakeOllama) -> Arc<dyn InferenceBackend> {
     Arc::new(
         OllamaBackend::connect(server.url(), "stand-in", test_tokenizer())
@@ -116,12 +121,19 @@ async fn a_turn_runs_end_to_end() {
 
 /// §2.7, measured at the wire rather than in a unit test.
 ///
-/// Two claims, and they are different strengths. The character card and the
-/// system instructions are *always* stable across a scene, so they must be
-/// byte-identical on every turn. Retrieved lore is per-query and therefore
-/// only stable when the query retrieves the same thing — which is why
-/// `PromptSections` orders it ahead of the growing history rather than
-/// pretending it never changes.
+/// The claim is one claim now, and it is the strong one: **two consecutive
+/// turns on different subjects still share every message up to this turn's
+/// own volatile tail.** The instructions, the character card, world state and
+/// memory do not move, and turn one's player line and answer reappear
+/// byte-for-byte as turn two's transcript.
+///
+/// This test asked something weaker until Phase 5.0. It sent *the same
+/// question twice*, so the retrieved lore happened to be identical and the
+/// assertion passed with lore ordered ahead of the transcript — where, in
+/// play, it changed on every turn and invalidated everything behind it. The
+/// wire test was green and the live measurement was 2x the Godot baseline.
+/// A stand-in only tells you about the stand-in until the case it exercises
+/// is the case that actually runs.
 #[tokio::test]
 async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
     let server = FakeOllama::start(
@@ -139,14 +151,14 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
         quiet_director(),
     );
 
-    // The same question twice, so retrieval returns the same lore and the
-    // whole stable half of the prompt can be compared.
+    // Two different subjects, which is what a played scene looks like and
+    // what the latency harness measures.
     engine
-        .player_input("Where is the ledger kept?")
+        .player_input("Tell me about the boundary accord.")
         .await
         .expect("turn one");
     engine
-        .player_input("Where is the ledger kept?")
+        .player_input("And the counting house?")
         .await
         .expect("turn two");
 
@@ -162,10 +174,11 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
         "turn two should carry turn one in its history"
     );
 
-    // Everything before the volatile pair — instructions and card, the lore
-    // for a query that has not changed, world state and memory — is the
-    // prefix a KV-cache-reusing engine can skip, and must be byte-identical.
-    let stable = first_messages.len() - 2;
+    // The volatile tail is the last three messages: this turn's lore, this
+    // turn's emotional profile, this turn's player line. Everything before
+    // it is the cached prefix, and it must survive a change of subject.
+    let stable = first_messages.len() - VOLATILE_TAIL;
+    assert!(stable >= 2, "there should be a prefix worth caching");
     for i in 0..stable {
         assert_eq!(
             first_messages[i], second_messages[i],
@@ -181,9 +194,10 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
         "the player's line must replay exactly as it was sent"
     );
 
-    // The two volatile blocks are the last two messages in both requests:
-    // how the character feels, then what the player just said.
+    // And the tail is in the order `PromptSections` documents.
     for messages in [first_messages, second_messages] {
+        let lore = &messages[messages.len() - 3];
+        assert_eq!(lore["role"], "system");
         let volatile = &messages[messages.len() - 2];
         assert_eq!(volatile["role"], "system");
         assert!(volatile["content"]
@@ -197,11 +211,22 @@ async fn consecutive_turns_send_a_byte_identical_prompt_prefix() {
             .unwrap()
             .contains("<player_message>"));
     }
+
+    // The thing that made the weak version of this test pass for the wrong
+    // reason: the lore really did change between these two turns, so the
+    // prefix above held in spite of a moving block rather than because
+    // nothing moved.
+    assert_ne!(
+        first_messages[first_messages.len() - 3],
+        second_messages[second_messages.len() - 3],
+        "the two subjects retrieved the same lore, so this proves nothing — \
+         pick queries that retrieve differently"
+    );
 }
 
-/// The weaker half, stated so nobody mistakes it for the stronger one: when
-/// the query changes, the lore block changes with it, and only the system
-/// block is guaranteed.
+/// The character card is the front of the prefix and never moves, stated
+/// separately because it is the block whose stability everything else is
+/// ordered around.
 #[tokio::test]
 async fn the_character_card_survives_a_change_of_subject() {
     let server = FakeOllama::start(

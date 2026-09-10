@@ -25,7 +25,7 @@ use crate::emotion::{EmotionEngine, EmotionState};
 use crate::inference::{
     ChatMessage, ChatRequest, InferenceBackend, InferenceError, ResponseFormat,
 };
-use crate::knowledge::{CanonicalField, EntityId, EntityKind};
+use crate::knowledge::{CanonicalField, Entity, EntityId, EntityKind};
 use crate::memory::{CompactionPlan, DistillationPlan, MemoryManager};
 use crate::prompt::assembly::{
     player_message, CharacterCard, DirectorPrompt, PlayerCard, TurnPrompt, WorldSnapshot,
@@ -66,8 +66,26 @@ pub struct TurnOutcome {
     /// of latency that a person actually feels.
     pub time_to_first_token: Option<Duration>,
     pub prompt_tokens: usize,
+    /// Prompt tokens the backend reported evaluating, when it reports them.
+    ///
+    /// Read against `prompt_tokens`: the two are close when the backend
+    /// re-processed the whole prompt and far apart when it served most of it
+    /// from a cached prefix. This is what §2.7's ordering work is for, and
+    /// measuring it directly is how Phase 5 tells a cache hit from a fast
+    /// machine — `docs/eval_baseline.md`'s Phase 4 run had only
+    /// time-to-first-token to go on and could conclude nothing from it.
+    pub evaluated_prompt_tokens: Option<usize>,
     pub completion_tokens: usize,
     pub retrieved: usize,
+    /// The lore block this turn's prompt actually carried, when it carried
+    /// one.
+    ///
+    /// Kept rather than recomputed because the two are not the same thing:
+    /// re-running retrieval later asks a different question of a database
+    /// that has since moved. Anything grading a turn — the judge suite most
+    /// of all — has to see the material the Actor saw, or it measures
+    /// retrieval twice and the response not at all.
+    pub retrieved_context: Option<String>,
     pub director_triggered: bool,
     /// The world-state half of the response, on the single-call arm. `None`
     /// on the two-call arm, where the Director composes it separately.
@@ -235,6 +253,173 @@ impl TurnEngine {
             self.spawn_baseline_deduction(entity_id);
         }
         Ok(())
+    }
+
+    /// Where the player is standing, if anywhere.
+    ///
+    /// A campaign whose vault has no locations never sets one, and that is a
+    /// legitimate shape rather than an error: `minimal` has two locations,
+    /// and a vault of nothing but character notes has none.
+    pub fn current_location(&self) -> Result<Option<Entity>, TurnError> {
+        let campaign = self.load_campaign()?;
+        let id = campaign.active_location.trim();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        Ok(self
+            .session
+            .graph()
+            .get(&EntityId::from_stored(id))
+            .cloned())
+    }
+
+    /// Every location in this campaign's graph, by label.
+    pub fn locations(&self) -> Vec<Entity> {
+        let mut all: Vec<Entity> = self
+            .session
+            .graph()
+            .by_kind(EntityKind::Location)
+            .cloned()
+            .collect();
+        all.sort_by(|a, b| a.label.cmp(&b.label));
+        all
+    }
+
+    /// Locations reachable in one step from where the player is standing.
+    ///
+    /// The vault's own connections, not a movement system invented here: a
+    /// `connections:` field or a wiki-link between two location notes becomes
+    /// an edge at ingest, and this reads those. With nowhere active, every
+    /// location is an exit — the player has to start somewhere.
+    pub fn exits(&self) -> Result<Vec<Entity>, TurnError> {
+        let Some(here) = self.current_location()? else {
+            return Ok(self.locations());
+        };
+        let graph = self.session.graph();
+        let mut exits: Vec<Entity> = graph
+            .neighbours(&here.id)
+            .into_iter()
+            .filter_map(|id| graph.get(&id))
+            .filter(|e| e.kind == EntityKind::Location)
+            .cloned()
+            .collect();
+        exits.sort_by(|a, b| a.label.cmp(&b.label));
+        Ok(exits)
+    }
+
+    /// Move the player to a location (§5.4).
+    ///
+    /// Refuses a destination that is not a location, and one nothing connects
+    /// to the current location — both as [`TurnError::CannotTravel`] with a
+    /// detail that says which, because "no such place" and "you cannot get
+    /// there from here" are different answers.
+    ///
+    /// The move is written to the transcript as narration. That is not
+    /// decoration: the next turn's prompt is assembled from world state *and*
+    /// the transcript, and a character who is never told the player walked in
+    /// will answer as though they did not.
+    pub fn move_to_location(&self, name: &str) -> Result<Entity, TurnError> {
+        let graph = self.session.graph();
+        let destination = graph
+            .resolve(name)
+            .and_then(|id| graph.get(id))
+            .cloned()
+            .ok_or_else(|| TurnError::CannotTravel {
+                to: name.to_string(),
+                detail: format!("there is no place called \"{name}\" in this campaign"),
+            })?;
+
+        if destination.kind != EntityKind::Location {
+            return Err(TurnError::CannotTravel {
+                to: destination.label.clone(),
+                detail: format!(
+                    "{} is a {}, not a place you can travel to",
+                    destination.label,
+                    destination.kind.as_str()
+                ),
+            });
+        }
+
+        let mut campaign = self.load_campaign()?;
+        if campaign.active_location == destination.id.as_str() {
+            return Err(TurnError::CannotTravel {
+                to: destination.label.clone(),
+                detail: format!("you are already at {}", destination.label),
+            });
+        }
+
+        if let Some(here) = self.current_location()? {
+            let connected = graph.neighbours(&here.id).contains(&destination.id);
+            if !connected {
+                return Err(TurnError::CannotTravel {
+                    to: destination.label.clone(),
+                    detail: format!("nothing connects {} to {}", here.label, destination.label),
+                });
+            }
+        }
+
+        campaign.active_location = destination.id.as_str().to_string();
+        self.session
+            .with_store(|store| store.save_campaign(&campaign))?;
+
+        self.append_history(
+            HistoryRole::Narrator,
+            &format!("The player travels to {}.", destination.label),
+            Some("narrator"),
+            None,
+        )?;
+
+        self.emit(TurnEvent::LocationChanged {
+            entity_id: destination.id.as_str().to_string(),
+            label: destination.label.clone(),
+        });
+        Ok(destination)
+    }
+
+    /// Characters the player could plausibly speak to from where they stand.
+    ///
+    /// The port of `NearbyCharacterList.get_nearby_character_ids`, and much
+    /// shorter than it, because Phase 3 moved the work: that function checked
+    /// graph edges, then searched biographies for the location's name as a
+    /// substring, then re-read frontmatter `connections:`. Ingest now turns
+    /// all three into edges — `AssociatedWith` for a tag or link onto a
+    /// location, `Mentions` for a name written in prose — so one neighbour
+    /// query answers what three heuristics used to.
+    ///
+    /// Two behaviours are kept deliberately. Characters that cannot speak
+    /// are excluded — `minimal`'s Kettle is a creature with `can_speak:
+    /// false` and belongs in no conversation list — and a campaign whose
+    /// vault has no locations at all returns every character rather than
+    /// none: the alternative is a playable vault with nobody in it.
+    pub fn characters_present(&self) -> Result<Vec<Entity>, TurnError> {
+        let graph = self.session.graph();
+        let speakable = |e: &&Entity| speech_of(Some(e)) == Speech::Verbal;
+
+        let Some(here) = self.current_location()? else {
+            let mut all: Vec<Entity> = graph
+                .by_kind(EntityKind::Character)
+                .filter(speakable)
+                .cloned()
+                .collect();
+            all.sort_by(|a, b| a.label.cmp(&b.label));
+            return Ok(all);
+        };
+
+        // One hop reaches characters attached to this place; two reaches
+        // those attached to an adjoining one, which is the "regional edge"
+        // rule the Godot list applied by walking the location's neighbours
+        // itself.
+        let mut nearby: Vec<Entity> = graph
+            .within(&here.id, 2)
+            .into_iter()
+            .filter_map(|id| graph.get(&id))
+            .filter(|e| e.kind == EntityKind::Character)
+            .filter(speakable)
+            .cloned()
+            .collect();
+        nearby.sort_by(|a, b| a.label.cmp(&b.label));
+        nearby.dedup_by(|a, b| a.id == b.id);
+        Ok(nearby)
     }
 
     /// Deduce a character's resting disposition from their biography.
@@ -483,8 +668,10 @@ impl TurnEngine {
             latency: started.elapsed(),
             time_to_first_token: streamed.time_to_first_token,
             prompt_tokens,
+            evaluated_prompt_tokens: streamed.evaluated_prompt_tokens,
             completion_tokens,
             retrieved: lore.count,
+            retrieved_context: (lore.count > 0).then(|| lore.text.clone()),
             director_triggered,
             beat,
         })
@@ -711,6 +898,7 @@ impl TurnEngine {
         let mut parser = FieldStreamer::new(&["narration", "dialogue"]);
         let mut text = String::new();
         let mut time_to_first_token = None;
+        let mut evaluated_prompt_tokens = None;
         let mut zone: Option<&'static str> = None;
 
         loop {
@@ -721,6 +909,9 @@ impl TurnEngine {
             };
             let Some(delta) = next else { break };
             let delta = delta?;
+            if let Some(evaluated) = delta.evaluated_prompt_tokens {
+                evaluated_prompt_tokens = Some(evaluated);
+            }
             if let Some(content) = delta.content {
                 if !content.is_empty() {
                     text.push_str(&content);
@@ -755,6 +946,7 @@ impl TurnEngine {
         Ok(Streamed {
             text,
             time_to_first_token,
+            evaluated_prompt_tokens,
         })
     }
 
@@ -1291,6 +1483,7 @@ struct Lore {
 struct Streamed {
     text: String,
     time_to_first_token: Option<Duration>,
+    evaluated_prompt_tokens: Option<usize>,
 }
 
 /// Restores the turn machine however the turn ends, cancellation included.

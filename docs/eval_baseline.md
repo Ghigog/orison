@@ -614,11 +614,15 @@ similarity for both `"Quillion"` and a paraphrased query with the name absent
 
 See [migration_plan.md](migration_plan.md) Appendix D for the full numbers,
 the arms, and the decision recorded from them. Summary: arm A (the current
-split) won or tied on quality-per-second on both fixtures, but its quality
-composite was lower than the two single-model arms because of two pronoun
-flags — which the scoring's own legend says need a human read before being
-counted as real defects, not assumed. Both flagged narrations are quoted in
-Appendix D.
+split) won or tied on quality-per-second on both fixtures, and its two
+pronoun flags — the only reason its quality composite trailed the two
+single-model arms — **were read by hand in Phase 5.0 and are both false
+positives**. In each, the flagged pronoun belongs to a correctly-gendered
+third party, not to the transcript character. Discounting them puts arm A's
+quality at 1.000 on both fixtures and makes it the outright winner on both
+rather than winning one and tying the other. D-4 stands: keep the split.
+The unresolved caveat is the model class, not the pronouns — a 7B stood in
+for the 8B arms.
 
 ### A real vault — the fastest way to find out whether any of this is right
 
@@ -643,6 +647,183 @@ precision after graph expansion at a real scale; whether the passage reranker
 earns its place; whether chunk size and overlap survive documents longer than
 53 words; whether `sqlite-vec` holds up past 207 nodes; and whether RAPTOR's
 cluster counts scale.
+
+---
+
+## Phase 5 measurement
+
+Phase 5 builds the playable CLI and the judge suite, and resolves the two
+items Phase 4 handed forward. The machine that wrote it had **no Ollama and
+no models**, which decides the shape of everything below: what could be
+measured without one was measured, what could not is named as unmeasured
+rather than estimated, and the harnesses were changed so the machine that
+does have one gets an answer instead of a hint.
+
+### The turn-latency regression: two causes, both structural, both fixed
+
+Phase 4 measured the Rust turn loop at roughly 2x the Godot baseline while
+`tests/turn_loop.rs` asserted byte-identical prompt prefixes at the wire.
+Both were true, and two things sat in the gap.
+
+**B-17: retrieved lore was ordered ahead of the growing transcript.**
+`prompt::ordering` put it there on the reasoning that a repeated query keeps
+its prefix stable. Play never repeats the query — `TurnEngine::retrieve_lore`
+retrieves with the player's line — so the lore block changed on every turn and
+everything behind it, which is the entire transcript, was re-processed every
+time. The wire test did not see it because it asked *the same question twice*.
+Lore now sits in the volatile tail, beside the emotional profile.
+
+**B-18: the backend asked for the model's full advertised context window.**
+`/api/show` reports what a model *can* serve; `llama3.2:3b` reports 131072,
+sixteen times the 8192 the Godot baseline was recorded at. Ollama sizes the
+runner's KV cache from `num_ctx` at load time whether the prompt fills it or
+not, so this bought nothing and cost the whole allocation — tens of gigabytes
+of cache for a 3B model, on a MacBook Air. `OllamaBackend` now caps at
+`DEFAULT_CONTEXT_LIMIT` (8192, the baseline's own figure), overridable through
+`OllamaConfig`, and the capped number is the single value feeding both
+`num_ctx` and the prompt budget.
+
+**Neither is confirmed by a live number, and this document will not pretend
+otherwise.** What changed instead is what a live run measures. Ollama reports
+`prompt_eval_count`: the prompt tokens it actually evaluated, excluding
+whatever it served from its own prompt cache. That now reaches
+`TurnOutcome::evaluated_prompt_tokens`, and `turn_latency` prints it:
+
+```
+turn |      sent | evaluated |  reused |      ttft |     total
+   0 |      1130 |       880 |     22% |      6 ms |     64 ms
+   1 |      1184 |       326 |     72% |      5 ms |     44 ms
+   ...
+   7 |      1475 |       333 |     77% |      6 ms |     58 ms
+```
+
+Cache reuse is a measured fraction now, not an inference from
+time-to-first-token. Phase 4 could only say "TTFT rose, so probably no
+reuse"; a re-run can say what fraction of the prompt the server skipped.
+
+### The stand-in was flattering the code in three places
+
+Phase 4's lesson — "a test that passes against a stand-in is evidence about
+the stand-in" — cost three more findings when the stand-in was made to behave
+like the thing it stands in for.
+
+| It did | A real Ollama does | What that hid |
+|---|---|---|
+| Advertised `context_length` 8192 | `llama3.2:3b` advertises 131072 | 8192 is exactly the cap, so the stand-in agreed with the code by coincidence and B-18 was unreachable in `cargo test` |
+| Reported `prompt_eval_count: 0` | Reports what it evaluated, on the last chunk only | Cache reuse was unmeasurable without a live server |
+| Emitted response fields alphabetically | Emits them in the schema's order | `serde_json::json!` builds a `BTreeMap`, so the stand-in streamed **dialogue before narration** — every shell rendering that stream would show the character's answer before the narration setting it up, and only against the stand-in |
+
+The stand-in now advertises a real window, models a prompt cache (reporting
+the tokens not shared as a prefix with the previous request), and serialises
+the same Rust types the response is parsed back into, so its field order
+cannot drift from the schema's.
+
+**And the cache property became assertable without a model.** Reuse is a
+property of the message list, not a timing measurement, so `turn_latency`'s
+harness self-test now asserts that reuse *rises* as the transcript grows.
+Reverting the ordering fix makes it fall — 72% to 65% on `minimal` — and the
+assertion fires. An absolute floor could not tell the two apart on a fixture
+this short, because the character card dominates either way.
+
+### D-4: the human read, done
+
+Both flagged narrations are **false positives**. `minimal`'s transcript
+character is Bram Holt (he/him) and the flagged "her" belongs to Elara Voss,
+who is being described; `messy`'s is Lord Anneke, the fixture's designated
+pronoun trap, and every she/her belongs to Sergeant Adah, who is female.
+Neither speaker takes a pronoun in either passage. Discounting them puts arm
+A at quality 1.000 on both fixtures and makes it the outright winner rather
+than winning one and tying the other. Full working in
+[migration_plan.md](migration_plan.md) Appendix D. **D-4 stands: keep the
+split.** The open caveat is the model class — a 7B stood in for the 8B arms —
+not the pronouns.
+
+### The deterministic suite, run against the CLI
+
+`crates/orison-cli/tests/harness.rs` types each fixture's `ground_truth.json`
+transcript into `Shell::run`, which is the function the binary hands `stdin`
+to. Against the stand-in, so it runs in CI:
+
+| Fixture | parsed | prn | rep | bad | notes |
+|---|---:|---:|---:|---:|---|
+| `minimal` | 4/4 | 0 | 3 | 0 | loop detection fires on a stand-in that repeats itself |
+| `messy` | 5/5 | 0 | 4 | 0 | same |
+
+The latencies from a stand-in are meaningless and are not recorded. What the
+run establishes is that the shell drives a whole scripted transcript to
+completion, that every deterministic metric is computable from what comes
+back, and — through the verbatim-repeat assertion — that the metrics can
+still fire. Schema validity is 100%, which under constrained decoding is the
+only acceptable value.
+
+Retrieval and ingest are unchanged from Phase 3/4 and still clear the
+baseline: recall 1.000 on all three fixtures against 0.875-0.933, `large`
+without mention edges still 0.875 (the positive control), ingest 6/6 required
+substrings against the Godot build's 3/6.
+
+### The judge suite: built, gated, unrun
+
+`turn::judge` implements §1.3's rubric — in-character consistency, use of
+vault-sourced facts, narrative progression, absence of sycophancy, each 1-5 —
+as a schema-constrained response, with the rubric prose in `prompt::templates`
+where `tests/prompt_boundary.rs` can enforce that it reads no state.
+
+Three of §1.3's own rules are enforced rather than documented:
+
+- The judge holds its own backend, never the Actor's, and `JudgeReport`
+  records the judge's model id — a model grading itself is not a measurement
+  and a report should not be able to hide that it was one.
+- `JudgeReport::mean()` returns `None` below ten scored turns. Judge scores
+  are noisy; a mean of four turns is noise with a decimal point, and it would
+  be quoted.
+- Nothing in it returns a pass or a fail. The deterministic suite is the gate.
+
+Every score comes with a sentence naming the line it is about, and `render()`
+prints those sentences with the numbers, because a judge score without its
+justification is exactly the kind of figure that gets quoted without its
+caveats.
+
+**It has not been run against a model.** There is also no Godot judge baseline
+to compare it against: Phase 1 deferred building the suite, so the number that
+exit criterion compares to does not exist yet. Running it on the Godot build
+is not possible under feature freeze either — which means the honest form of
+that criterion is "record the Rust numbers, and treat the first run as the
+baseline rather than as a comparison."
+
+### What is still unmeasured, and the commands that would fix that
+
+One machine with Ollama, `llama3.2:3b`, and a larger model closes all four.
+
+```bash
+# 1. Did B-17 and B-18 fix the regression? The gate.
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
+  cargo test -p orison-core --test turn_latency -- --nocapture
+
+# 2. The judge suite, and the first numbers for it.
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_ACTOR_MODEL=llama3.2:3b \
+ORISON_TEST_JUDGE_MODEL=<a larger model> \
+  cargo test -p orison-cli --test harness -- --nocapture
+
+# 3. D-4 against the model class it is actually about.
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_EXPERIMENT_DIRECTOR_MODEL=<a true 8B> \
+ORISON_EXPERIMENT_ACTOR_MODEL=llama3.2:3b \
+ORISON_EXPERIMENT_SINGLE_MODEL=<the same 8B> \
+  cargo test -p orison-core --test director_actor_experiment -- --nocapture
+
+# 4. And the tuning work the real vault surfaced (62% overflow, 48% untyped).
+ORISON_TEST_VAULT=/path/to/vault \
+  cargo test -p orison-core --test real_vault -- --nocapture
+```
+
+Read (1) first, and read the `reused` column before the latency column. If
+reuse is near zero after turn 0, the prefix is still not being served from
+cache and there is a third cause; if it is high and p95 is still above the
+baseline, the cause is not the cache and the ordering work is finished
+either way. Phase 4 could not tell those two apart. This is the change that
+matters most in Phase 5.
 
 ---
 
