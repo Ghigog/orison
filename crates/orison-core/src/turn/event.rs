@@ -82,6 +82,13 @@ pub enum TurnEvent {
         dice_roll: DiceRoll,
     },
 
+    /// The player moved. Carries the label as well as the id because a
+    /// shell should never have to reach into the graph to render an event.
+    LocationChanged {
+        entity_id: String,
+        label: String,
+    },
+
     /// Campaign or character memory was rewritten.
     MemoryUpdated {
         entity_id: Option<String>,

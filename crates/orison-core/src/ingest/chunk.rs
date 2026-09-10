@@ -100,6 +100,23 @@ pub struct Chunk {
     pub char_end: usize,
 }
 
+/// Storable form. Written here rather than at each call site because three
+/// of them existed by Phase 5 and a fourth would have been the one that
+/// transposed `char_start` and `char_end`.
+impl From<&Chunk> for crate::state::ChunkRow {
+    fn from(c: &Chunk) -> Self {
+        Self {
+            id: c.id.clone(),
+            entity_id: c.entity_id.to_string(),
+            ordinal: c.ordinal as i64,
+            heading: c.heading.clone(),
+            text: c.text.clone(),
+            char_start: c.char_start as i64,
+            char_end: c.char_end as i64,
+        }
+    }
+}
+
 impl Chunk {
     pub fn make_id(entity_id: &EntityId, ordinal: usize) -> String {
         format!("{entity_id}#{ordinal}")

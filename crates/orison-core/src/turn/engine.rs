@@ -25,7 +25,7 @@ use crate::emotion::{EmotionEngine, EmotionState};
 use crate::inference::{
     ChatMessage, ChatRequest, InferenceBackend, InferenceError, ResponseFormat,
 };
-use crate::knowledge::{CanonicalField, EntityId, EntityKind};
+use crate::knowledge::{CanonicalField, Entity, EntityId, EntityKind};
 use crate::memory::{CompactionPlan, DistillationPlan, MemoryManager};
 use crate::prompt::assembly::{
     player_message, CharacterCard, DirectorPrompt, PlayerCard, TurnPrompt, WorldSnapshot,
@@ -244,6 +244,173 @@ impl TurnEngine {
             self.spawn_baseline_deduction(entity_id);
         }
         Ok(())
+    }
+
+    /// Where the player is standing, if anywhere.
+    ///
+    /// A campaign whose vault has no locations never sets one, and that is a
+    /// legitimate shape rather than an error: `minimal` has two locations,
+    /// and a vault of nothing but character notes has none.
+    pub fn current_location(&self) -> Result<Option<Entity>, TurnError> {
+        let campaign = self.load_campaign()?;
+        let id = campaign.active_location.trim();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        Ok(self
+            .session
+            .graph()
+            .get(&EntityId::from_stored(id))
+            .cloned())
+    }
+
+    /// Every location in this campaign's graph, by label.
+    pub fn locations(&self) -> Vec<Entity> {
+        let mut all: Vec<Entity> = self
+            .session
+            .graph()
+            .by_kind(EntityKind::Location)
+            .cloned()
+            .collect();
+        all.sort_by(|a, b| a.label.cmp(&b.label));
+        all
+    }
+
+    /// Locations reachable in one step from where the player is standing.
+    ///
+    /// The vault's own connections, not a movement system invented here: a
+    /// `connections:` field or a wiki-link between two location notes becomes
+    /// an edge at ingest, and this reads those. With nowhere active, every
+    /// location is an exit — the player has to start somewhere.
+    pub fn exits(&self) -> Result<Vec<Entity>, TurnError> {
+        let Some(here) = self.current_location()? else {
+            return Ok(self.locations());
+        };
+        let graph = self.session.graph();
+        let mut exits: Vec<Entity> = graph
+            .neighbours(&here.id)
+            .into_iter()
+            .filter_map(|id| graph.get(&id))
+            .filter(|e| e.kind == EntityKind::Location)
+            .cloned()
+            .collect();
+        exits.sort_by(|a, b| a.label.cmp(&b.label));
+        Ok(exits)
+    }
+
+    /// Move the player to a location (§5.4).
+    ///
+    /// Refuses a destination that is not a location, and one nothing connects
+    /// to the current location — both as [`TurnError::CannotTravel`] with a
+    /// detail that says which, because "no such place" and "you cannot get
+    /// there from here" are different answers.
+    ///
+    /// The move is written to the transcript as narration. That is not
+    /// decoration: the next turn's prompt is assembled from world state *and*
+    /// the transcript, and a character who is never told the player walked in
+    /// will answer as though they did not.
+    pub fn move_to_location(&self, name: &str) -> Result<Entity, TurnError> {
+        let graph = self.session.graph();
+        let destination = graph
+            .resolve(name)
+            .and_then(|id| graph.get(id))
+            .cloned()
+            .ok_or_else(|| TurnError::CannotTravel {
+                to: name.to_string(),
+                detail: format!("there is no place called \"{name}\" in this campaign"),
+            })?;
+
+        if destination.kind != EntityKind::Location {
+            return Err(TurnError::CannotTravel {
+                to: destination.label.clone(),
+                detail: format!(
+                    "{} is a {}, not a place you can travel to",
+                    destination.label,
+                    destination.kind.as_str()
+                ),
+            });
+        }
+
+        let mut campaign = self.load_campaign()?;
+        if campaign.active_location == destination.id.as_str() {
+            return Err(TurnError::CannotTravel {
+                to: destination.label.clone(),
+                detail: format!("you are already at {}", destination.label),
+            });
+        }
+
+        if let Some(here) = self.current_location()? {
+            let connected = graph.neighbours(&here.id).contains(&destination.id);
+            if !connected {
+                return Err(TurnError::CannotTravel {
+                    to: destination.label.clone(),
+                    detail: format!("nothing connects {} to {}", here.label, destination.label),
+                });
+            }
+        }
+
+        campaign.active_location = destination.id.as_str().to_string();
+        self.session
+            .with_store(|store| store.save_campaign(&campaign))?;
+
+        self.append_history(
+            HistoryRole::Narrator,
+            &format!("The player travels to {}.", destination.label),
+            Some("narrator"),
+            None,
+        )?;
+
+        self.emit(TurnEvent::LocationChanged {
+            entity_id: destination.id.as_str().to_string(),
+            label: destination.label.clone(),
+        });
+        Ok(destination)
+    }
+
+    /// Characters the player could plausibly speak to from where they stand.
+    ///
+    /// The port of `NearbyCharacterList.get_nearby_character_ids`, and much
+    /// shorter than it, because Phase 3 moved the work: that function checked
+    /// graph edges, then searched biographies for the location's name as a
+    /// substring, then re-read frontmatter `connections:`. Ingest now turns
+    /// all three into edges — `AssociatedWith` for a tag or link onto a
+    /// location, `Mentions` for a name written in prose — so one neighbour
+    /// query answers what three heuristics used to.
+    ///
+    /// Two behaviours are kept deliberately. Characters that cannot speak
+    /// are excluded — `minimal`'s Kettle is a creature with `can_speak:
+    /// false` and belongs in no conversation list — and a campaign whose
+    /// vault has no locations at all returns every character rather than
+    /// none: the alternative is a playable vault with nobody in it.
+    pub fn characters_present(&self) -> Result<Vec<Entity>, TurnError> {
+        let graph = self.session.graph();
+        let speakable = |e: &&Entity| speech_of(Some(e)) == Speech::Verbal;
+
+        let Some(here) = self.current_location()? else {
+            let mut all: Vec<Entity> = graph
+                .by_kind(EntityKind::Character)
+                .filter(speakable)
+                .cloned()
+                .collect();
+            all.sort_by(|a, b| a.label.cmp(&b.label));
+            return Ok(all);
+        };
+
+        // One hop reaches characters attached to this place; two reaches
+        // those attached to an adjoining one, which is the "regional edge"
+        // rule the Godot list applied by walking the location's neighbours
+        // itself.
+        let mut nearby: Vec<Entity> = graph
+            .within(&here.id, 2)
+            .into_iter()
+            .filter_map(|id| graph.get(&id))
+            .filter(|e| e.kind == EntityKind::Character)
+            .filter(speakable)
+            .cloned()
+            .collect();
+        nearby.sort_by(|a, b| a.label.cmp(&b.label));
+        nearby.dedup_by(|a, b| a.id == b.id);
+        Ok(nearby)
     }
 
     /// Deduce a character's resting disposition from their biography.

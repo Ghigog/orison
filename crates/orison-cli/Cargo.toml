@@ -1,0 +1,29 @@
+[package]
+name = "orison-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Orison's headless playable client: create a campaign, import a vault, converse, travel. No graphics (migration plan Phase 5)."
+
+[lib]
+name = "orison_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "orison"
+path = "src/main.rs"
+
+[dependencies]
+orison-core = { path = "../orison-core" }
+tokio = { workspace = true }
+clap = { workspace = true }
+tokenizers = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+# The same stand-in Ollama the engine's own tests play against, rather than a
+# second one that could drift from it.
+orison-core = { path = "../orison-core", features = ["test-support"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }

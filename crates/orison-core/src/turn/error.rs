@@ -83,6 +83,15 @@ pub enum TurnError {
     #[error("no campaign is loaded")]
     NoCampaign,
 
+    /// A move to somewhere that is not a location in this campaign's graph,
+    /// or that nothing connects to the place the player is standing.
+    ///
+    /// Typed rather than a printed warning, because the shell has to tell the
+    /// two apart: "there is no such place" and "you cannot get there from
+    /// here" are different answers to the player.
+    #[error("{detail}")]
+    CannotTravel { to: String, detail: String },
+
     /// A move the state machine does not permit. Unreachable through the
     /// public API; reaching it means the engine contradicted itself.
     #[error("illegal turn transition: {from} -> {to}")]
@@ -146,9 +155,10 @@ impl From<&TurnError> for FailureKind {
             TurnError::State(_) => FailureKind::Storage,
             TurnError::Retrieval(_) => FailureKind::Retrieval,
             TurnError::Cancelled(_) => FailureKind::Cancelled,
-            TurnError::NoActiveCharacter | TurnError::NoCampaign | TurnError::EmptyInput => {
-                FailureKind::Configuration
-            }
+            TurnError::NoActiveCharacter
+            | TurnError::NoCampaign
+            | TurnError::EmptyInput
+            | TurnError::CannotTravel { .. } => FailureKind::Configuration,
             TurnError::IllegalTransition { .. } | TurnError::QueueClosed => FailureKind::Internal,
         }
     }

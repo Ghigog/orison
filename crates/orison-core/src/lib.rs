@@ -16,3 +16,8 @@ pub mod memory;
 pub mod retrieval;
 pub mod state;
 pub mod turn;
+
+/// A stand-in Ollama and the fixture response bodies, for tests in this crate
+/// and in `orison-cli`. Off by default; nothing here reaches a release build.
+#[cfg(feature = "test-support")]
+pub mod testing;
