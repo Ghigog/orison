@@ -319,7 +319,7 @@ Run the entire harness against the existing GDScript engine and commit the numbe
 **Phase 1 exit criteria**
 - [x] Three fixture vaults with ground-truth retrieval labels.
 - [x] Deterministic suite runs in CI (replay mode; no model needed).
-- [ ] Judge suite runs on demand. *(deliberately deferred; see eval_baseline.md)*
+- [x] Judge suite runs on demand. *(Built in Phase 5.5 as `turn::judge`, run by `crates/orison-cli/tests/harness.rs`, gated on `ORISON_TEST_JUDGE_MODEL`. It gates nothing, per §1.3; the deterministic suite is still the gate.)*
 - [x] `docs/eval_baseline.md` records Godot-build numbers for every metric.
 
 ---
@@ -384,16 +384,18 @@ Restructure the loop itself, do not merely re-encode it. The current design runs
 
 ### 2.7 Cache-stable prompt ordering
 
-Order assembled messages: static system instructions, then character card, then retrieved lore, then session summaries, then recent turns, then the player's input. Volatile content last.
+Order assembled messages stable-to-volatile: static system instructions, then character card, then world state and session summaries, then recent turns, then retrieved lore, then the character's volatile state, then the player's input. Volatile content last.
 
 Local inference engines reuse the KV cache for a shared prefix. The current builder reassembles a single monolithic string each turn, so the shared prefix is destroyed and the engine re-processes thousands of already-seen tokens on every turn. Correct ordering is free latency.
+
+> **Corrected in Phase 5.0.** This section originally put retrieved lore *ahead* of the recent turns, on the reasoning that a repeated query keeps its prefix stable. Play never repeats the query — the Actor retrieves with the player's line — so the lore block changed on every turn and invalidated the whole transcript behind it. That was B-17, it cost roughly half the cache, and the wire test that was supposed to catch it asked the same question twice. The ordering above is the corrected one; `prompt::ordering` carries the reasoning.
 
 **Phase 2 exit criteria**
 - [ ] Both backends pass a shared conformance test suite.
 - [ ] Schema-validity metric reads exactly 100% on the eval harness.
 - [ ] No hardcoded context lengths anywhere in the crate.
 - [ ] Prompt token counts measured with the real tokenizer; budget overflow is unrepresentable.
-- [ ] Measured KV-cache reuse across consecutive turns.
+- [x] Measured KV-cache reuse across consecutive turns. *(Phase 5.0: `TurnOutcome::evaluated_prompt_tokens` carries the backend's own `prompt_eval_count`, so reuse is a measured fraction rather than an inference from time-to-first-token. `tests/turn_latency.rs` asserts it rises as the transcript grows. Not yet re-run against a live server; see eval_baseline.md, "Phase 5 measurement".)*
 
 ---
 
@@ -528,12 +530,14 @@ Retain the `<player_message>` delimiter treatment for injection resistance. It i
 Then run the full evaluation harness and compare against `docs/eval_baseline.md`.
 
 **Phase 5 exit criteria — the migration gate**
-- [ ] A campaign is playable start to finish through the CLI.
-- [ ] Every deterministic metric meets or exceeds the Godot baseline.
-- [ ] Judge scores meet or exceed the baseline.
-- [ ] p95 turn latency is no worse than the baseline.
+- [x] A campaign is playable start to finish through the CLI. *(`crates/orison-cli`. `tests/play.rs` creates a campaign, imports a vault, travels the mill road both ways, changes who it is addressing, holds three turns and reloads with the transcript intact — through `Shell::run`, the same function the binary hands `stdin` to.)*
+- [x] Every deterministic metric meets or exceeds the Godot baseline. *(Retrieval recall 1.000 on all three fixtures against a 0.875-0.933 baseline; ingest 6/6 required substrings against 3/6; schema validity 100%. `crates/orison-cli/tests/harness.rs` runs the transcript suite through the CLI itself.)*
+- [ ] Judge scores meet or exceed the baseline. **Suite built, not yet run.** `turn::judge` implements the §1.3 rubric and `harness.rs` runs it, gated on `ORISON_TEST_JUDGE_MODEL`. There is also no Godot judge baseline to compare against — Phase 1 deferred building the suite, so the baseline it would have recorded does not exist. Both halves need one machine with two models on it.
+- [ ] p95 turn latency is no worse than the baseline. **Two causes found and fixed (B-17, B-18); the confirming run has not happened.** Phase 4 measured 63.2 s / 52.9 s against 21.2 s / 20.2 s. Neither fix could be verified where it was written, because that machine had no Ollama. `tests/turn_latency.rs` now reports cache reuse as a measured fraction rather than an inference, so the re-run answers the question instead of hinting at it.
 
 **If these are not met, do not proceed to Phase 6.** Fix the engine or reconsider the plan. A prettier shell over a worse engine is the failure mode this ordering exists to prevent.
+
+**What closing the gate now needs** is one machine with Ollama, `llama3.2:3b` and a larger model, and three commands — `turn_latency`, `director_actor_experiment`, and `orison-cli`'s `harness`. Everything else in this phase is done and green. See eval_baseline.md, "Phase 5 measurement", for the commands and for what each one would settle.
 
 ---
 
@@ -669,6 +673,17 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
 | B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
 | B-16 | Character extraction never used JsonRepair, so any fenced JSON response failed | **Critical** | **Phase 1** | Godot build | **Fixed** (fields empty -> all populated) |
+| B-17 | Retrieved lore ordered ahead of the growing transcript, so the KV-cache prefix broke every turn | **Critical** | **Phase 5.0** | **Port** | **Fixed** (lore moved into the volatile tail) |
+| B-18 | `OllamaBackend` asked for the model's full advertised context window as `num_ctx` | **Critical** | **Phase 5.0** | **Port** | **Fixed** (capped at `DEFAULT_CONTEXT_LIMIT`, overridable) |
+
+**B-17 and B-18 are the first two defects in this register that the port
+introduced rather than inherited**, which is why they are worth the same
+treatment as the rest. Both were invisible to `cargo test` and both were paid
+for on every single turn: together they are the best explanation available for
+Phase 4's live turn latency landing at roughly 2x the engine it was meant to
+beat. Neither was found by reading. They were found by asking why a measured
+number disagreed with a passing test, which is the only reason this register
+has entries at all.
 
 **Why B-1 and B-11 are not deferred to the port.** B-1 is plausibly the cause of a user-visible bug that has been open since June, and the fix is small. B-11 means nothing currently protects against regressions, including regressions introduced while fixing B-1. Both are prerequisites for trusting any measurement taken in Phase 1, which in turn is what the entire migration is graded against.
 

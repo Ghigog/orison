@@ -403,6 +403,7 @@ mod tests {
             evaluated_prompt_tokens: Some(100),
             completion_tokens: 50,
             retrieved: 3,
+            retrieved_context: Some("LORE: the accord is kept in the counting house.".into()),
             director_triggered: false,
             beat: None,
         }

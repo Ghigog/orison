@@ -57,6 +57,13 @@ godot --headless --path . res://tests/TestRunner.tscn
 
 # On a cold checkout, import assets first if the suite misbehaves.
 godot --headless --path . --import
+
+# The Rust core and the headless client. No model, no network.
+cargo test --workspace
+
+# Play a campaign. Needs a local Ollama and a model pulled.
+cargo run -p orison-cli -- new --title "Thornwick" --vault fixtures/vaults/minimal
+cargo run -p orison-cli -- play thornwick --actor-model llama3.2:3b
 ```
 
 The runner discovers every method named `test_*` on `TestRunnerNode`, runs them
@@ -73,6 +80,7 @@ environment-dependent and had to be repaired; do not add a fourth.
 ## Layout and responsibilities
 
 ```
+crates/         The Rust core (orison-core) and the headless client (orison-cli)
 src/autoload/   Global singletons, registered in project.godot
 src/core/       Engine logic with no scene dependencies
 src/resources/  Typed Resource models
@@ -113,8 +121,20 @@ silently passing:
 | `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_MODEL` | Phase 2's live chat conformance cases, a live turn, and `tests/turn_latency.rs` |
 | `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_OLLAMA_EMBED_MODEL` | The dense half of retrieval (a chat model id is not an embedding model id) |
 | `ORISON_EXPERIMENT_DIRECTOR_MODEL` + `_ACTOR_MODEL` + `_SINGLE_MODEL` | The Director/Actor experiment (migration plan §4.2) |
+| `ORISON_TEST_OLLAMA_URL` + `ORISON_TEST_JUDGE_MODEL` (+ `ORISON_TEST_ACTOR_MODEL`) | The judge suite, in `crates/orison-cli/tests/harness.rs`. The judge should be a larger model than the one under test |
 | `ORISON_TEST_VAULT` | `tests/real_vault.rs`: ingest a real Obsidian vault and report. Prints counts and note paths, never vault content |
 | `--features llama-cpp` | `LlamaCppBackend`; builds llama.cpp from source, so it is off by default |
+| `--features test-support` | `orison_core::testing`: the stand-in Ollama and fixture response bodies. Enabled by the crates' own dev-dependencies, never by a release build |
+
+**The headless client.** `crates/orison-cli` is Phase 5's playable milestone:
+create a campaign, import a vault, converse with streaming output, travel
+between locations, save and load. It is a library as well as a binary, because
+the evaluation harness runs *against* it — `shell::Shell` reads any `BufRead`
+and writes any `Write`, so a scripted transcript plays through exactly the code
+a person types into. It is built against `TurnEngine` and `TurnEvent` and
+nothing under them; if a shell needs something the engine does not expose, the
+answer is to add it to the engine, not to reach past it. Which models play
+which role is configuration (B-10) and never a comparison against a model name.
 
 **The Rust core's turn loop.** `crates/orison-core/src/turn/` is the port:
 `state` owns which transitions are legal, `queue` sequential execution and
@@ -122,7 +142,9 @@ real cancellation, `engine` the turn itself. `emotion/` is the single home of
 the model in [docs/emotions.md](docs/emotions.md); `memory/` owns the three
 tiers and never touches a biography; `prompt/` splits into `templates` (every
 word the model is told, and it may not read state) and `assembly` (typed state
-into blocks). `tests/prompt_boundary.rs` enforces that split.
+into blocks). `tests/prompt_boundary.rs` enforces that split. `experiment/` scores an arm on
+what a program can check; `judge/` scores it on the §1.3 rubric with a model,
+and gates nothing — the deterministic suite is the gate.
 
 **Turn loop (Godot).** `GameLoopController` orchestrates a turn: player input through
 `PlayerInputParser`, an agentic Director research loop over the knowledge graph,
@@ -211,7 +233,8 @@ purged once and must not come back.
 | Document | What it is |
 |---|---|
 | [docs/migration_plan.md](docs/migration_plan.md) | The plan off Godot. Phases, exit criteria, defect register. |
-| [docs/handoff_phase4.md](docs/handoff_phase4.md) | Executable brief for the current phase (orchestration and the turn loop). |
+| [docs/handoff_phase5.md](docs/handoff_phase5.md) | Executable brief for the current phase (the headless playable milestone). |
+| [docs/handoff_phase4.md](docs/handoff_phase4.md) | The completed orchestration brief. |
 | [docs/handoff_phase3.md](docs/handoff_phase3.md) | The completed data-layer brief. Useful as the record of what `orison-core` now provides. |
 | [docs/handoff_phase0.md](docs/handoff_phase0.md) | The original Phase 0 brief, kept as history. |
 | [docs/rag_architecture.md](docs/rag_architecture.md) | Retrieval philosophy, Director/Actor rationale, June diagnosis. Authoritative. |

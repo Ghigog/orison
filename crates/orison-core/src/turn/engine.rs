@@ -77,6 +77,15 @@ pub struct TurnOutcome {
     pub evaluated_prompt_tokens: Option<usize>,
     pub completion_tokens: usize,
     pub retrieved: usize,
+    /// The lore block this turn's prompt actually carried, when it carried
+    /// one.
+    ///
+    /// Kept rather than recomputed because the two are not the same thing:
+    /// re-running retrieval later asks a different question of a database
+    /// that has since moved. Anything grading a turn — the judge suite most
+    /// of all — has to see the material the Actor saw, or it measures
+    /// retrieval twice and the response not at all.
+    pub retrieved_context: Option<String>,
     pub director_triggered: bool,
     /// The world-state half of the response, on the single-call arm. `None`
     /// on the two-call arm, where the Director composes it separately.
@@ -662,6 +671,7 @@ impl TurnEngine {
             evaluated_prompt_tokens: streamed.evaluated_prompt_tokens,
             completion_tokens,
             retrieved: lore.count,
+            retrieved_context: (lore.count > 0).then(|| lore.text.clone()),
             director_triggered,
             beat,
         })

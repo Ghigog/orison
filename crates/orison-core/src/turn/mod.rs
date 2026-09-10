@@ -15,6 +15,8 @@
 //! | [`config`] | Budgets, retrieval settings and the Director's trigger rule |
 //! | [`event`] | What a turn tells a shell, as one typed stream |
 //! | [`engine`] | The turn itself |
+//! | [`experiment`] | The §4.2 arms, scored on what a program can check |
+//! | [`judge`] | The §1.3 rubric, scored by a model. Never a gate |
 
 pub mod clock;
 pub mod config;
@@ -22,6 +24,7 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod experiment;
+pub mod judge;
 pub mod queue;
 pub mod session;
 pub mod state;
@@ -33,6 +36,7 @@ pub use engine::{TurnEngine, TurnOutcome};
 pub use error::{CancelReason, FailureKind, TurnError};
 pub use event::{Speaker, TurnEvent};
 pub use experiment::{ArmReport, Finding, ScoredTurn, TranscriptScript};
+pub use judge::{Judge, JudgeReport, JudgeScores, JudgedTurnInput, MINIMUM_SAMPLES};
 pub use queue::{CancelToken, Priority, RequestQueue, Ticket};
 pub use session::Session;
 pub use state::{DirectorState, TurnState};

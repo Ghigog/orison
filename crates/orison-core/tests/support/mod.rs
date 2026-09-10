@@ -17,8 +17,8 @@ use orison_core::state::{Campaign, CampaignStore};
 use orison_core::turn::{FixedClock, Session};
 
 pub use orison_core::testing::{
-    character_response_json, combined_response_json, director_response_json, test_tokenizer,
-    FakeOllama, Observed, ADVERTISED_CONTEXT_LENGTH,
+    character_response_json, combined_response_json, director_response_json, fixture_root,
+    fixture_script, test_tokenizer, FakeOllama, Observed, ADVERTISED_CONTEXT_LENGTH,
 };
 
 /// A two-character, two-location campaign with enough text for BM25 to have
@@ -109,43 +109,18 @@ pub fn fixture_session(
     Arc<std::sync::Mutex<CampaignStore>>,
     orison_core::turn::TranscriptScript,
 ) {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/vaults")
-        .join(fixture);
-    let ground_truth: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("ground_truth.json")).unwrap())
-            .expect("ground_truth.json parses");
+    let root = fixture_root(fixture);
+    let script = fixture_script(fixture);
 
     let outcome =
         orison_core::ingest::ingest_vault(&root, &orison_core::ingest::IngestOptions::default())
             .expect("ingest the fixture vault");
     let graph = outcome.graph;
 
-    let character_label = ground_truth["transcript_character"]
-        .as_str()
-        .expect("fixture defines a transcript character");
     let character_id = graph
-        .resolve(character_label)
-        .unwrap_or_else(|| panic!("{character_label} is not in the compiled graph"))
+        .resolve(&script.character)
+        .unwrap_or_else(|| panic!("{} is not in the compiled graph", script.character))
         .clone();
-
-    let script = orison_core::turn::TranscriptScript {
-        character: character_label.to_string(),
-        forbidden_pronouns: ground_truth["transcript_forbidden_pronouns"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
-        lines: ground_truth["transcript_script"]
-            .as_array()
-            .expect("fixture defines a transcript script")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect(),
-    };
 
     let mut store = CampaignStore::open_in_memory().expect("in-memory campaign store");
     let campaign_id = format!("eval-{fixture}");

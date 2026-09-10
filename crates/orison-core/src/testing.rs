@@ -546,3 +546,47 @@ pub fn director_response_json(narration: &str) -> String {
         },
     })
 }
+
+// --------------------------------------------------------------- fixtures
+
+/// The fixture vault directory, resolved from this crate rather than from the
+/// caller's, so `orison-cli`'s tests find the same three vaults.
+pub fn fixture_root(fixture: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/vaults")
+        .join(fixture)
+}
+
+/// A fixture's scripted transcript, from its `ground_truth.json`.
+///
+/// One loader, because the alternative is each harness deciding for itself
+/// which character the script addresses — and `messy`'s answer to that is the
+/// whole point of the fixture. Lord Anneke is the pronoun trap: no gender
+/// field, an unmistakably masculine body, and a name with a strong feminine
+/// prior. A harness that picked its own character would skip the regression
+/// the fixture exists for.
+pub fn fixture_script(fixture: &str) -> crate::turn::TranscriptScript {
+    let path = fixture_root(fixture).join("ground_truth.json");
+    let raw =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let ground_truth: serde_json::Value =
+        serde_json::from_str(&raw).expect("ground_truth.json parses");
+    let strings = |key: &str| -> Vec<String> {
+        ground_truth[key]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    crate::turn::TranscriptScript {
+        character: ground_truth["transcript_character"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{fixture} defines no transcript character"))
+            .to_string(),
+        forbidden_pronouns: strings("transcript_forbidden_pronouns"),
+        lines: strings("transcript_script"),
+    }
+}
