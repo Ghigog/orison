@@ -380,6 +380,15 @@ async fn serve(
         // A non-streamed `/api/chat` answers with one JSON object, so it
         // needs a Content-Length like any ordinary response. The Director
         // uses this path.
+        //
+        // It waits what the streamed path would have waited, rather than
+        // answering in microseconds. A Director that returns instantly is
+        // not a stand-in for one that thinks for twenty seconds: it closes
+        // every window in which the player can act while a beat composes,
+        // and B-19 lived in exactly that window, unreachable by any test
+        // until this line existed.
+        tokio::time::sleep(gap * pieces.len() as u32).await;
+
         let payload = serde_json::json!({
             "model": "stand-in",
             "message": { "role": "assistant", "content": pieces.concat() },
