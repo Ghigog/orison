@@ -75,6 +75,10 @@ pub struct TurnOutcome {
     /// machine — `docs/eval_baseline.md`'s Phase 4 run had only
     /// time-to-first-token to go on and could conclude nothing from it.
     pub evaluated_prompt_tokens: Option<usize>,
+    /// How long the backend spent evaluating this turn's prompt, when it
+    /// says. The cache signal: it stays flat as a transcript grows when the
+    /// prefix is reused, and rises with the prompt when it is not.
+    pub prompt_eval_time: Option<Duration>,
     pub completion_tokens: usize,
     pub retrieved: usize,
     /// The lore block this turn's prompt actually carried, when it carried
@@ -669,6 +673,7 @@ impl TurnEngine {
             time_to_first_token: streamed.time_to_first_token,
             prompt_tokens,
             evaluated_prompt_tokens: streamed.evaluated_prompt_tokens,
+            prompt_eval_time: streamed.prompt_eval_time,
             completion_tokens,
             retrieved: lore.count,
             retrieved_context: (lore.count > 0).then(|| lore.text.clone()),
@@ -899,6 +904,7 @@ impl TurnEngine {
         let mut text = String::new();
         let mut time_to_first_token = None;
         let mut evaluated_prompt_tokens = None;
+        let mut prompt_eval_time = None;
         let mut zone: Option<&'static str> = None;
 
         loop {
@@ -911,6 +917,9 @@ impl TurnEngine {
             let delta = delta?;
             if let Some(evaluated) = delta.evaluated_prompt_tokens {
                 evaluated_prompt_tokens = Some(evaluated);
+            }
+            if let Some(spent) = delta.prompt_eval_time {
+                prompt_eval_time = Some(spent);
             }
             if let Some(content) = delta.content {
                 if !content.is_empty() {
@@ -947,6 +956,7 @@ impl TurnEngine {
             text,
             time_to_first_token,
             evaluated_prompt_tokens,
+            prompt_eval_time,
         })
     }
 
@@ -1491,6 +1501,7 @@ struct Streamed {
     text: String,
     time_to_first_token: Option<Duration>,
     evaluated_prompt_tokens: Option<usize>,
+    prompt_eval_time: Option<Duration>,
 }
 
 /// Restores the turn machine however the turn ends, cancellation included.

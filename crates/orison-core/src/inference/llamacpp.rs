@@ -381,6 +381,7 @@ fn generate_streaming(
                 // re-evaluates a shared prefix, so there is no separate
                 // "evaluated" count to report.
                 evaluated_prompt_tokens: None,
+                prompt_eval_time: None,
             }));
             return;
         }
@@ -393,6 +394,7 @@ fn generate_streaming(
                         tool_calls: None,
                         done: false,
                         evaluated_prompt_tokens: None,
+                        prompt_eval_time: None,
                     }))
                     .is_err()
                 {
@@ -422,6 +424,7 @@ fn generate_streaming(
         tool_calls: None,
         done: true,
         evaluated_prompt_tokens: None,
+        prompt_eval_time: None,
     }));
 }
 

@@ -8,6 +8,8 @@
 //! backend uses `/api/chat` exclusively, which is not a style preference —
 //! it is the reason this phase exists.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use futures_core::stream::BoxStream;
 use serde::{Deserialize, Serialize};
@@ -192,11 +194,21 @@ struct OllamaChatResponse {
     message: OllamaMessage,
     #[serde(default)]
     done: bool,
-    /// Prompt tokens Ollama actually evaluated. Tokens served from its own
-    /// prompt cache are not counted here, which is what makes this the
-    /// honest cache-reuse signal. Absent on every chunk but the last.
+    /// Prompt tokens Ollama reports for this request. Absent on every chunk
+    /// but the last.
+    ///
+    /// Documented as excluding whatever was served from the prompt cache,
+    /// and measured in Phase 5.6 as doing no such thing: it reports the whole
+    /// prompt either way. Kept because it is the prompt's length as the
+    /// server tokenised it, which is worth having; not kept as a cache
+    /// signal. See `prompt_eval_duration`.
     #[serde(default)]
     prompt_eval_count: Option<usize>,
+    /// Nanoseconds Ollama spent evaluating the prompt. This one does fall
+    /// when a prefix is reused, which makes it the cache signal
+    /// `prompt_eval_count` was mistaken for.
+    #[serde(default)]
+    prompt_eval_duration: Option<u64>,
     #[serde(default)]
     eval_count: usize,
 }
@@ -442,6 +454,9 @@ impl InferenceBackend for OllamaBackend {
                                 }),
                                 done: parsed.done,
                                 evaluated_prompt_tokens: parsed.prompt_eval_count,
+                                prompt_eval_time: parsed
+                                    .prompt_eval_duration
+                                    .map(Duration::from_nanos),
                             })),
                             Err(e) => deltas.push(Err(e.into())),
                         }

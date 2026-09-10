@@ -401,6 +401,7 @@ mod tests {
             time_to_first_token: Some(Duration::from_millis(200)),
             prompt_tokens: 100,
             evaluated_prompt_tokens: Some(100),
+            prompt_eval_time: None,
             completion_tokens: 50,
             retrieved: 3,
             retrieved_context: Some("LORE: the accord is kept in the counting house.".into()),

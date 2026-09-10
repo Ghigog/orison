@@ -707,46 +707,69 @@ Run on a MacBook Air against a local Ollama, `llama3.2:3b`, the model the
 baseline was recorded on. Director disabled, so this is the Actor turn alone,
 which is what the Godot figure measured.
 
-| Fixture | Godot p50 | Rust p50 | Rust p95 | Phase 4 p50 | Mean reuse after turn 0 |
+| Fixture | Godot p50 | Rust p50 | Rust p95 | Phase 4 p50 | Reuse, as then measured |
 |---|---:|---:|---:|---:|---:|
-| `minimal` | 21200 ms | 12570 ms | 15083 ms | 63200 ms | **0%** |
-| `messy` | 20200 ms | 25028 ms | 30887 ms | 52900 ms | **0%** |
+| `minimal` | 21200 ms | 12570 ms | 15083 ms | 63200 ms | 0% — unsound, see below |
+| `messy` | 20200 ms | 25028 ms | 30887 ms | 52900 ms | 0% — unsound, see below |
 
 **The gate is p95 against the baseline, and `messy` does not meet it.**
 `minimal` clears it with room (15.1 s against 21.2 s); `messy` misses by half
 again (30.9 s against 20.2 s). Phase 5 does not exit on these numbers.
 
 **The improvement over Phase 4 is real and large — 5.0x on `minimal`, 2.1x on
-`messy` — and none of it is attributable to B-17.** Reuse reads 0% on every
-turn of both fixtures. `evaluated` tracks `sent` at a constant ~1.11 ratio
-from the first turn to the last, which is the chat template's per-message
-overhead on top of a full re-evaluation, and time-to-first-token climbs with
-the prompt (2760 ms to 12630 ms on `minimal`) exactly as re-processing would.
-So B-18's `num_ctx` cap is carrying the entire gain, and the cache-stable
-ordering that Phase 5.0 was mostly about is not reaching this backend at all.
+`messy`.** The p95 figures stand; the reuse column does not, and the paragraph
+that used to stand here read it as evidence that B-17 had not reached the
+backend. That reading was wrong, and this is why.
 
-**Two readings survive this data, and one command separates them.** Either
-the prefix genuinely is not being reused, or `prompt_eval_count` reports the
-full prompt whether or not it was cached, and the metric this section
-introduced is measuring nothing. The discriminator is `prompt_eval_duration`
-on three requests sharing one long system prefix: if the count stays flat
-while the duration collapses, reuse is working and the count is lying.
-`tests/prefix_cache.rs` runs exactly that, straight at `/api/chat` with no
-engine involved, and names which of the three readings the numbers support:
+### The reuse column was measuring nothing
+
+Two readings survived the run above. Either the prefix genuinely was not being
+reused, or `prompt_eval_count` reports the full prompt whether or not it was
+cached. `tests/prefix_cache.rs` settled it: three requests sharing one
+byte-identical 2232-token system prefix, straight at `/api/chat`, no engine
+involved.
+
+| call | `prompt_eval_count` | `prompt_eval_duration` |
+|---:|---:|---:|
+| 0 | 2232 | 9858 ms |
+| 1 | 2233 | 167 ms |
+| 2 | 2232 | 191 ms |
+
+**The count is flat and the work collapsed by 98%.** Ollama reuses the prefix
+and reports the whole prompt anyway. `prompt_eval_count` is not a cache signal
+on this build, whatever its documentation says, and every 0% above is an
+artifact of reading it as one. The constant ~1.11 ratio between `evaluated` and
+`sent` was never a full re-evaluation — it is the chat template's per-message
+overhead on a count that reports the prompt's length and nothing about the
+cache.
+
+The metric is rebuilt rather than patched. `ChatDelta` and `TurnOutcome` now
+carry `prompt_eval_time`, and `turn_latency` derives reuse from what a thousand
+tokens of prompt cost the server, read against turn 0 where nothing is cached
+yet. Time falls when the cache is used, which is the whole requirement. It is
+also narrower than time-to-first-token, which carries queueing, sampling and
+the first token's own decode.
+
+The stand-in reported 75% over these transcripts while the live server reported
+0%, and **the stand-in was the honest one** — the first time in this project
+the disagreement ran that way. It now models the server it stands in for on
+both fields: the full count, and a duration proportional to what a caching
+server would actually have to evaluate.
+
+**What this does not settle is whether the engine's own turns get that reuse.**
+The probe shares a prefix by construction. Live turns rose from 2760 ms to
+12630 ms time-to-first-token as the prompt grew, which is what re-processing
+looks like and is not what this server does when handed a stable prefix.
+Re-running `turn_latency` on the rebuilt metric is what answers it:
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
 ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
-  cargo test -p orison-core --test prefix_cache -- --nocapture
+  cargo test -p orison-core --test turn_latency -- --nocapture
 ```
 
-Until that is run, "0% reuse" is an observation about `prompt_eval_count`,
-not yet a finding about the cache — and this document is not going to record a third
-structural defect on the strength of a number whose meaning is unestablished.
-
-The stand-in reports 75% mean reuse over the same transcripts, so it and the
-live server now disagree. That disagreement is the finding; which of them is
-wrong is the open question.
+Until then B-17's effect on a live run is unmeasured, not absent, and the
+`messy` p95 is the open regression.
 
 ### The stand-in was flattering the code in three places
 
@@ -757,20 +780,22 @@ like the thing it stands in for.
 | It did | A real Ollama does | What that hid |
 |---|---|---|
 | Advertised `context_length` 8192 | `llama3.2:3b` advertises 131072 | 8192 is exactly the cap, so the stand-in agreed with the code by coincidence and B-18 was unreachable in `cargo test` |
-| Reported `prompt_eval_count: 0` | Reports what it evaluated, on the last chunk only | Cache reuse was unmeasurable without a live server |
+| Reported `prompt_eval_count: 0` | Reports the prompt's full length on the last chunk, cached or not, and bills the real work to `prompt_eval_duration` | Cache reuse was unmeasurable without a live server. Phase 5.6 corrected the second half of this row: the stand-in first modelled a count that *excluded* cached tokens, which is what Ollama documents and not what it does |
 | Emitted response fields alphabetically | Emits them in the schema's order | `serde_json::json!` builds a `BTreeMap`, so the stand-in streamed **dialogue before narration** — every shell rendering that stream would show the character's answer before the narration setting it up, and only against the stand-in |
 
-The stand-in now advertises a real window, models a prompt cache (reporting
-the tokens not shared as a prefix with the previous request), and serialises
-the same Rust types the response is parsed back into, so its field order
-cannot drift from the schema's.
+The stand-in now advertises a real window, models a prompt cache (billing
+`prompt_eval_duration` for the tokens not shared as a prefix with the previous
+request, while reporting `prompt_eval_count` in full as Ollama does), and
+serialises the same Rust types the response is parsed back into, so its field
+order cannot drift from the schema's.
 
-**And the cache property became assertable without a model.** Reuse is a
-property of the message list, not a timing measurement, so `turn_latency`'s
-harness self-test now asserts that reuse *rises* as the transcript grows.
-Reverting the ordering fix makes it fall — 72% to 65% on `minimal` — and the
-assertion fires. An absolute floor could not tell the two apart on a fixture
-this short, because the character card dominates either way.
+**And the cache property became assertable without a model.** What the
+stand-in charges for a prompt is a deterministic function of the message list
+rather than of the machine running it, so `turn_latency`'s harness self-test
+asserts that reuse *rises* as the transcript grows. Reverting the ordering fix
+makes it fall — 65% to 54% on `minimal` — and the assertion fires. An absolute
+floor could not tell the two apart on a fixture this short, because the
+character card dominates either way.
 
 ### D-4: the human read, done
 

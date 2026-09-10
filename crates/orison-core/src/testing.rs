@@ -93,15 +93,43 @@ impl Observed {
     }
 }
 
-/// What a prompt-caching server would have to evaluate for this request,
-/// given what it was sent last time.
+/// Nanoseconds the stand-in claims to spend per prompt token it evaluates.
 ///
-/// Ollama reports exactly this as `prompt_eval_count`: tokens served from its
-/// own cache are not counted. Modelling it here rather than reporting a flat
-/// zero is what lets `tests/turn_latency.rs`'s harness self-test fail when
-/// the prompt ordering regresses — the previous stand-in could not tell a
-/// cache-stable prompt from a cache-hostile one, which is precisely how a
-/// green wire test coexisted with a live run at 2x the Godot baseline.
+/// Arbitrary, and only the ratio matters: what a reader of
+/// `prompt_eval_duration` is looking for is whether the number falls when a
+/// prefix is reused, not what a particular machine costs.
+const NANOS_PER_EVALUATED_TOKEN: u64 = 1_000_000;
+
+/// The overhead a request pays whether or not it evaluates anything, so a
+/// fully cached prompt reports a small duration rather than a zero that
+/// would divide badly downstream.
+const FIXED_PROMPT_EVAL_NANOS: u64 = 2_000_000;
+
+/// Every token in this request's prompt, which is what a real Ollama reports
+/// as `prompt_eval_count`.
+///
+/// It is documented as excluding whatever was served from the prompt cache.
+/// Measured in Phase 5.6 against `llama3.2:3b`, it does not: three requests
+/// sharing a byte-identical 2232-token prefix reported 2232, 2233 and 2232
+/// while the work behind them fell from 9858 ms to 179 ms
+/// (`tests/prefix_cache.rs`). The stand-in reports the full count too,
+/// because a stand-in that is more honest than the server it stands in for
+/// teaches tests to rely on something that is not there.
+///
+/// Token counts are word counts, matching [`test_tokenizer`].
+fn total_prompt_tokens(current: &[String]) -> usize {
+    current.iter().map(|m| m.split_whitespace().count()).sum()
+}
+
+/// What a prompt-caching server would actually have to evaluate for this
+/// request, given what it was sent last time.
+///
+/// This drives `prompt_eval_duration`, which is the field that does fall when
+/// a prefix is reused. Modelling it rather than reporting a flat zero is what
+/// lets `tests/turn_latency.rs`'s harness self-test fail when the prompt
+/// ordering regresses — a stand-in that cannot tell a cache-stable prompt
+/// from a cache-hostile one is precisely how a green wire test coexisted with
+/// a live run at 2x the Godot baseline.
 ///
 /// Token counts are word counts, matching [`test_tokenizer`].
 fn evaluated_prompt_tokens(previous: &[String], current: &[String]) -> usize {
@@ -344,7 +372,7 @@ async fn serve(
     // Model the server's prompt cache before answering: what it would have to
     // evaluate is whatever this request does not share as a prefix with the
     // last one.
-    let evaluated = {
+    let (reported_count, prompt_eval_nanos) = {
         let current = messages_of(
             &observed
                 .last_chat_body
@@ -357,8 +385,12 @@ async fn serve(
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let evaluated = evaluated_prompt_tokens(&previous, &current);
+        let total = total_prompt_tokens(&current);
         *previous = current;
-        evaluated
+        (
+            total,
+            FIXED_PROMPT_EVAL_NANOS + evaluated as u64 * NANOS_PER_EVALUATED_TOKEN,
+        )
     };
 
     let pieces = split_into(
@@ -394,7 +426,8 @@ async fn serve(
             "message": { "role": "assistant", "content": pieces.concat() },
             "done": true,
             "done_reason": "stop",
-            "prompt_eval_count": evaluated,
+            "prompt_eval_count": reported_count,
+            "prompt_eval_duration": prompt_eval_nanos,
             "eval_count": 0,
         })
         .to_string();
@@ -444,7 +477,8 @@ async fn serve(
             "done_reason": if i == last { "stop" } else { "" },
         });
         if i == last {
-            line_value["prompt_eval_count"] = serde_json::json!(evaluated);
+            line_value["prompt_eval_count"] = serde_json::json!(reported_count);
+            line_value["prompt_eval_duration"] = serde_json::json!(prompt_eval_nanos);
             line_value["eval_count"] = serde_json::json!(0);
         }
         let line = line_value.to_string();

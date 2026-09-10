@@ -249,12 +249,23 @@ pub struct ChatDelta {
     /// Prompt tokens the *backend* says it evaluated, when it says so —
     /// present on the final chunk of an Ollama stream and `None` before it.
     ///
-    /// This is not the same number as the prompt's length, and the difference
-    /// is the point: a backend reusing a KV-cached prefix evaluates only the
-    /// tokens it has not seen before. Comparing it with the locally counted
-    /// prompt size is a direct measurement of cache reuse, where
-    /// time-to-first-token is only an inference from one.
+    /// **Do not read this as a cache-reuse signal.** It was introduced as
+    /// one, on the documented understanding that tokens served from the
+    /// server's prompt cache go uncounted. Measured against a real Ollama in
+    /// Phase 5.6, that is false: three requests sharing a byte-identical
+    /// 2232-token prefix reported 2232, 2233 and 2232 while the work behind
+    /// them fell from 9858 ms to 179 ms. The count reports the whole prompt
+    /// whether or not it was evaluated. `tests/prefix_cache.rs` is that
+    /// measurement. Use [`ChatDelta::prompt_eval_time`] instead.
     pub evaluated_prompt_tokens: Option<usize>,
+    /// How long the backend spent evaluating the prompt, when it says.
+    ///
+    /// This is the signal `evaluated_prompt_tokens` was supposed to be. A
+    /// backend reusing a KV-cached prefix does no work for the cached part,
+    /// so this stays flat as a transcript grows and rises with the prompt
+    /// when it does not — and unlike time-to-first-token it excludes queueing,
+    /// sampling and the first token's own decode.
+    pub prompt_eval_time: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

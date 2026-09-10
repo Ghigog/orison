@@ -147,10 +147,11 @@ document exists — nothing else in Phase 5 is outstanding.
 ### 1. Turn latency. This is the gate.
 
 > **Run, and the gate is not met.** `minimal` clears it at p95 15.1 s;
-> `messy` misses at 30.9 s against 20.2 s. Reuse read **0%** on every turn of
-> both. The numbers and what they mean are in
+> `messy` misses at 30.9 s against 20.2 s. That run also read 0% cache reuse,
+> which turned out to be the metric and not the cache — it has been rebuilt on
+> `prompt_eval_duration`, so **this command wants re-running**. The numbers and
+> what they mean are in
 > [eval_baseline.md](eval_baseline.md#turn-latency--the-live-re-run-phase-56).
-> Re-run it after any change to prompt assembly or the backend.
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
@@ -162,14 +163,19 @@ Phase 4 measured p95 at 63.2 s / 52.9 s against a 21.2 s / 20.2 s baseline —
 about 2x *slower* than the engine it replaces. Two causes were found and
 fixed (B-17, B-18); this run says whether that was enough.
 
-**Read the `reused` column before the latency column.** It is the fraction of
-each prompt Ollama served from its own cache rather than re-evaluating:
+**Read the `reused` column before the latency column.** It is how much of each
+prompt cost the server nothing, derived from the time it spent evaluating the
+prompt against what turn 0 paid when nothing was cached yet:
 
 ```
-turn |      sent | evaluated |  reused |      ttft |     total
-   0 |      1130 |       880 |     22% |      6 ms |     64 ms
-   1 |      1184 |       326 |     72% |      5 ms |     44 ms
+turn |      sent |   counted |  prompt ms | ms/1k sent |  reused |      ttft |     total
+   0 |      1130 |       880 |        882 |        781 |      0% |      9 ms |     57 ms
+   1 |      1184 |       918 |        328 |        277 |     65% |      8 ms |     29 ms
 ```
+
+`counted` is `prompt_eval_count`, which is the prompt's length as the server
+tokenised it and **not** a cache signal: Ollama reports it in full whether or
+not it evaluated the tokens. That mistake cost Phase 5.6 a run.
 
 - **Reuse high and rising, p95 at or under the baseline** → the gate is met.
 - **Reuse high, p95 still over** → the cache was never the problem. The
@@ -180,11 +186,11 @@ turn |      sent | evaluated |  reused |      ttft |     total
 Phase 4 had only time-to-first-token to read and could not tell those apart.
 That is the change that matters most in this phase.
 
-**When reuse reads zero, run this next.** A zero can mean the prefix is not
-being reused, or that this Ollama reports the full `prompt_eval_count`
-whether it cached the prompt or not. The latency table cannot tell those
-apart; three requests sharing one system prefix can, and the test says which
-reading its own numbers support:
+**When reuse reads zero, run this next.** It checks the backend's own
+accounting rather than the engine: three requests sharing one long system
+prefix, straight at `/api/chat`. On `llama3.2:3b` it is what established that
+`prompt_eval_count` reports the whole prompt cached or not, and it will say so
+again if you are on a server that behaves differently:
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
