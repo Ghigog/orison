@@ -146,12 +146,11 @@ document exists — nothing else in Phase 5 is outstanding.
 
 ### 1. Turn latency. This is the gate.
 
-> **Run, and the gate is not met.** `minimal` clears it at p95 15.1 s;
-> `messy` misses at 30.9 s against 20.2 s. That run also read 0% cache reuse,
-> which turned out to be the metric and not the cache — it has been rebuilt on
-> `prompt_eval_duration`, so **this command wants re-running**. The numbers and
-> what they mean are in
-> [eval_baseline.md](eval_baseline.md#turn-latency--the-live-re-run-phase-56).
+> **Run on the rebuilt metric. `minimal` meets the gate, `messy` does not** —
+> p95 15.5 s against 21.2 s, and 26.3 s against 20.2 s. Cache reuse is real but
+> partial and decaying, and the engine's prompts are not the cause. The numbers,
+> the diagnosis and the one question still open are in
+> [eval_baseline.md](eval_baseline.md#turn-latency-on-the-rebuilt-metric-phase-56).
 
 ```bash
 ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \

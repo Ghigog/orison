@@ -771,6 +771,78 @@ ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
 Until then B-17's effect on a live run is unmeasured, not absent, and the
 `messy` p95 is the open regression.
 
+### Turn latency on the rebuilt metric (Phase 5.6)
+
+Same machine, same model, Director disabled. This is the first reading of the
+gate that measures reuse in work rather than in a token count that does not
+move.
+
+| Fixture | Godot p50 | Rust p50 | Rust p95 | Gate | Mean reuse after turn 0 |
+|---|---:|---:|---:|---|---:|
+| `minimal` | 21200 ms | 14100 ms | **15500 ms** | met | 47%, falling 57% → 36% |
+| `messy` | 20200 ms | 16907 ms | **26339 ms** | **missed** | 1% |
+
+`minimal` clears the gate. `messy` does not, and it is the only thing standing
+between Phase 5 and Phase 6 on latency.
+
+**The reuse is real, partial, and decays.** On `minimal` the cost per thousand
+prompt tokens drops from 4566 ms on turn 0 to 1986 ms on turn 1, then climbs
+back to 2925 ms by turn 7. Turning that into tokens: the cached region is flat
+at **roughly 715 tokens** across the whole transcript, while the prompt grows
+from 1130 to 2011. A fixed head is being reused. The transcript behind it is
+not. On `messy` not even the head survives — every turn pays the uncached rate.
+
+**The engine is not what differs.** `tests/prefix_growth.rs` runs eight turns
+against both fixtures with no model and asserts what the requests actually
+look like:
+
+```
+=== minimal ===
+turn 1:  7 messages,   921 words | shared with previous:  1 messages,  592 words ( 64%)
+turn 7: 25 messages,  1136 words | shared with previous: 19 messages,  800 words ( 70%)
+
+=== messy ===
+turn 1:  7 messages,   949 words | shared with previous:  1 messages,  539 words ( 57%)
+turn 7: 25 messages,  1247 words | shared with previous: 19 messages,  787 words ( 63%)
+```
+
+The shared prefix grows every turn, on both fixtures, and each turn makes
+**exactly one** model call — so nothing is interleaving into the backend's
+cache slot between turns. `messy` builds a prefix as cache-friendly as
+`minimal`'s and gets none of the reuse, which rules the prompt out as the
+difference. The two fixtures also share a single speaker each, so the
+character card at the front of the prompt never moves.
+
+Reverting §2.7's ordering freezes that prefix at 592 words and the test fails
+with the live signature exactly: *"the shared prefix did not grow (592 → 592
+words)"*. That the live run shows a frozen cached region while the message
+list shows a growing prefix is the whole of the remaining puzzle.
+
+**What is left to establish is whether this server reuses the shape a turn
+actually has.** `tests/prefix_cache.rs`'s first probe holds one system message
+fixed and varies the question; `llama3.2:3b` passes it outright. A turn is
+harder: request *n* is `[system][turns 1..n-1][fresh tail][question]`, so the
+prefix shared with request *n-1* ends where *n-1*'s tail began, and the server
+must keep a proper prefix of what it holds and discard the rest. The second
+probe sends exactly that and reports which of three things happened:
+
+```bash
+ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
+ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
+  cargo test -p orison-core --test prefix_cache -- --nocapture
+```
+
+If it reuses and holds, the engine's prompts are cache-stable and the
+shortfall is below the message list, in how the prompt renders. If it reuses
+and decays, the server keeps a fixed head by design and §2.7 cannot buy more
+than that. If it does not reuse at all in this shape, the volatile tail
+*behind* the transcript is itself the problem, and no amount of ordering
+within the tail will help — the blocks have to come out from behind the
+history.
+
+Both verdicts in that probe were checked against servers built to exhibit each
+behaviour, so it can tell them apart rather than defaulting to the reassuring
+one.
 ### The stand-in was flattering the code in three places
 
 Phase 4's lesson — "a test that passes against a stand-in is evidence about
