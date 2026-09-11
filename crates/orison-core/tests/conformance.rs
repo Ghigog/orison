@@ -173,6 +173,40 @@ fn keep_alive_defaults_to_a_bounded_duration_not_forever() {
     );
 }
 
+/// `inference::probe` (#29: the desktop connect screen's reachability badge)
+/// answers the same three `HealthStatus` states `health()` does, without
+/// needing a connected backend — exercised hermetically against the stand-in
+/// rather than gated on a live Ollama, since it never calls `/api/show`.
+#[tokio::test]
+async fn probe_reports_available_for_a_model_the_endpoint_has_installed() {
+    let server = stand_in().await;
+    let health = orison_core::inference::probe(&server.url(), "stand-in")
+        .await
+        .expect("probe must not error for a reachable server");
+    assert_eq!(health.status, HealthStatus::Available);
+}
+
+#[tokio::test]
+async fn probe_reports_model_not_installed_distinctly_from_unreachable() {
+    let server = stand_in().await;
+    let health = orison_core::inference::probe(&server.url(), "never-pulled")
+        .await
+        .expect("probe must not error for a reachable server");
+    assert_eq!(health.status, HealthStatus::ModelNotInstalled);
+}
+
+#[tokio::test]
+async fn probe_reports_unreachable_for_a_refused_connection() {
+    let health = orison_core::inference::probe("http://127.0.0.1:1", "any-model")
+        .await
+        .expect("probe must not error just because the endpoint is down");
+    assert!(
+        matches!(health.status, HealthStatus::Unreachable { .. }),
+        "expected Unreachable for a refused connection, got: {:?}",
+        health.status
+    );
+}
+
 #[tokio::test]
 async fn live_ollama_health_reports_available_for_an_installed_model() {
     let Some((url, model)) = live_ollama_config() else {

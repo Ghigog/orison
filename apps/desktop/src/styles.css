@@ -199,6 +199,27 @@ textarea {
   width: auto;
 }
 
+.health-badge {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+.health-badge.ok {
+  color: var(--ink-3);
+}
+
+.health-badge.warn {
+  color: var(--lamp);
+}
+
+.health-detail {
+  font-size: 11px;
+  color: var(--lamp);
+  margin-top: 6px;
+  min-height: 1.4em;
+}
+
 .sheet-block {
   background: var(--paper);
   box-shadow: var(--sheet-shadow);

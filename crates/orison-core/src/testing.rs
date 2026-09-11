@@ -318,6 +318,29 @@ async fn serve(
         }
     };
 
+    if path.ends_with("/api/tags") {
+        // What `probe`/`health` need to tell "installed" from "not
+        // installed": a name a real Ollama would report for the model every
+        // other stand-in helper here connects as (see `stand_in()` and
+        // friends' `"stand-in"` convention), with a `:latest` tag so the
+        // installed check's split(':') fallback is exercised too, not just
+        // an exact match.
+        let payload = serde_json::json!({
+            "models": [{ "name": "stand-in:latest" }],
+        })
+        .to_string();
+        writer
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{payload}",
+                    payload.len()
+                )
+                .as_bytes(),
+            )
+            .await?;
+        return Ok(());
+    }
+
     if path.ends_with("/api/show") {
         // What a real small model advertises, not what we would like it to.
         // `llama3.2:3b` — the model the baseline was recorded on — reports

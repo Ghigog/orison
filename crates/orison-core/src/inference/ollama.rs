@@ -521,44 +521,71 @@ impl InferenceBackend for OllamaBackend {
     }
 
     async fn health(&self) -> Result<ModelHealth, InferenceError> {
-        let url = format!("{}/api/tags", self.base_url.trim_end_matches('/'));
-        let resp = match self.client.get(&url).send().await {
-            Ok(r) => r,
-            Err(source) => {
-                return Ok(ModelHealth {
-                    model: self.model.clone(),
-                    status: HealthStatus::Unreachable {
-                        detail: source.to_string(),
-                    },
-                    context_length: None,
-                });
-            }
-        };
+        tags_health(
+            &self.client,
+            &self.base_url,
+            &self.model,
+            Some(self.context_length),
+        )
+        .await
+    }
+}
 
-        if !resp.status().is_success() {
+/// Check whether `model` is installed and the endpoint reachable at
+/// `base_url`, without the `/api/show` round trip or tokenizer load that
+/// [`OllamaBackend::connect`] needs — the difference between "can I show a
+/// reachability badge for what the player typed" and "can I actually run a
+/// turn against it". Errors that `connect` would fail on (an unreachable
+/// endpoint, a model that isn't pulled) come back as [`HealthStatus`]
+/// variants here instead, since the whole point is to answer both without
+/// requiring either to already be true.
+pub async fn probe(base_url: &str, model: &str) -> Result<ModelHealth, InferenceError> {
+    tags_health(&reqwest::Client::new(), base_url, model, None).await
+}
+
+async fn tags_health(
+    client: &reqwest::Client,
+    base_url: &str,
+    model: &str,
+    context_length: Option<usize>,
+) -> Result<ModelHealth, InferenceError> {
+    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(source) => {
             return Ok(ModelHealth {
-                model: self.model.clone(),
+                model: model.to_string(),
                 status: HealthStatus::Unreachable {
-                    detail: format!("HTTP {}", resp.status()),
+                    detail: source.to_string(),
                 },
                 context_length: None,
             });
         }
+    };
 
-        let tags: OllamaTagsResponse = resp.json().await?;
-        let installed = tags
-            .models
-            .iter()
-            .any(|m| m.name == self.model || m.name.split(':').next() == Some(self.model.as_str()));
-
-        Ok(ModelHealth {
-            model: self.model.clone(),
-            status: if installed {
-                HealthStatus::Available
-            } else {
-                HealthStatus::ModelNotInstalled
+    if !resp.status().is_success() {
+        return Ok(ModelHealth {
+            model: model.to_string(),
+            status: HealthStatus::Unreachable {
+                detail: format!("HTTP {}", resp.status()),
             },
-            context_length: Some(self.context_length),
-        })
+            context_length: None,
+        });
     }
+
+    let tags: OllamaTagsResponse = resp.json().await?;
+    let installed = tags
+        .models
+        .iter()
+        .any(|m| m.name == model || m.name.split(':').next() == Some(model));
+
+    Ok(ModelHealth {
+        model: model.to_string(),
+        status: if installed {
+            HealthStatus::Available
+        } else {
+            HealthStatus::ModelNotInstalled
+        },
+        context_length,
+    })
 }
