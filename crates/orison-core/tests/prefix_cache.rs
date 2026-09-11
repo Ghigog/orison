@@ -153,3 +153,169 @@ async fn does_this_server_reuse_a_shared_prefix() {
         }
     );
 }
+
+/// Does this server still reuse when the conversation *grows* and the tail
+/// moves — which is the shape every real turn has?
+///
+/// The probe above holds one system message fixed and varies only the
+/// question. That is the easy case, and `llama3.2:3b` passes it outright.
+/// A turn is harder in a specific way: the previous request ended with
+/// blocks that this one does not have in the same place. Request *n* is
+///
+/// ```text
+/// [system][turn 1 .. turn n-1][fresh tail][question]
+/// ```
+///
+/// so the common prefix with request *n-1* ends where *n-1*'s tail began —
+/// the cached sequence is longer than the prefix now shared with it, and the
+/// server has to keep a proper prefix of what it holds and discard the rest.
+///
+/// `tests/prefix_growth.rs` proves the engine builds exactly this shape, with
+/// a prefix that grows every turn, on both fixtures and with one model call
+/// per turn. Phase 5.6's live run nonetheless measured a cached region that
+/// stayed flat at roughly 715 tokens on `minimal` while the prompt doubled,
+/// and no reuse at all on `messy`. Either the server does not reuse this
+/// shape, or something below the message list does not survive it.
+///
+/// Read the `prompt ms` column against the growing prompt:
+///
+/// - **flat** — the server reuses a growing conversation. The engine's
+///   prompts are cache-stable and the shortfall is elsewhere: look below the
+///   message list, at how the prompt renders.
+/// - **rising with the prompt** — the server only reuses when nothing follows
+///   the cached region. The ordering work cannot fix that, and the engine has
+///   to stop moving blocks behind the transcript: the tail is the problem,
+///   not its contents.
+#[tokio::test]
+async fn does_this_server_reuse_a_growing_conversation() {
+    let (Ok(url), Ok(model)) = (
+        std::env::var("ORISON_TEST_OLLAMA_URL"),
+        std::env::var("ORISON_TEST_OLLAMA_MODEL"),
+    ) else {
+        eprintln!(
+            "SKIPPED does_this_server_reuse_a_growing_conversation: set \
+             ORISON_TEST_OLLAMA_URL and ORISON_TEST_OLLAMA_MODEL."
+        );
+        return;
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .expect("build a client");
+    let system = shared_system_prefix();
+
+    println!("\nPrefix reuse with a growing conversation and a moving tail");
+    println!("model: {model}");
+    println!(
+        "{:>5} | {:>9} | {:>11} | {:>11}",
+        "turn", "sent", "prompt eval", "ms/1k sent"
+    );
+    println!("{:-<6}|{:-<11}|{:-<13}|{:-<13}", "", "", "", "");
+
+    // The transcript, grown one exchange at a time, exactly as a scene does.
+    let mut transcript: Vec<serde_json::Value> = Vec::new();
+    let mut costs = Vec::new();
+
+    for turn in 0..6 {
+        let question = format!("Question number {turn}: what stands in the north aisle?");
+
+        let mut messages = vec![serde_json::json!({ "role": "system", "content": system })];
+        messages.extend(transcript.iter().cloned());
+        // The volatile tail: new on every call, and ordered behind the
+        // transcript exactly as `prompt::ordering` puts it.
+        messages.push(serde_json::json!({
+            "role": "system",
+            "content": format!("Retrieved for this turn only, turn {turn}: \
+                                the ledgers were rebound in the spring of the {turn}th year."),
+        }));
+        messages.push(serde_json::json!({ "role": "user", "content": question }));
+
+        let body = serde_json::json!({
+            "model": model,
+            "stream": false,
+            "keep_alive": "5m",
+            "options": { "num_ctx": 8192, "temperature": 0, "num_predict": 24 },
+            "messages": messages,
+        });
+        let sent_words: usize = body["messages"]
+            .as_array()
+            .expect("messages")
+            .iter()
+            .map(|m| {
+                m["content"]
+                    .as_str()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .count()
+            })
+            .sum();
+
+        let reply: Reply = client
+            .post(format!("{}/api/chat", url.trim_end_matches('/')))
+            .json(&body)
+            .send()
+            .await
+            .expect("reach the configured Ollama")
+            .json()
+            .await
+            .expect("a JSON reply");
+
+        let ms = reply.prompt_eval_duration.unwrap_or(0) as f64 / 1e6;
+        let per_1k = ms / (sent_words as f64 / 1000.0);
+        println!("{turn:>5} | {sent_words:>9} | {ms:>8.0} ms | {per_1k:>11.0}");
+        costs.push((sent_words, ms, per_1k));
+
+        // Grow the transcript by this exchange, which is what makes the next
+        // request's shared prefix longer than this one's was.
+        transcript.push(serde_json::json!({ "role": "user", "content": question }));
+        transcript.push(serde_json::json!({
+            "role": "assistant",
+            "content": "A copper kettle sits in the stove at the far end, and it has never \
+                        been seen to move while observed. The ledgers beside it are bound in \
+                        calfskin and shelved by year.",
+        }));
+    }
+
+    // Turn 0 caches nothing, so its per-token cost is what an uncached token
+    // costs here. Every later turn is read against it — the same baseline
+    // `turn_latency` uses, so the two runs are directly comparable.
+    let baseline = costs[0].2.max(0.001);
+    let early = costs[1].2;
+    let late = costs.last().expect("turns").2;
+    println!(
+        "\ncost per 1k sent: turn 0 {:.0} (uncached) | turn 1 {:.0} ({:.0}%) | turn {} {:.0} ({:.0}%)",
+        baseline,
+        early,
+        early / baseline * 100.0,
+        costs.len() - 1,
+        late,
+        late / baseline * 100.0,
+    );
+
+    // Anything at or above 60% of the uncached rate is not meaningfully
+    // cached: the remaining gap is batching, not reuse.
+    let reused_at_all = early < baseline * 0.6;
+    let still_reused = late < baseline * 0.6;
+
+    println!(
+        "\n{}",
+        match (reused_at_all, still_reused) {
+            (true, true) =>
+                "REUSED, AND IT HOLDS. The per-token cost stayed well under the uncached \
+                 rate as the transcript grew, so this server honours the engine's shape. A \
+                 live turn that does not get this reuse is failing below the message list \
+                 — look at how the prompt renders, not at the ordering.",
+            (true, false) =>
+                "REUSED AT FIRST, THEN DECAYED. The cost climbed back towards the uncached \
+                 rate as the conversation grew, so the server keeps a fixed head and \
+                 re-evaluates what follows it. This is the shape Phase 5.6 measured live, \
+                 and it is the server's behaviour rather than the engine's prompt.",
+            (false, _) =>
+                "NOT REUSED IN THIS SHAPE. The per-token cost never left the uncached rate, \
+                 even though the fixed-prefix probe above reuses fine. The difference is the \
+                 moving tail behind the transcript: ordering cannot fix that, and the engine \
+                 has to stop putting blocks behind the history.",
+        }
+    );
+}
