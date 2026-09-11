@@ -1,7 +1,7 @@
 /* Round 2 design direction (docs/design/Orison.dc.html): paper on a desk,
-   not the dark glassmorphism design_philosophy.md used to specify. Only the
-   tokens this early scaffold actually uses; the full set moves here as each
-   screen is ported (see docs/design/README.md). */
+   not the dark glassmorphism design_philosophy.md used to specify. Tokens
+   and components ported as each screen gets wired to a real command; see
+   docs/design/README.md for the decisions behind them. */
 :root {
   --paper: oklch(0.965 0.01 85);
   --paper-2: oklch(0.934 0.012 82);
@@ -27,44 +27,133 @@ body {
   background: var(--desk);
   color: var(--ink);
   font-family: Spectral, Georgia, serif;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 30px;
+  font-weight: 400;
+  margin: 8px 0 20px;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 8px 10px;
+  width: 100%;
 }
 
 .mono {
   font-family: "IBM Plex Mono", monospace;
 }
 
+.muted {
+  color: var(--ink-2);
+}
+
+.error {
+  color: var(--lamp);
+}
+
 #app {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
 }
 
 .rail {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-  padding: 26px 44px 0;
+  width: 200px;
+  flex: none;
+  padding: 24px 0 24px 20px;
+  border-right: 1px solid var(--rule);
+  background: var(--paper-2);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
 }
 
-.campaign-list {
-  padding: 12px 44px 60px;
+.brand {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+.nav-group {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  margin: 22px 0 8px;
+}
+
+.nav-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 10px 4px 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  color: var(--ink);
+}
+
+.nav-item .mark {
+  color: var(--lamp);
+  width: 8px;
+  flex: none;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.screen {
+  flex: 1;
+  min-width: 0;
+}
+
+.pad {
+  padding: 40px 44px 60px;
   max-width: 920px;
 }
 
-.campaign-row {
+.title-lg {
+  font-size: 22px;
+}
+
+.meta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+
+.row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  padding: 20px 0;
+  gap: 20px;
+  padding: 18px 0;
   border-bottom: 1px solid var(--rule-2);
   align-items: center;
 }
 
-.campaign-row button {
+.btn {
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
   letter-spacing: 0.1em;
@@ -76,24 +165,94 @@ body {
   cursor: pointer;
 }
 
-.campaign-row button:hover {
+.btn:hover {
   background: var(--ink);
   color: var(--paper);
 }
 
+.btn-solid {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.field {
+  margin: 16px 0;
+}
+
+.field label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.sheet-block {
+  background: var(--paper);
+  box-shadow: var(--sheet-shadow);
+  padding: 22px 26px;
+  margin-top: 20px;
+}
+
+.play-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 28px 16px;
+}
+
 .sheet {
   max-width: 900px;
-  margin: 0 auto;
+  margin: 0 24px 40px;
   background: var(--paper);
   box-shadow: var(--sheet-shadow);
   border-top: 2px solid var(--ink);
 }
 
 .transcript {
-  padding: 20px 30px;
+  padding: 20px 30px 8px;
   max-height: 50vh;
   overflow: auto;
-  white-space: pre-wrap;
+}
+
+.transcript p {
+  margin: 0 0 14px;
+}
+
+.transcript p.system {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.transcript p.error {
+  color: var(--lamp);
+}
+
+.interrupted {
+  border-top: 1px solid var(--lamp-mark);
+  border-bottom: 1px solid var(--lamp-mark);
+  padding: 14px 0;
+  margin: 14px 0;
+}
+
+.instrument {
+  border-top: 1px solid var(--rule-2);
+  background: var(--paper-2);
+  padding: 8px 30px;
+  font-size: 11px;
+  color: var(--ink-3);
+  min-height: 1.4em;
 }
 
 .composer {
@@ -106,13 +265,18 @@ body {
 .composer input {
   flex: 1;
   border: none;
-  outline: none;
   background: none;
   font-family: Spectral, Georgia, serif;
-  font-size: 17px;
-  color: var(--ink);
+  font-size: 16px;
 }
 
-.error {
+.lamp {
   color: var(--lamp);
+}
+
+pre.mono {
+  background: var(--paper);
+  padding: 14px;
+  font-size: 12px;
+  white-space: pre-wrap;
 }

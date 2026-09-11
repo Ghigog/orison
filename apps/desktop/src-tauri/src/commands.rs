@@ -144,17 +144,46 @@ fn engine_or_err(
     })
 }
 
-/// Fire-and-forget: the turn's content arrives as `"turn-event"` events, not
-/// as this call's return value (see the module doc). `TurnEngine` cancels any
-/// turn already in flight itself, so the desktop shell never has to.
+/// Fire-and-forget: the turn's narrative content arrives as `"turn-event"`
+/// events, not as this call's return value (see the module doc).
+/// `TurnEngine` cancels any turn already in flight itself, so the desktop
+/// shell never has to.
+///
+/// The one thing the event stream does not carry is `TurnOutcome`'s
+/// instrumentation — latency, time-to-first-token, cache reuse — since that
+/// only exists once the turn has fully applied. This spawns a task to await
+/// it and emit it separately as `"turn-outcome"`, once, rather than making
+/// every `TurnEvent` variant carry fields that are meaningless until the
+/// last one. A cancelled or failed turn (`FailureKind`, already on
+/// `"turn-event"` as `Failed`) has no outcome to report and emits nothing
+/// here.
 #[tauri::command]
 pub fn submit_player_input(
+    app: AppHandle,
     state: State<AppState>,
     campaign_id: String,
     text: String,
 ) -> Result<(), String> {
     let engine = engine_or_err(&state, &campaign_id)?;
-    engine.submit_player_input(text);
+    let ticket = engine.submit_player_input(text);
+    tauri::async_runtime::spawn(async move {
+        if let Ok(outcome) = ticket.join().await {
+            let payload = serde_json::json!({
+                "campaignId": campaign_id,
+                "outcome": {
+                    "latencyMs": outcome.latency.as_secs_f64() * 1000.0,
+                    "timeToFirstTokenMs": outcome.time_to_first_token.map(|d| d.as_secs_f64() * 1000.0),
+                    "promptTokens": outcome.prompt_tokens,
+                    "evaluatedPromptTokens": outcome.evaluated_prompt_tokens,
+                    "promptEvalTimeMs": outcome.prompt_eval_time.map(|d| d.as_secs_f64() * 1000.0),
+                    "completionTokens": outcome.completion_tokens,
+                    "retrieved": outcome.retrieved,
+                    "directorTriggered": outcome.director_triggered,
+                },
+            });
+            let _ = app.emit("turn-outcome", payload);
+        }
+    });
     Ok(())
 }
 
