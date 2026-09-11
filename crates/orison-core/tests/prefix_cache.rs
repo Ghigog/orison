@@ -16,8 +16,15 @@
 //! ```bash
 //! ORISON_TEST_OLLAMA_URL=http://127.0.0.1:11434 \
 //! ORISON_TEST_OLLAMA_MODEL=llama3.2:3b \
-//!   cargo test -p orison-core --test prefix_cache -- --nocapture
+//!   cargo test -p orison-core --test prefix_cache -- --nocapture --test-threads=1
 //! ```
+//!
+//! **`--test-threads=1` is not optional.** Both probes here measure a server's
+//! prompt cache, which is shared mutable state on the other side of the wire.
+//! Run them concurrently and each one's requests evict the other's prefix
+//! between calls, so the timings measure contention. They also take distinct
+//! system text for the same reason. Without both, this file reports the
+//! contention and calls it a cache.
 //!
 //! Read the two columns together:
 //!
@@ -37,9 +44,17 @@
 use std::time::Duration;
 
 /// Long enough that reuse is unmistakable against per-message template
-/// overhead, and stable to the byte across all three requests.
-fn shared_system_prefix() -> String {
-    "The archive keeps its ledgers in the north aisle. ".repeat(200)
+/// overhead, and stable to the byte across all of one probe's requests.
+///
+/// **Each probe gets its own text.** Both tests in this file talk to the same
+/// server, `cargo test` runs them on separate threads, and a server's prompt
+/// cache is shared state. When they shared this string, the second probe's
+/// turn 0 — its uncached baseline — landed on a slot the first probe had
+/// already warmed, and every later turn was measured against a baseline that
+/// was itself a cache hit. The verdict came out inverted. Distinct text per
+/// probe is what makes each one's turn 0 mean what it says.
+fn system_prefix(tag: &str) -> String {
+    format!("The {tag} keeps its ledgers in the north aisle. ").repeat(200)
 }
 
 #[derive(serde::Deserialize)]
@@ -67,7 +82,7 @@ async fn does_this_server_reuse_a_shared_prefix() {
         .timeout(Duration::from_secs(300))
         .build()
         .expect("build a client");
-    let system = shared_system_prefix();
+    let system = system_prefix("archive");
 
     println!("\nPrefix reuse, straight at /api/chat");
     println!("model: {model}");
@@ -203,7 +218,7 @@ async fn does_this_server_reuse_a_growing_conversation() {
         .timeout(Duration::from_secs(300))
         .build()
         .expect("build a client");
-    let system = shared_system_prefix();
+    let system = system_prefix("almonry");
 
     println!("\nPrefix reuse with a growing conversation and a moving tail");
     println!("model: {model}");
