@@ -2,8 +2,12 @@
 .godot/
 /android/
 
-# Rust workspace (crates/)
+# Rust workspace (crates/, apps/desktop/src-tauri/)
 /target/
+
+# Tauri desktop shell frontend (apps/desktop/)
+apps/desktop/node_modules/
+apps/desktop/dist/
 
 # Seeded design canvas payloads (2 MB editor bundle, regenerated from the .dc.html sources)
 docs/design/*-ui.html

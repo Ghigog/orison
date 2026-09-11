@@ -9,13 +9,15 @@
 //! Broadcast rather than a channel per subscriber: a sidebar, a transcript and
 //! a portrait all want the same turn.
 
+use serde::Serialize;
+
 use crate::prompt::schemas::{Choice, DiceRoll, Emotion, EscalationSignal};
 
 use super::error::FailureKind;
 use super::state::{DirectorState, TurnState};
 
 /// Who a line of transcript belongs to.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Speaker {
     Player,
     /// A character, by graph entity id.
@@ -24,7 +26,12 @@ pub enum Speaker {
     System,
 }
 
-#[derive(Debug, Clone)]
+/// A shell that renders `TurnEvent` over IPC (the Tauri shell, §3.1's
+/// "orison-core never knows what is rendering it") needs it as JSON on the
+/// wire; `Serialize` is a data-shape trait, not a UI-toolkit import, so it
+/// costs the crate nothing to derive here rather than wrap every variant at
+/// the boundary.
+#[derive(Debug, Clone, Serialize)]
 pub enum TurnEvent {
     /// The turn machine moved. A shell derives "is input enabled" from
     /// `TurnState::is_busy` rather than from a separate signal that every

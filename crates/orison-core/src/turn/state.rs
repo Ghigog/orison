@@ -18,13 +18,15 @@
 
 use std::fmt;
 
+use serde::Serialize;
+
 /// Where a single player turn is.
 ///
 /// `Preparing` covers everything before the model is called (sanitising input,
 /// writing the player's line to history, retrieval); it is separate from
 /// `Streaming` because cancellation during it must not leave a half-written
 /// turn behind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum TurnState {
     /// No turn in flight. The only state in which player input is accepted
     /// without cancelling something first.
@@ -86,7 +88,7 @@ impl fmt::Display for TurnState {
 /// beat has been composed and is waiting for a moment to be shown. It is a
 /// state rather than a nullable field so that "composed but not yet consumed"
 /// cannot be confused with "not running".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum DirectorState {
     Idle,
     /// Running the deterministic retrieval pre-pass and, under the profiles

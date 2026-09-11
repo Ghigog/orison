@@ -1,0 +1,32 @@
+[package]
+name = "orison-desktop"
+version = "0.1.0"
+description = "Orison — the Tauri desktop shell (migration plan Phase 6)"
+authors = ["Orison"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "orison_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+orison-core = { path = "../../../crates/orison-core" }
+orison-cli = { path = "../../../crates/orison-cli" }
+
+# Release profile tuning lives at the workspace root (Cargo ignores a
+# member's own [profile.*] once it joins a workspace); see the repository
+# root Cargo.toml.
