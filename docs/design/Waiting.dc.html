@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Outfit', system-ui, sans-serif; background: #0A0712; }
+    a { color: #FF5F38; } a:hover { color: #FF8562; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</helmet>
+
+<div style="width: 940px; background: #0A0712; color: #FFF8F2; padding: 36px 36px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 26px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: 0.05em; line-height: 1.3;">The first three seconds</div>
+    <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: #A59EBF; max-width: 740px; text-wrap: pretty;">Time to first token is 2.7 to 6.3 seconds. Until it arrives there is no story text to show, and this is the only moment in a turn with nothing to stream. It is the moment most likely to be built as a spinner.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">t = 2.1s &mdash; TurnState::Preparing</div>
+
+    <div style="width: 868px; display: flex; flex-direction: column; background: rgba(21, 18, 36, 0.75); border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 16px; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.40); overflow: hidden;">
+      <div style="height: 2px; background: rgba(255, 244, 236, 0.06);">
+        <div style="height: 2px; width: 15%; background: #FF5F38;"></div>
+      </div>
+      <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; flex-direction: column; gap: 6px; padding-left: 20px; border-left: 2px solid rgba(255, 95, 56, 0.45);">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #FF5F38; line-height: 1.2;">You</div>
+          <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">Morning. What is the toll?</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">Reading your vault</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 6px 13px;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38;"></span>Stonebridge</span>
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 6px 13px;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38;"></span>Bram Holt</span>
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 6px 13px;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38;"></span>The Mill Road</span>
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 6px 13px;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38;"></span>Tolls and tithes</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px 14px 24px; border-top: 1px solid rgba(255, 244, 236, 0.08);">
+        <div style="flex-grow: 1; font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: #A59EBF;">Keep typing. The window never locks.</div>
+        <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #A59EBF; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 0 16px; height: 44px; cursor: pointer;">Esc to stop</button>
+        <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #A59EBF; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 0 22px; height: 44px; cursor: pointer;">2.1s</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; max-width: 740px; text-wrap: pretty;">Retrieval has already finished by 2.4 seconds. The note titles are free, they are true, and they are the player&rsquo;s own writing &mdash; so the gap is filled with provenance rather than with an animation that means nothing.</div>
+    <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; max-width: 740px; text-wrap: pretty;">The elapsed counter replaces the Send label rather than appearing beside it. The composer stays typable throughout, and Esc cancels through <code style="font-family: 'Outfit', sans-serif; font-size: 14px;">cancel_current_turn</code>.</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 20px; border: 1px solid rgba(225, 29, 72, 0.22); border-radius: 12px; padding: 16px 20px; background: rgba(225, 29, 72, 0.05);">
+    <div style="display: flex; align-items: center; gap: 12px; opacity: 0.55;">
+      <span style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255, 244, 236, 0.18); border-top-color: #FFF8F2; animation: spin 0.9s linear infinite; display: inline-block;"></span>
+      <span style="font-size: 14px; letter-spacing: 0.02em; color: #A59EBF;">Generating response&hellip;</span>
+    </div>
+    <div style="font-size: 14px; letter-spacing: 0.02em; color: #E11D48; margin-left: auto;">Not this. Fifteen seconds of it reads as a hang.</div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":940,"height":760}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
