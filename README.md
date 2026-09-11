@@ -13,7 +13,7 @@ For details on the project design, developer/agent guides, and backlog tracking,
 - **[First Run](docs/first_run.md)**: How to play a campaign in a terminal on the Rust engine, and the four measurements that close Phase 5's migration gate.
 - **[Phase 5 Handoff](docs/handoff_phase5.md)**: Executable brief for the current phase, the headless playable milestone.
 - **[Architecture](ARCHITECTURE.md)**: Conceptual layout of the parser, state manager, and game renderer.
-- **[Design Philosophy & Language](design_philosophy.md)**: Unified visual language, color tokens, typography pairing, responsive grids, and motion system.
+- **[Design Philosophy & Language](design_philosophy.md)**: The frozen Godot build's real color tokens and typography, and the accessibility bar (contrast, e-ink) it and Phase 6 both need to clear.
 - **[Agent Guide](AGENTS.md)**: Canonical guidance for developers and AI agents: constraints, layout, rules, and how to run the suite.
 - **[Research Case Studies](docs/research.md)**: Deep dive into market platforms, Nomi.AI memory system, and takeaways.
 - **[Technical Architecture Proposal](docs/proposal.md)**: Details on SQLite databases, desktop passthrough, and local model mitigations.
@@ -73,7 +73,7 @@ Prerequisites: [Godot Engine 4.x](https://godotengine.org/) (Standard or Mono/C#
 │   └── ui/                  # Controllers bound to visual scenes
 ├── tests/                   # Integration and unit test runner scenes
 ├── ARCHITECTURE.md          # Project architecture design document
-├── design_philosophy.md     # Unified visual language and component styling
+├── design_philosophy.md     # Real color tokens, typography, and the contrast/e-ink bar
 ├── AGENTS.md                # Canonical developer/agent guide
 └── project.godot            # Godot project settings file
 ```

@@ -204,8 +204,7 @@ touch input handling or prompt assembly.
 3. **No layout bleed.** Keep controls inside their container bounds. Set
    `clip_contents` or minimum sizes on parents where appropriate.
 4. **Follow the design system** in
-   [design_philosophy.md](design_philosophy.md) for colour, typography, spacing
-   and motion.
+   [design_philosophy.md](design_philosophy.md) for colour and typography.
 
 ### Godot practices
 
@@ -240,7 +239,7 @@ purged once and must not come back.
 | [docs/handoff_phase0.md](docs/handoff_phase0.md) | The original Phase 0 brief, kept as history. |
 | [docs/rag_architecture.md](docs/rag_architecture.md) | Retrieval philosophy, Director/Actor rationale, June diagnosis. Authoritative. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Subsystem layout and turn-flow diagrams. |
-| [design_philosophy.md](design_philosophy.md) | Colour tokens, typography, spacing, motion. |
+| [design_philosophy.md](design_philosophy.md) | The Godot build's real colour tokens and typography, plus the contrast/e-ink bar. |
 | [docs/emotions.md](docs/emotions.md) | Tri-dimensional emotion model. |
 | [docs/orison_audit.md](docs/orison_audit.md) | June 2026 audit. Largely remediated; useful as history. |
 | [docs/proposal.md](docs/proposal.md) | Original technical proposal. Platform assumptions superseded by the migration plan; product pillars still hold. |
