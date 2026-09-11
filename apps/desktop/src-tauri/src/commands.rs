@@ -17,10 +17,11 @@ use tauri::{AppHandle, Emitter, State};
 
 use orison_cli::campaign;
 use orison_cli::config::{ModelArgs, Profile};
+use orison_core::inference;
 use orison_core::state::CampaignSummary;
 use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
 
-use crate::dto::{EntityDto, IngestReportDto, ModelArgsDto, ModelsSummaryDto};
+use crate::dto::{EntityDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto};
 use crate::state::AppState;
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -133,6 +134,18 @@ pub async fn connect_models(
         context_length,
         tokenizer_is_approximate,
     })
+}
+
+/// Whether `model` is reachable and pulled at `url`, for the connect
+/// screen's per-field badge (#29) — answered without connecting a backend,
+/// so a typo'd model name or a stopped Ollama server shows up before the
+/// player clicks Connect, not as an opaque failure mid-turn.
+#[tauri::command]
+pub async fn check_model_health(url: String, model: String) -> Result<ModelHealthDto, String> {
+    inference::probe(&url, &model)
+        .await
+        .map(ModelHealthDto::from)
+        .map_err(err)
 }
 
 fn engine_or_err(

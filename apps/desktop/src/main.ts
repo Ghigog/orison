@@ -54,6 +54,17 @@ interface ModelsSummaryDto {
   tokenizer_is_approximate: boolean;
 }
 
+type ModelHealthStatus =
+  | { kind: "available" }
+  | { kind: "modelNotInstalled" }
+  | { kind: "unreachable"; detail: string };
+
+interface ModelHealthDto {
+  model: string;
+  status: ModelHealthStatus;
+  contextLength: number | null;
+}
+
 type Speaker = "Player" | { Character: string } | "Narrator" | "System";
 
 type TurnEvent =
@@ -216,6 +227,66 @@ async function renderCampaigns() {
 // Models / connect (docs/design/Orison.dc.html "models", trimmed to what
 // connect_models actually needs)
 
+/// Renders a `check_model_health` result into a `● REACHABLE` / `● NOT
+/// PULLED` / `● UNREACHABLE` badge, matching docs/design/Orison.dc.html's
+/// "models" screen — the two "endpoint answered" failure modes are kept
+/// visually distinct per #29's acceptance criteria, not collapsed into one
+/// generic error.
+function renderHealthBadge(badge: HTMLElement, detail: HTMLElement, health: ModelHealthDto) {
+  switch (health.status.kind) {
+    case "available":
+      badge.textContent = "● REACHABLE";
+      badge.className = "mono health-badge ok";
+      detail.textContent = "";
+      break;
+    case "modelNotInstalled":
+      badge.textContent = "● NOT PULLED";
+      badge.className = "mono health-badge warn";
+      detail.textContent = `ollama pull ${health.model}`;
+      break;
+    case "unreachable":
+      badge.textContent = "● UNREACHABLE";
+      badge.className = "mono health-badge warn";
+      detail.textContent = health.status.detail;
+      break;
+  }
+}
+
+/// Wires one model field's blur (never keystroke — a 15-second-turn model
+/// deserves a debounce, not a request per character) to `check_model_health`.
+/// `requestId` guards against an in-flight check for a since-edited value
+/// landing after a newer one and overwriting it with stale badge text.
+function attachHealthCheck(input: HTMLInputElement, urlInput: HTMLInputElement, badge: HTMLElement, detail: HTMLElement) {
+  let requestId = 0;
+  const run = async () => {
+    const model = input.value.trim();
+    if (!model) {
+      badge.textContent = "";
+      detail.textContent = "";
+      return;
+    }
+    const thisRequest = ++requestId;
+    badge.textContent = "checking…";
+    badge.className = "mono health-badge";
+    detail.textContent = "";
+    try {
+      const health = await invoke<ModelHealthDto>("check_model_health", {
+        url: urlInput.value.trim(),
+        model,
+      });
+      if (thisRequest === requestId) renderHealthBadge(badge, detail, health);
+    } catch (e) {
+      if (thisRequest === requestId) {
+        badge.textContent = "● CHECK FAILED";
+        badge.className = "mono health-badge warn";
+        detail.textContent = String(e);
+      }
+    }
+  };
+  input.addEventListener("blur", run);
+  urlInput.addEventListener("blur", run);
+}
+
 async function renderConnect(campaignId: string, campaignTitle: string) {
   app.innerHTML = shell(
     "campaigns",
@@ -228,12 +299,20 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
         <input id="url" value="http://127.0.0.1:11434" />
       </div>
       <div class="field">
-        <label class="mono">THE ACTOR — speaks in character</label>
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <label class="mono">THE ACTOR — speaks in character</label>
+          <span id="actor-health" class="mono health-badge"></span>
+        </div>
         <input id="actor-model" value="llama3.2:3b" />
+        <div id="actor-health-detail" class="mono health-detail"></div>
       </div>
       <div class="field">
-        <label class="mono">THE DIRECTOR — composes what happens next (blank = same as the Actor)</label>
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <label class="mono">THE DIRECTOR — composes what happens next (blank = same as the Actor)</label>
+          <span id="director-health" class="mono health-badge"></span>
+        </div>
         <input id="director-model" placeholder="llama3.2:3b" />
+        <div id="director-health-detail" class="mono health-detail"></div>
       </div>
       <label class="mono checkbox"><input type="checkbox" id="two-calls" /> Director + Actor (two calls; unchecked runs a single call)</label>
       <div style="margin-top:20px">
@@ -244,10 +323,17 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
   `,
   );
   attachNav();
+
+  const urlInput = document.querySelector<HTMLInputElement>("#url")!;
+  const actorInput = document.querySelector<HTMLInputElement>("#actor-model")!;
+  const directorInput = document.querySelector<HTMLInputElement>("#director-model")!;
+  attachHealthCheck(actorInput, urlInput, document.querySelector("#actor-health")!, document.querySelector("#actor-health-detail")!);
+  attachHealthCheck(directorInput, urlInput, document.querySelector("#director-health")!, document.querySelector("#director-health-detail")!);
+
   document.querySelector("#connect")!.addEventListener("click", async () => {
-    const url = (document.querySelector("#url") as HTMLInputElement).value;
-    const actorModel = (document.querySelector("#actor-model") as HTMLInputElement).value;
-    const directorModelRaw = (document.querySelector("#director-model") as HTMLInputElement).value.trim();
+    const url = urlInput.value;
+    const actorModel = actorInput.value;
+    const directorModelRaw = directorInput.value.trim();
     const twoCalls = (document.querySelector("#two-calls") as HTMLInputElement).checked;
     try {
       const summary = await invoke<ModelsSummaryDto>("connect_models", {

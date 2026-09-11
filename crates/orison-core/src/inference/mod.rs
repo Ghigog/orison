@@ -16,7 +16,7 @@ pub mod types;
 
 pub use backend::InferenceBackend;
 pub use error::InferenceError;
-pub use ollama::{OllamaBackend, OllamaConfig, DEFAULT_CONTEXT_LIMIT};
+pub use ollama::{probe, OllamaBackend, OllamaConfig, DEFAULT_CONTEXT_LIMIT};
 pub use types::{
     Capabilities, ChatDelta, ChatMessage, ChatRequest, ChatResponse, DoneReason, HealthStatus,
     KeepAlive, ModelHealth, ResponseFormat, Role, SamplingOptions, ToolCall, ToolDefinition,

@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use orison_core::inference::{HealthStatus, ModelHealth};
 use orison_core::ingest::IngestReport;
 use orison_core::knowledge::{Entity, EntityKind};
 
@@ -83,4 +84,41 @@ pub struct ModelsSummaryDto {
     pub summary: String,
     pub context_length: usize,
     pub tokenizer_is_approximate: bool,
+}
+
+/// What the connect screen's per-field reachability badge needs. Kept as a
+/// tagged enum rather than collapsed into one string so the frontend can
+/// render "not pulled" (with the `ollama pull <model>` fix) distinctly from
+/// "unreachable" — `HealthStatus` makes the same distinction on the Rust
+/// side and it must survive the IPC boundary.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ModelHealthStatusDto {
+    Available,
+    ModelNotInstalled,
+    Unreachable { detail: String },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelHealthDto {
+    pub model: String,
+    pub status: ModelHealthStatusDto,
+    pub context_length: Option<usize>,
+}
+
+impl From<ModelHealth> for ModelHealthDto {
+    fn from(h: ModelHealth) -> Self {
+        Self {
+            model: h.model,
+            status: match h.status {
+                HealthStatus::Available => ModelHealthStatusDto::Available,
+                HealthStatus::ModelNotInstalled => ModelHealthStatusDto::ModelNotInstalled,
+                HealthStatus::Unreachable { detail } => {
+                    ModelHealthStatusDto::Unreachable { detail }
+                }
+            },
+            context_length: h.context_length,
+        }
+    }
 }
