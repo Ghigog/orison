@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Outfit', system-ui, sans-serif; background: #0A0712; }
+    a { color: #FF5F38; } a:hover { color: #FF8562; }
+    @keyframes breathe { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+  </style>
+</helmet>
+
+<div style="width: 940px; background: #0A0712; color: #FFF8F2; padding: 36px 36px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: 0.05em; line-height: 1.3;">The Director strip</div>
+    <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: #A59EBF; max-width: 720px; text-wrap: pretty;">One row at the top of the dialogue panel, directly above the nameplate, so it sits in the reading path rather than off in a status bar. It renders <code style="font-family: 'Outfit', sans-serif; font-size: 14px; color: #FFF8F2;">DirectorState</code> and nothing else. Idle draws nothing at all.</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF;">Idle</span>
+        <span style="font-size: 11px; color: #A59EBF;">no beat in flight, none queued</span>
+      </div>
+      <div style="height: 44px; display: flex; align-items: center; padding: 0 24px; border: 1px dashed rgba(255, 244, 236, 0.10); border-radius: 12px; background: rgba(21, 18, 36, 0.35);">
+        <span style="font-size: 14px; letter-spacing: 0.02em; color: #A59EBF; font-style: italic;">The strip collapses. A row that says &ldquo;idle&rdquo; is a row that teaches the player to stop reading it.</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF;">Researching</span>
+        <span style="font-size: 11px; color: #A59EBF;">retrieval pre-pass, and any research calls the profile keeps</span>
+      </div>
+      <div style="height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 24px; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 12px; background: rgba(21, 18, 36, 0.75);">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: #A59EBF; animation: breathe 2.4s ease-in-out infinite; flex-shrink: 0;"></span>
+        <span style="font-size: 14px; letter-spacing: 0.02em;">Bram is remembering.</span>
+        <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 3px 10px;">The Mill Road</span>
+        <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 3px 10px;">the miller and his debt</span>
+        <span style="margin-left: auto; font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">researching</span>
+      </div>
+      <div style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; padding-left: 2px;">Chips are the notes retrieval actually returned. They are the player&rsquo;s own vault, named back to them.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF;">Composing</span>
+        <span style="font-size: 11px; color: #A59EBF;">the Director model call is in flight</span>
+      </div>
+      <div style="height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 24px; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 12px; background: rgba(21, 18, 36, 0.75);">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: #A59EBF; animation: breathe 2.4s ease-in-out infinite; flex-shrink: 0;"></span>
+        <span style="font-size: 14px; letter-spacing: 0.02em;">Bram is thinking about what happens next.</span>
+        <span style="margin-left: auto; font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">composing</span>
+      </div>
+      <div style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; padding-left: 2px;">No chips: there is nothing honest to name yet. The absence is the difference between the two states.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #FF5F38;">Ready</span>
+        <span style="font-size: 11px; color: #A59EBF;">a beat is composed and waiting for a quiet moment</span>
+      </div>
+      <div style="height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 24px; border: 1px solid rgba(255, 95, 56, 0.28); border-radius: 12px; background: rgba(21, 18, 36, 0.75);">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: #FF5F38; box-shadow: 0 0 10px rgba(255, 95, 56, 0.8); animation: breathe 2.4s ease-in-out infinite; flex-shrink: 0;"></span>
+        <span style="font-size: 14px; letter-spacing: 0.02em;">Bram has decided something.</span>
+        <span style="margin-left: auto; font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">ready</span>
+      </div>
+      <div style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; padding-left: 2px;">Solar Flare is the only accent the strip ever uses, and only here. It is the one state that is about to change the scene.</div>
+    </div>
+
+  </div>
+
+  <div style="height: 1px; background: rgba(255, 244, 236, 0.08);"></div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">Rules the strip has to obey</div>
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div style="display: flex; gap: 12px; align-items: baseline;">
+        <span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38; flex-shrink: 0; transform: translateY(-3px);"></span>
+        <span style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">It never blocks anything. Nothing in the window waits on the Director.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: baseline;">
+        <span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38; flex-shrink: 0; transform: translateY(-3px);"></span>
+        <span style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">It never shows a percentage or an estimate. It has neither, and inventing one is the apology the product cannot afford.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: baseline;">
+        <span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38; flex-shrink: 0; transform: translateY(-3px);"></span>
+        <span style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">It names the character, not the system. &ldquo;Bram is thinking&rdquo; is anticipation; &ldquo;Director: composing&rdquo; is a progress bar with extra steps.</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: baseline;">
+        <span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38; flex-shrink: 0; transform: translateY(-3px);"></span>
+        <span style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">The lowercase state name on the right is a debug affordance, and belongs behind the developer setting.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":940,"height":880}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

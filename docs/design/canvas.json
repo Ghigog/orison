@@ -1,0 +1,65 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "The 15-second turn" },
+    { "id": "page-2", "name": "Screens and tokens" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "page": "page-1", "title": "Gameplay viewport (live)", "is_interactive": true },
+    { "file": "Waiting.dc.html", "x": 1560, "y": 0, "w": 940, "h": 760, "page": "page-1", "title": "The first three seconds" },
+    { "file": "Director.dc.html", "x": 1560, "y": 900, "w": 940, "h": 880, "page": "page-1", "title": "Director strip" },
+    { "file": "Failure.dc.html", "x": 0, "y": 1020, "w": 940, "h": 840, "page": "page-1", "title": "Failure states (B-15)" },
+    { "file": "VaultImport.dc.html", "x": 0, "y": 0, "w": 1100, "h": 900, "page": "page-2", "title": "Vault import review" },
+    { "file": "Tokens.dc.html", "x": 1220, "y": 0, "w": 1100, "h": 1080, "page": "page-2", "title": "Design tokens" }
+  ],
+  "annotations": [
+    {
+      "id": "note-main",
+      "x": 0,
+      "y": -190,
+      "w": 700,
+      "page": "page-1",
+      "text": "Press Send. It runs at real measured speed: first token at 3.2s, stream ends at 13.0s, turn completes at 14.1s, and the Director keeps working until 19.5s while you read.\n\nThe tweak above the frame drops it to 4x if you are checking layout rather than feel."
+    },
+    {
+      "id": "note-waiting",
+      "x": 1560,
+      "y": -190,
+      "w": 700,
+      "page": "page-1",
+      "text": "The only moment in a turn with nothing to stream, and the one most likely to get a spinner.\n\nRetrieval has already finished by 2.4s, so the gap is filled with the note titles it returned. True, free, and the player's own writing."
+    },
+    {
+      "id": "note-director",
+      "x": 2580,
+      "y": 900,
+      "w": 340,
+      "page": "page-1",
+      "text": "One row per DirectorState, with the exact copy. Idle draws nothing.\n\nThe character is named, not the system. Solar Flare appears only on Ready, the one state about to change the scene."
+    },
+    {
+      "id": "note-failure",
+      "x": 1020,
+      "y": 1020,
+      "w": 420,
+      "page": "page-1",
+      "text": "B-15, promoted. FailureKind already types every case the shell has to tell apart, so each one gets a place in the transcript and one action.\n\nNever a toast, and never a line of invented dialogue covering a call that did not happen."
+    },
+    {
+      "id": "note-import",
+      "x": 0,
+      "y": -170,
+      "w": 800,
+      "page": "page-2",
+      "text": "Testing backlog section 5: 48% of a real vault came back untyped, and untyped people are never offered as characters.\n\nThe fix is not a better heuristic. It is showing the cost before the import commits: the list of who you will be able to talk to updates as each folder is set."
+    },
+    {
+      "id": "note-tokens",
+      "x": 1220,
+      "y": -170,
+      "w": 800,
+      "page": "page-2",
+      "text": "Everything here is already written in design_philosophy.md. Only colours and font sizes reached Godot; the orange block is the part that never did, and is the Phase 6 exit criterion."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

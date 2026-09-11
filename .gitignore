@@ -4,3 +4,6 @@
 
 # Rust workspace (crates/)
 /target/
+
+# Seeded design canvas payloads (2 MB editor bundle, regenerated from the .dc.html sources)
+docs/design/*-ui.html

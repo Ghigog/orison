@@ -1,0 +1,309 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Outfit', system-ui, sans-serif; background: #0A0712; }
+    a { color: #FF5F38; } a:hover { color: #FF8562; }
+    @keyframes caret { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0.12; } }
+    @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+    @keyframes driftin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .o-chip { animation: driftin 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .o-scroll::-webkit-scrollbar { width: 6px; }
+    .o-scroll::-webkit-scrollbar-thumb { background: rgba(255, 244, 236, 0.14); border-radius: 3px; }
+    .o-scroll::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 1440px; height: 900px; background: #0A0712; overflow: hidden; color: #FFF8F2;">
+
+  <div style="position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 108%, #3A1B24 0%, #1B1026 42%, #0A0712 78%);"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 128px; height: 260px; background: radial-gradient(60% 100% at 46% 100%, rgba(255, 95, 56, 0.26) 0%, rgba(255, 95, 56, 0) 70%);"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 180px; height: 220px; background: #0C0916; clip-path: polygon(0 62%, 9% 62%, 13% 30%, 17% 62%, 30% 62%, 34% 26%, 38% 62%, 55% 62%, 59% 32%, 63% 62%, 100% 62%, 100% 100%, 0 100%);"></div>
+
+  <div style="position: absolute; left: 232px; bottom: 300px; width: 260px; height: 392px;">
+    <div style="position: absolute; inset: -40px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 55%, {{emotionGlow}} 0%, rgba(0,0,0,0) 68%); animation: breathe 5.2s ease-in-out infinite;"></div>
+    <svg viewBox="0 0 260 392" width="260" height="392" style="position: relative; display: block;" aria-label="Character portrait placeholder">
+      <path d="M130 44c26 0 44 20 44 46 0 22-10 40-22 50 36 12 62 34 70 66l16 66c4 18-8 30-26 30H78c-18 0-30-12-26-30l16-66c8-32 34-54 70-66-12-10-22-28-22-50 0-26 18-46 34-46z" fill="#151224" stroke="rgba(255,244,236,0.16)" stroke-width="1.5"></path>
+      <path d="M86 206h88M78 246h104" stroke="rgba(255,244,236,0.10)" stroke-width="1.5" stroke-linecap="round"></path>
+    </svg>
+    <div style="position: absolute; left: 0; bottom: -34px; display: flex; align-items: center; gap: 8px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: {{emotionColor}};"></span>
+      <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">portrait slot &middot; {{emotionLabel}}</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; top: 40px; left: 50px; display: flex; flex-direction: column; gap: 6px;">
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: 0.05em; line-height: 1.3;">Stonebridge</div>
+    <div style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">Thornwick &middot; turn {{turnNo}}</div>
+  </div>
+
+  <div style="position: absolute; top: 40px; right: 30px; bottom: 40px; width: 320px; display: flex; flex-direction: column; gap: 16px; background: rgba(21, 18, 36, 0.70); backdrop-filter: blur(15px); border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 16px; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.40); padding: 20px;">
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+      <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #FFF8F2; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 10px 8px; height: 44px; cursor: pointer;">Mind map</button>
+      <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #FFF8F2; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 10px 8px; height: 44px; cursor: pointer;">Journal</button>
+      <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #FFF8F2; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 10px 8px; height: 44px; cursor: pointer;">Vault</button>
+      <button style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #FFF8F2; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 10px 8px; height: 44px; cursor: pointer;">Settings</button>
+    </div>
+
+    <div style="height: 1px; background: rgba(255, 244, 236, 0.08);"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">Here with you</div>
+      <div style="display: flex; flex-direction: column; gap: 10px; border: 1px solid {{emotionBorder}}; border-radius: 12px; padding: 12px; background: rgba(10, 7, 18, 0.45);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: {{emotionColor}}; box-shadow: 0 0 10px {{emotionColor}};"></span>
+          <span style="font-size: 14px; font-weight: 500; letter-spacing: 0.02em;">Bram Holt</span>
+          <span style="margin-left: auto; font-size: 11px; color: #A59EBF;">{{emotionLabel}}</span>
+        </div>
+        <div style="position: relative; height: 4px; border-radius: 2px; background: rgba(255, 244, 236, 0.08);">
+          <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: {{rapportWidth}}; background: linear-gradient(90deg, #6B7280, #10B981); border-radius: 2px;"></div>
+          <div style="position: absolute; left: {{rapportPos}}; top: -3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #FFF8F2; box-shadow: 0 0 8px rgba(255, 248, 242, 0.6);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">
+          <span>rapport</span>
+          <span style="color: {{rapportDeltaColor}};">{{rapportValue}} {{rapportDelta}}</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 12px; padding: 12px; opacity: 0.62;">
+        <span style="width: 9px; height: 9px; border-radius: 50%; background: #D1D5DB;"></span>
+        <span style="font-size: 14px; font-weight: 500;">Elara Voss</span>
+        <span style="margin-left: auto; font-size: 11px; color: #A59EBF;">at the Archive</span>
+      </div>
+    </div>
+
+    <div style="height: 1px; background: rgba(255, 244, 236, 0.08);"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">What he remembers</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 10px; align-items: baseline;">
+          <span style="font-size: 11px; letter-spacing: 0.02em; color: #FF5F38; width: 52px; flex-shrink: 0;">just now</span>
+          <span style="font-family: 'Lora', Georgia, serif; font-size: 13px; line-height: 1.5; color: #FFF8F2;">You asked what the crossing costs.</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: baseline;">
+          <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; width: 52px; flex-shrink: 0;">today</span>
+          <span style="font-family: 'Lora', Georgia, serif; font-size: 13px; line-height: 1.5; color: #A59EBF;">A stranger came up the mill road on foot, carrying nothing.</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: baseline;">
+          <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; width: 52px; flex-shrink: 0;">always</span>
+          <span style="font-family: 'Lora', Georgia, serif; font-size: 13px; line-height: 1.5; color: #A59EBF;">Eleven years on this bridge, and he has never once kept a secret.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px;">
+      <div style="height: 1px; background: rgba(255, 244, 236, 0.08);"></div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">Ways on</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span style="font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 7px 14px;">The Mill Road</span>
+          <span style="font-size: 14px; letter-spacing: 0.02em; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 7px 14px;">Thornwick Archive</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding-top: 4px;">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#10B981" stroke-width="1.4" stroke-linecap="round"><rect x="2.5" y="3" width="11" height="8" rx="1.5"></rect><path d="M5.5 13.5h5"></path></svg>
+        <span style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">llama3.2:3b &middot; this machine</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 40px; right: 390px; bottom: 30px; max-width: 900px; margin: 0 auto; height: 372px; display: flex; flex-direction: column; background: rgba(21, 18, 36, 0.75); backdrop-filter: blur(15px); border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 16px; box-shadow: 0 12px 24px rgba(0, 0, 0, 0.40); overflow: hidden;">
+
+    <div style="height: 2px; background: rgba(255, 244, 236, 0.06); flex-shrink: 0;">
+      <div style="height: 2px; width: {{progressWidth}}; background: #FF5F38; transition: width 0.12s linear;"></div>
+    </div>
+
+    <sc-if value="{{directorVisible}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 24px; border-bottom: 1px solid rgba(255, 244, 236, 0.08); flex-shrink: 0;">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: {{directorDot}}; animation: breathe 2.4s ease-in-out infinite; flex-shrink: 0;"></span>
+        <span style="font-size: 14px; letter-spacing: 0.02em; color: #FFF8F2;">{{directorLabel}}</span>
+        <sc-for list="{{directorChips}}" as="chip" hint-placeholder-count="2">
+          <span class="o-chip" style="font-size: 11px; letter-spacing: 0.02em; color: #A59EBF; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 3px 10px;">{{chip.label}}</span>
+        </sc-for>
+        <span style="margin-left: auto; font-size: 11px; letter-spacing: 0.02em; color: #A59EBF;">{{directorState}}</span>
+      </div>
+    </sc-if>
+
+    <div class="o-scroll" style="flex-grow: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 18px;">
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #A59EBF; line-height: 1.2;">Bram Holt</div>
+        <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: #A59EBF; font-style: italic;">He straightens off the parapet as you come up the road, and does not reach for the staff leaning beside him.</div>
+        <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">"Long walk from the Reach, that. You will want the bridge, I expect."</div>
+      </div>
+
+      <sc-if value="{{showPlayer}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 6px; padding-left: 20px; border-left: 2px solid rgba(255, 95, 56, 0.45);">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #FF5F38; line-height: 1.2;">You</div>
+          <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">Morning. What is the toll?</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showPrepare}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A59EBF; line-height: 1.3;">{{prepareTitle}}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <sc-for list="{{prepareChips}}" as="chip" hint-placeholder-count="3">
+              <span class="o-chip" style="display: inline-flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.02em; color: #FFF8F2; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 999px; padding: 6px 13px;">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: #FF5F38;"></span>{{chip.label}}
+              </span>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showActor}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #A59EBF; line-height: 1.2;">Bram Holt</div>
+          <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: #A59EBF; font-style: italic;">{{actorNarration}}</div>
+          <div style="font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6;">{{actorDialogue}}<sc-if value="{{showCaret}}" hint-placeholder-val="{{true}}"><span style="display: inline-block; width: 2px; height: 19px; margin-left: 2px; vertical-align: -3px; background: #FF5F38; animation: caret 1.05s steps(1, end) infinite;"></span></sc-if></div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px 14px 24px; border-top: 1px solid rgba(255, 244, 236, 0.08); flex-shrink: 0;">
+      <div style="flex-grow: 1; font-family: 'Lora', Georgia, serif; font-size: 18px; line-height: 1.6; color: {{inputColor}};">{{inputText}}</div>
+      <sc-if value="{{showCancel}}" hint-placeholder-val="{{true}}">
+        <button onClick="{{onCancel}}" style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: #A59EBF; background: transparent; border: 1px solid rgba(255, 244, 236, 0.08); border-radius: 10px; padding: 0 16px; height: 44px; cursor: pointer;">Esc to stop</button>
+      </sc-if>
+      <button onClick="{{onSend}}" style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.05em; color: {{sendColor}}; background: {{sendBg}}; border: 1px solid {{sendBorder}}; border-radius: 10px; padding: 0 22px; height: 44px; cursor: pointer;">{{sendLabel}}</button>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"speed":{"editor":"enum","options":["real time","4x"],"default":"real time","tsType":"string"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { t: 0, running: false, done: false };
+  }
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.running) return;
+      var step = (this.props.speed === '4x' ? 0.4 : 0.1);
+      var next = this.state.t + step;
+      if (next >= 22) { this.setState({ t: 22, running: false, done: true }); }
+      else { this.setState({ t: next }); }
+    }, 100);
+  }
+
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  renderVals() {
+    var self = this;
+    var t = this.state.t;
+    var started = this.state.running || this.state.done;
+
+    // Measured on the minimal fixture: p50 14.1 s per turn, first token 2.7-6.3 s.
+    var FIRST_TOKEN = 3.2, STREAM_END = 13.0, COMPLETE = 14.1;
+
+    var narration = 'He weighs you for a moment, the way a man does when the answer is going to cost him something.';
+    var dialogue = '"Two coppers on foot, four with a cart, and the mill road is the only way across that will not put you in the water. Been that price since the old bridgemaster kept it. If you are short - " he glances back up the road " - there is another way to settle it."';
+
+    var phase = t <= 0 ? 'idle'
+      : t < FIRST_TOKEN ? 'preparing'
+      : t < STREAM_END ? 'streaming'
+      : t < COMPLETE ? 'applying'
+      : 'idle';
+
+    // Retrieval resolves during Preparing. Each note is named as it lands.
+    var notes = [
+      { at: 0.5, label: 'Stonebridge' },
+      { at: 0.9, label: 'Bram Holt' },
+      { at: 1.4, label: 'The Mill Road' },
+      { at: 1.9, label: 'Tolls and tithes' },
+      { at: 2.4, label: '2,840 tokens assembled' }
+    ];
+    var prepareChips = [];
+    if (t > 0) {
+      for (var i = 0; i < notes.length; i++) { if (t >= notes[i].at) prepareChips.push(notes[i]); }
+    }
+
+    // Two watched fields open in turn: StreamStarted{field:"narration"},
+    // then StreamStarted{field:"dialogue"}. Revealed over the measured window.
+    var NARRATION_END = FIRST_TOKEN + (STREAM_END - FIRST_TOKEN) * 0.28;
+    var nFrac = Math.max(0, Math.min(1, (t - FIRST_TOKEN) / (NARRATION_END - FIRST_TOKEN)));
+    var dFrac = Math.max(0, Math.min(1, (t - NARRATION_END) / (STREAM_END - NARRATION_END)));
+    var outNarration = narration.slice(0, Math.floor(narration.length * nFrac));
+    var outDialogue = dialogue.slice(0, Math.floor(dialogue.length * dFrac));
+
+    // The Director keeps working after the turn completes, while the player reads.
+    var dState = 'idle', dLabel = '', dChips = [], dDot = '#A59EBF';
+    if (t >= 14.4 && t < 16.0) {
+      dState = 'researching';
+      dLabel = 'Bram is remembering.';
+      dChips = [{ label: 'The Mill Road' }, { label: 'the miller and his debt' }];
+    } else if (t >= 16.0 && t < 19.5) {
+      dState = 'composing';
+      dLabel = 'Bram is thinking about what happens next.';
+    } else if (t >= 19.5) {
+      dState = 'ready';
+      dLabel = 'Bram has decided something.';
+      dDot = '#FF5F38';
+    }
+
+    var emotion = t >= 13.4
+      ? { label: 'wary', color: '#7C3AED', glow: 'rgba(124, 58, 237, 0.16)', border: 'rgba(124, 58, 237, 0.30)' }
+      : { label: 'serene', color: '#D1D5DB', glow: 'rgba(209, 213, 219, 0.09)', border: 'rgba(255, 244, 236, 0.08)' };
+
+    var rapport = t >= 13.4 ? 0.18 : 0.12;
+    var busy = phase !== 'idle';
+
+    return {
+      turnNo: t >= COMPLETE ? 5 : 4,
+      progressWidth: busy ? Math.min(100, (t / COMPLETE) * 100).toFixed(1) + '%' : '0%',
+
+      showPlayer: started,
+      showPrepare: t > 0 && t < FIRST_TOKEN,
+      prepareTitle: 'Reading your vault',
+      prepareChips: prepareChips,
+
+      showActor: t >= FIRST_TOKEN,
+      actorNarration: outNarration,
+      actorDialogue: outDialogue,
+      showCaret: phase === 'streaming',
+
+      directorVisible: dState !== 'idle',
+      directorState: dState,
+      directorLabel: dLabel,
+      directorChips: dChips,
+      directorDot: dDot,
+
+      emotionLabel: emotion.label,
+      emotionColor: emotion.color,
+      emotionGlow: emotion.glow,
+      emotionBorder: emotion.border,
+      rapportValue: '+' + rapport.toFixed(2),
+      rapportDelta: t >= 13.4 ? 'up 0.06' : '',
+      rapportDeltaColor: t >= 13.4 ? '#10B981' : '#A59EBF',
+      rapportWidth: (rapport * 50).toFixed(1) + '%',
+      rapportPos: (50 + rapport * 50).toFixed(1) + '%',
+
+      inputText: busy ? 'Keep typing. The window never locks.' : 'And if I have no coin?',
+      inputColor: busy ? '#A59EBF' : '#FFF8F2',
+      showCancel: busy,
+      sendLabel: busy ? t.toFixed(1) + 's' : (started ? 'Again' : 'Send'),
+      sendBg: busy ? 'transparent' : 'rgba(255, 95, 56, 0.15)',
+      sendBorder: busy ? 'rgba(255, 244, 236, 0.08)' : '#FF5F38',
+      sendColor: busy ? '#A59EBF' : '#FFF8F2',
+
+      onSend: function () { if (!busy) self.setState({ t: 0.01, running: true, done: false }); },
+      onCancel: function () { self.setState({ t: 0, running: false, done: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
