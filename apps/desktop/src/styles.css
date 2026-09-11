@@ -1,0 +1,118 @@
+/* Round 2 design direction (docs/design/Orison.dc.html): paper on a desk,
+   not the dark glassmorphism design_philosophy.md used to specify. Only the
+   tokens this early scaffold actually uses; the full set moves here as each
+   screen is ported (see docs/design/README.md). */
+:root {
+  --paper: oklch(0.965 0.01 85);
+  --paper-2: oklch(0.934 0.012 82);
+  --desk: oklch(0.878 0.013 78);
+  --ink: oklch(0.245 0.016 60);
+  --ink-2: oklch(0.44 0.014 62);
+  --ink-3: oklch(0.455 0.014 64);
+  --rule: oklch(0.8 0.014 78);
+  --rule-2: oklch(0.86 0.012 78);
+  --lamp: oklch(0.47 0.1 62);
+  --lamp-mark: oklch(0.615 0.105 62);
+  --sheet-shadow:
+    0 1px 2px oklch(0.3 0.02 60 / 0.1),
+    0 10px 34px oklch(0.3 0.02 60 / 0.13);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink);
+  font-family: Spectral, Georgia, serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.rail {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  padding: 26px 44px 0;
+}
+
+.campaign-list {
+  padding: 12px 44px 60px;
+  max-width: 920px;
+}
+
+.campaign-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--rule-2);
+  align-items: center;
+}
+
+.campaign-row button {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  padding: 10px 20px;
+  border: 1px solid var(--ink);
+  background: none;
+  color: var(--ink);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.campaign-row button:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.sheet {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--paper);
+  box-shadow: var(--sheet-shadow);
+  border-top: 2px solid var(--ink);
+}
+
+.transcript {
+  padding: 20px 30px;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.composer {
+  border-top: 1px solid var(--rule-2);
+  padding: 14px 30px;
+  display: flex;
+  gap: 12px;
+}
+
+.composer input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: Spectral, Georgia, serif;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.error {
+  color: var(--lamp);
+}

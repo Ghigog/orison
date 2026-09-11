@@ -218,6 +218,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Tauri's Linux build dependencies
+        # apps/desktop/src-tauri (Phase 6) joined this workspace, so
+        # `--workspace` below now builds `wry`/`tao`, which link against
+        # webkit2gtk and friends. Not needed to check out or test
+        # orison-core/orison-cli alone, but --workspace does both in one
+        # job and ubuntu-latest does not carry these by default.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

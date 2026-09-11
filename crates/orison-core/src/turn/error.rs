@@ -8,6 +8,8 @@
 //! a `print()`. Here every one of them is a variant the loop must decide how
 //! to present.
 
+use serde::Serialize;
+
 use crate::inference::InferenceError;
 use crate::prompt::PromptError;
 use crate::retrieval::RetrievalError;
@@ -107,7 +109,7 @@ pub enum TurnError {
 ///
 /// [`TurnError`] is not `Clone` (its sources are not), and turn events are
 /// broadcast to every subscriber, so events carry this plus a detail string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum FailureKind {
     /// The configured endpoint could not be reached. Actionable: start the
     /// server.
