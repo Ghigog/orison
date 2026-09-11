@@ -142,10 +142,16 @@ ever implemented in Godot. In CSS the rest is nearly free.
 
 ### Three things to do before the first screen
 
-1. **Promote B-15.** "The engine reports success after total model failure" is
-   still Open in the Appendix B register. A silent failure is survivable in a
-   CLI the author runs and is not survivable in a shipped window, where there
-   is no terminal in which to notice the absence.
+1. ~~**Promote B-15.**~~ **Done.** The register entry was stale, not the code:
+   `InferenceError::Unreachable`/`ModelNotFound` have been unconditional since
+   Phase 2.2, and `FailureKind::ModelUnreachable` already carries a dead model
+   through `TurnEngine` to `orison-cli`'s shell (`conformance.rs`'s
+   `unreachable_ollama_endpoint_is_a_typed_error_not_a_silent_failure`, no live
+   server required). See migration_plan.md's B-15 row. What Phase 6 still owes
+   is the screen that renders it — a silent failure is survivable in a CLI the
+   author runs and is not survivable in a shipped window with no terminal to
+   notice the absence — and the round 2 design canvas's "Interrupted" screen is
+   built against exactly this typed failure.
 
 2. **Design vault import around the 48% problem.** A real vault imported
    without `--folder-type` mappings left 48% of notes untyped, and untyped

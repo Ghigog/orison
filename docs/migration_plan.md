@@ -680,11 +680,23 @@ Update the Status column as work lands. Once Phase 0.5 moves tickets to GitHub I
 | B-7 | Brute-force vector search over an in-memory JSON dictionary | Moderate | Phase 3.4 | Port | **Fixed** (`sqlite-vec` ANN in the campaign database) |
 | B-13 | Lexical retrieval condition is inverted; 13 of 14 baseline queries retrieve nothing | **Critical** | **Phase 1** | Godot build | **Fixed** (recall 0.00-0.20 -> 0.88-1.00) |
 | B-14 | Character nodes discard raw source text entirely | **Critical** | **Phase 1** | Godot build | **Fixed** (ingest 3/6 -> 6/6) |
-| B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | Phase 2.2 | Port | Open |
+| B-15 | Engine reports success after total model failure; an unreachable model degrades silently | **Critical** | **Phase 2.2** | Port | **Fixed** (`InferenceError::Unreachable`/`ModelNotFound`, unconditional per the trait contract; `FailureKind::ModelUnreachable` carries it through `TurnEngine` to `orison-cli`'s shell; `conformance.rs`'s `unreachable_ollama_endpoint_is_a_typed_error_not_a_silent_failure` asserts it against a real refused connection, no live server required) |
 | B-16 | Character extraction never used JsonRepair, so any fenced JSON response failed | **Critical** | **Phase 1** | Godot build | **Fixed** (fields empty -> all populated) |
 | B-17 | Retrieved lore ordered ahead of the growing transcript, so the KV-cache prefix broke every turn | **Critical** | **Phase 5.0** | **Port** | **Fixed** (lore moved into the volatile tail) |
 | B-18 | `OllamaBackend` asked for the model's full advertised context window as `num_ctx` | **Critical** | **Phase 5.0** | **Port** | **Fixed** (capped at `DEFAULT_CONTEXT_LIMIT`, overridable) |
 | B-19 | A Director beat writes back the campaign row it read before its model call, reverting any move or change of speaker made while it composed | **Critical** | **Phase 5.6** | **Port** | **Fixed** (`compose_beat` reloads after the call; `tests/movement.rs`) |
+
+**B-15's register entry was stale, not open.** The fix landed in Phase 2.2
+alongside the rest of the inference layer — `InferenceBackend`'s every method
+returns `Result<_, InferenceError>`, `Unreachable`/`ModelNotFound` are
+unconditional per the trait contract, and `FailureKind::ModelUnreachable`
+carries the failure through `TurnEngine` to `orison-cli`'s shell — but nobody
+came back to flip this row, so it read Open through four more phases. The
+[Phase 6 handoff](handoff_phase6.md) flagged it as still open for exactly the
+reason B-15 exists at all: unverified status is how a silent failure survives.
+What Phase 6 still owes is not a fix but a rendering of the same typed
+failure — the round 2 design canvas's "Interrupted" screen
+([docs/design/README.md](design/README.md)) is built against it.
 
 **B-17 and B-18 are the first two defects in this register that the port
 introduced rather than inherited**, which is why they are worth the same
