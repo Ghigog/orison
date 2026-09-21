@@ -9,10 +9,10 @@
 //
 // Wired to real commands: Campaigns, Import, Models, Play (streamed events
 // plus a turn-outcome instrument strip), Character (vault description plus
-// live rapport and current emotion), and a read-only slice of Map (whatever
-// EntityDto carries). Not wired: the per-turn "what she felt, and why" log
-// and knowledge-graph edges — no command exposes them yet, so those sections
-// say so instead of inventing numbers.
+// live rapport and current emotion), and Map (nodes plus the graph's real
+// edges, #34). Not wired: the per-turn "what she felt, and why" log — no
+// command exposes it yet, so that section says so instead of inventing
+// numbers.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -37,6 +37,14 @@ interface EntityDto {
   label: string;
   kind: "character" | "location" | "scene" | "lore" | "item" | "note";
   description: string;
+}
+
+interface EdgeDto {
+  fromId: string;
+  fromLabel: string;
+  toId: string;
+  toLabel: string;
+  kind: string;
 }
 
 interface CharacterEmotionDto {
@@ -952,17 +960,32 @@ async function renderCharacter(campaignId: string, entity: EntityDto) {
 }
 
 // ---------------------------------------------------------------------------
-// Map (partial — real entities from `locations`, no graph edges yet: no
-// command exposes the knowledge graph's structure, only its nodes.)
+// Map: real entities from `locations`/`characters_present`, plus the graph's
+// real edges from `graph_edges` (#34) — "what it knows" means what
+// docs/design/Orison.dc.html says it means, the graph the engine actually
+// traverses, not a flat node list. RAPTOR summary nodes are excluded on the
+// Rust side (`TurnEngine::graph_edges`), and a dangling link — named but
+// never written — cannot be told apart from "no such edge" once the graph is
+// loaded, since `KnowledgeGraph::connect` never stores one in the first
+// place; that distinction only exists in the import report (#36).
+
+/// `connected_to` -> "connected to". An author's own `relationships:`
+/// wording (e.g. "sworn enemy of") passes through unchanged; it never
+/// contains underscores to begin with.
+function edgeVerb(kind: string): string {
+  return kind.replace(/_/g, " ");
+}
 
 async function renderMap(campaignId: string) {
   let locations: EntityDto[] = [];
   let characters: EntityDto[] = [];
+  let edges: EdgeDto[] = [];
   let error = "";
   try {
-    [locations, characters] = await Promise.all([
+    [locations, characters, edges] = await Promise.all([
       invoke<EntityDto[]>("locations", { campaignId }),
       invoke<EntityDto[]>("characters_present", { campaignId }),
+      invoke<EdgeDto[]>("graph_edges", { campaignId }),
     ]);
   } catch (e) {
     error = String(e);
@@ -972,6 +995,10 @@ async function renderMap(campaignId: string) {
       <div><div class="title-lg">${escapeHtml(e.label)}</div>
       <p class="muted">${escapeHtml(e.description)}</p></div>
     </div>`;
+  const edgeRow = (e: EdgeDto) => `
+    <div class="row mono">
+      ${escapeHtml(e.fromLabel)} —${escapeHtml(edgeVerb(e.kind))}→ ${escapeHtml(e.toLabel)}
+    </div>`;
   app.innerHTML = shell(
     "map",
     `
@@ -979,12 +1006,12 @@ async function renderMap(campaignId: string) {
       <div class="mono meta">KNOWLEDGE GRAPH</div>
       <h1>What this campaign knows</h1>
       ${error ? `<p class="error mono">${escapeHtml(error)}</p>` : ""}
-      <p class="muted">Nodes only — no command exposes the graph's edges yet, so this
-      lists entities rather than drawing the retrieval graph docs/design/Orison.dc.html shows.</p>
       <div class="mono meta" style="margin-top:24px">PRESENT NOW</div>
       ${characters.map((c) => row(c, true)).join("") || `<p class="muted">Nobody here.</p>`}
       <div class="mono meta" style="margin-top:24px">LOCATIONS</div>
       ${locations.map((l) => row(l, false)).join("")}
+      <div class="mono meta" style="margin-top:24px">CONNECTIONS</div>
+      ${edges.map(edgeRow).join("") || `<p class="muted">Nothing links to anything yet.</p>`}
     </div>
   `,
   );

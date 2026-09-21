@@ -23,8 +23,8 @@ use orison_core::state::CampaignSummary;
 use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
 
 use crate::dto::{
-    CharacterEmotionDto, EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto,
-    ModelsSummaryDto, VaultFolderDto,
+    CharacterEmotionDto, EdgeDto, EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto,
+    ModelHealthDto, ModelsSummaryDto, VaultFolderDto,
 };
 use crate::state::{lock, AppState};
 
@@ -354,6 +354,16 @@ pub fn characters_present(
 pub fn locations(state: State<AppState>, campaign_id: String) -> Result<Vec<EntityDto>, String> {
     let engine = engine_or_err(&state, &campaign_id)?;
     Ok(engine.locations().iter().map(EntityDto::from).collect())
+}
+
+/// The graph's edges, for the Map screen's drawn graph (#34) — see
+/// `TurnEngine::graph_edges` for what's excluded (RAPTOR summary nodes) and
+/// why a dangling link cannot be told apart from "no edge" once the graph is
+/// loaded (it was never stored as one).
+#[tauri::command]
+pub fn graph_edges(state: State<AppState>, campaign_id: String) -> Result<Vec<EdgeDto>, String> {
+    let engine = engine_or_err(&state, &campaign_id)?;
+    Ok(engine.graph_edges().iter().map(EdgeDto::from).collect())
 }
 
 /// A character's current rapport and emotional state, for the character

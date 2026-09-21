@@ -32,7 +32,7 @@ pub mod stream;
 
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use config::{DirectorPolicy, TurnConfig, TurnProfile};
-pub use engine::{TurnEngine, TurnOutcome};
+pub use engine::{GraphEdge, TurnEngine, TurnOutcome};
 pub use error::{CancelReason, FailureKind, TurnError};
 pub use event::{Speaker, TurnEvent};
 pub use experiment::{ArmReport, Finding, ScoredTurn, TranscriptScript};

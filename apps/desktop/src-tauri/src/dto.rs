@@ -13,6 +13,7 @@ use orison_core::emotion::{emotion_str, EmotionState, Rapport};
 use orison_core::inference::{HealthStatus, ModelHealth};
 use orison_core::ingest::IngestReport;
 use orison_core::knowledge::{Entity, EntityKind};
+use orison_core::turn::GraphEdge;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,32 @@ impl From<&Entity> for EntityDto {
             label: e.label.clone(),
             kind: e.kind,
             description: e.description.clone(),
+        }
+    }
+}
+
+/// One edge of the knowledge graph, both endpoints resolved to a label, for
+/// the Map screen's drawn graph (#34). `kind` is `EdgeKind::as_str()` — the
+/// same stored spelling ingest writes (`"connected_to"`, `"mentions"`, …), or
+/// the author's own relationship wording when it's neither of those.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeDto {
+    pub from_id: String,
+    pub from_label: String,
+    pub to_id: String,
+    pub to_label: String,
+    pub kind: String,
+}
+
+impl From<&GraphEdge> for EdgeDto {
+    fn from(e: &GraphEdge) -> Self {
+        Self {
+            from_id: e.from_id.clone(),
+            from_label: e.from_label.clone(),
+            to_id: e.to_id.clone(),
+            to_label: e.to_label.clone(),
+            kind: e.kind.as_str().to_string(),
         }
     }
 }
