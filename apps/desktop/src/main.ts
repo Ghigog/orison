@@ -427,6 +427,163 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
 
 let playListenersAttached = false;
 
+// Command grammar, mirrored from `orison_cli::shell::parse_command` so the
+// desktop composer has the same `/who`, `/talk`, `/where`, `/go`, `/status`,
+// `/save`, `/quit` vocabulary as `orison-cli`'s `Shell` rather than a
+// second, drifting implementation of it.
+type PlayCommand =
+  | { kind: "help" }
+  | { kind: "who" }
+  | { kind: "talk"; name: string }
+  | { kind: "where" }
+  | { kind: "go"; name: string }
+  | { kind: "status" }
+  | { kind: "save" }
+  | { kind: "quit" }
+  | { kind: "say"; text: string }
+  | { kind: "unknown"; message: string };
+
+function parsePlayCommand(line: string): PlayCommand {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("/")) return { kind: "say", text: trimmed };
+  const rest = trimmed.slice(1);
+  const spaceAt = rest.search(/\s/);
+  const word = (spaceAt === -1 ? rest : rest.slice(0, spaceAt)).toLowerCase();
+  const argument = (spaceAt === -1 ? "" : rest.slice(spaceAt + 1)).trim();
+  const need = (what: string): { name: string } | { kind: "unknown"; message: string } =>
+    argument
+      ? { name: argument }
+      : { kind: "unknown", message: `/${word} needs ${what}, for example: /${word} <name>` };
+  switch (word) {
+    case "help":
+    case "?":
+      return { kind: "help" };
+    case "who":
+      return { kind: "who" };
+    case "talk":
+    case "speak": {
+      const r = need("somebody to talk to");
+      return "kind" in r ? r : { kind: "talk", name: r.name };
+    }
+    case "where":
+    case "look":
+      return { kind: "where" };
+    case "go":
+    case "travel": {
+      const r = need("somewhere to go");
+      return "kind" in r ? r : { kind: "go", name: r.name };
+    }
+    case "status":
+    case "state":
+      return { kind: "status" };
+    case "save":
+      return { kind: "save" };
+    case "quit":
+    case "exit":
+      return { kind: "quit" };
+    default:
+      return {
+        kind: "unknown",
+        message: `no command called /${word}. /help lists them. To say it out loud, drop the slash.`,
+      };
+  }
+}
+
+const PLAY_HELP_LINES = [
+  "/who              who is here to talk to",
+  "/talk <name>      address somebody",
+  "/where            where you are, and what leads away",
+  "/go <place>       travel there",
+  "/status           what the engine is doing",
+  "/save             every turn is already saved",
+  "/quit             leave this campaign",
+  "anything else     is said out loud to whoever you are addressing",
+];
+
+/// Runs everything that is not `Say` or `Quit` — those stay in the draft's
+/// `keydown` handler, which is what already knows how to submit a turn and
+/// how to leave. `move_to_location` and `select_character` are the same
+/// `TurnEngine` calls `shell.rs`'s `go`/`talk` make; `move_to_location`
+/// already emits `TurnEvent::LocationChanged`, which `handleTurnEvent`
+/// already renders, so a successful `/go` needs no line appended here.
+async function dispatchPlayCommand(
+  command: PlayCommand,
+  transcript: HTMLDivElement,
+  campaignId: string,
+) {
+  const line = (text: string) => appendLine(transcript, "", text, "system");
+  switch (command.kind) {
+    case "help":
+      for (const l of PLAY_HELP_LINES) line(l);
+      return;
+    case "who": {
+      const present = await invoke<EntityDto[]>("characters_present", { campaignId }).catch(
+        (e) => {
+          line(String(e));
+          return null;
+        },
+      );
+      if (!present) return;
+      if (present.length === 0) {
+        line("Nobody here. /where, then /go somewhere with people in it.");
+        return;
+      }
+      line("Here:");
+      for (const e of present) line(`  ${e.label}`);
+      return;
+    }
+    case "talk": {
+      const present = await invoke<EntityDto[]>("characters_present", { campaignId }).catch(
+        () => [] as EntityDto[],
+      );
+      const match = present.find((e) => e.label.toLowerCase() === command.name.toLowerCase());
+      if (!match) {
+        line(`Nobody here is called "${command.name}". /who lists them.`);
+        return;
+      }
+      await invoke("select_character", { campaignId, entityId: match.id }).catch((e) =>
+        line(String(e)),
+      );
+      line(`You turn to ${match.label}.`);
+      return;
+    }
+    case "where": {
+      const [here, exits] = await Promise.all([
+        invoke<EntityDto | null>("current_location", { campaignId }).catch(() => null),
+        invoke<EntityDto[]>("exits", { campaignId }).catch(() => [] as EntityDto[]),
+      ]);
+      line(here ? here.label : "Nowhere in particular yet.");
+      if (exits.length === 0) line("  Nothing leads away from here.");
+      else {
+        line("  From here:");
+        for (const e of exits) line(`    ${e.label}`);
+      }
+      return;
+    }
+    case "go":
+      try {
+        await invoke<EntityDto>("move_to_location", { campaignId, name: command.name });
+      } catch (e) {
+        line(`You cannot: ${e}.`);
+      }
+      return;
+    case "status":
+      line(
+        `turn ${turnState} | director ${directorState} | ${turnState === "Idle" ? "ready for input" : "busy"}`,
+      );
+      return;
+    case "save":
+      line("Saved. (Every turn is already committed.)");
+      return;
+    case "quit":
+      render({ name: "campaigns" });
+      return;
+    case "unknown":
+      line(command.message);
+      return;
+  }
+}
+
 async function renderPlay(campaignId: string, campaignTitle: string) {
   app.innerHTML = shell(
     "play",
@@ -443,6 +600,9 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
       <div class="composer">
         <span class="mono lamp">&rsaquo;</span>
         <input id="draft" placeholder="say something, or type / for commands" autofocus />
+      </div>
+      <div class="composer-hint mono muted">
+        /who · /talk &lt;name&gt; · /where · /go &lt;place&gt; · /status · /save · /quit — esc to stop a turn
       </div>
     </div>
   `,
@@ -469,6 +629,16 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
   // first render (which are detached after any navigate-away-and-back).
   if (!playListenersAttached) {
     playListenersAttached = true;
+    // Esc stops a turn that's taking too long, matching
+    // docs/design/Orison.dc.html's instrument-strip hint. Bound to the
+    // document rather than the draft input so it still works while a turn
+    // is streaming and the player hasn't clicked back into the composer.
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || current.name !== "play") return;
+      if (turnState !== "Preparing" && turnState !== "Streaming") return;
+      e.preventDefault();
+      void invoke("cancel_current_turn", { campaignId: current.campaignId }).catch(() => {});
+    });
     await listen<{ campaignId: string; event: TurnEvent }>("turn-event", (e) => {
       if (e.payload.campaignId !== currentPlayCampaignId()) return;
       const q = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
@@ -489,9 +659,14 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
     if (e.key !== "Enter" || !draft.value.trim()) return;
     const text = draft.value;
     draft.value = "";
-    await invoke("submit_player_input", { campaignId, text }).catch((err) =>
-      appendLine(transcript, "ERROR", String(err), "error"),
-    );
+    const command = parsePlayCommand(text);
+    if (command.kind === "say") {
+      await invoke("submit_player_input", { campaignId, text: command.text }).catch((err) =>
+        appendLine(transcript, "ERROR", String(err), "error"),
+      );
+      return;
+    }
+    await dispatchPlayCommand(command, transcript, campaignId);
   });
 }
 
