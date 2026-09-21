@@ -477,3 +477,87 @@ pre.mono {
   font-size: 12px;
   color: var(--ink-3);
 }
+
+/* Play screen, small frame (docs/design/Orison.dc.html "mobile", #37): the
+   canvas's own re-proportioning, not the desktop layout shrunk in place.
+   Scoped to .play-screen so only Play is affected below this width. */
+@media (max-width: 480px) {
+  /* The 200px rail alone would eat half of a phone-width viewport, which
+     defeats the point of re-proportioning what's next to it. Narrowed only
+     while Play is the rendered screen, not for every screen at this width
+     — that's a separate concern the canvas doesn't specify. */
+  #app:has(.play-screen) .rail {
+    width: 108px;
+    padding: 16px 8px 16px 10px;
+  }
+
+  #app:has(.play-screen) .brand-sub,
+  #app:has(.play-screen) .nav-group {
+    display: none;
+  }
+
+  #app:has(.play-screen) .nav-item {
+    font-size: 12px;
+    padding: 5px 0;
+  }
+
+  .play-screen {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* No scene art is rendered yet (ProceduralArtEngine.gd is unported), so
+     the plate tokens that were sitting unused give this band the same
+     paper-plate texture the canvas draws behind it. flex-grow claims the
+     canvas's "top third" without a fixed height fighting real content. */
+  .play-header {
+    flex: 1 0 auto;
+    padding: 16px 16px 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: repeating-linear-gradient(135deg, var(--plate-a) 0 7px, var(--plate-b) 7px 14px);
+  }
+
+  .sheet {
+    flex: 2 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin: 0;
+    max-width: none;
+  }
+
+  .transcript {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    padding: 16px 16px 8px;
+  }
+
+  /* Speaker/role labels move above the text instead of running inline. */
+  .transcript .line-label {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* Collapses to the one line it already is; long content scrolls sideways
+     instead of wrapping and eating the sheet's share of the height. */
+  .instrument {
+    flex: none;
+    padding: 6px 16px;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  .composer {
+    flex: none;
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  /* Everything the hint line spells out is a tap away via /help instead. */
+  .composer-hint {
+    display: none;
+  }
+}

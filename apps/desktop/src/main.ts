@@ -607,21 +607,23 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
   app.innerHTML = shell(
     "play",
     `
-    <div class="play-header">
-      <div>
-        <div class="title-lg" id="location-label">${escapeHtml(campaignTitle)}</div>
-        <div class="mono meta" id="director-indicator">DIRECTOR · IDLE</div>
+    <div class="play-screen">
+      <div class="play-header">
+        <div>
+          <div class="title-lg" id="location-label">${escapeHtml(campaignTitle)}</div>
+          <div class="mono meta" id="director-indicator">DIRECTOR · IDLE</div>
+        </div>
       </div>
-    </div>
-    <div class="sheet">
-      <div id="transcript" class="transcript"></div>
-      <div id="instrument-strip" class="instrument mono"></div>
-      <div class="composer">
-        <span class="mono lamp">&rsaquo;</span>
-        <input id="draft" placeholder="say something, or type / for commands" autofocus />
-      </div>
-      <div class="composer-hint mono muted">
-        /who · /talk &lt;name&gt; · /where · /go &lt;place&gt; · /status · /save · /quit — esc to stop a turn
+      <div class="sheet">
+        <div id="transcript" class="transcript"></div>
+        <div id="instrument-strip" class="instrument mono"></div>
+        <div class="composer">
+          <span class="mono lamp">&rsaquo;</span>
+          <input id="draft" placeholder="say something, or type / for commands" autofocus />
+        </div>
+        <div class="composer-hint mono muted">
+          /who · /talk &lt;name&gt; · /where · /go &lt;place&gt; · /status · /save · /quit — esc to stop a turn
+        </div>
       </div>
     </div>
   `,
@@ -819,10 +821,22 @@ function speakerLabel(speaker: Speaker): string {
   return speaker.Character.toUpperCase();
 }
 
+// The label is its own span, not a bare text node, so the small-frame
+// breakpoint (styles.css) can move it onto its own line above the text
+// instead of the desktop's inline "LABEL: text" — docs/design/Orison.dc.html
+// "mobile"'s "speaker names move above the line instead of a left gutter"
+// (#37); this app never built that gutter, so this is what moves.
+function appendLabel(p: HTMLElement, label: string) {
+  const span = document.createElement("span");
+  span.className = "line-label";
+  span.textContent = `${label}: `;
+  p.append(span);
+}
+
 function appendLine(transcript: HTMLDivElement, label: string, text: string, cls = "") {
   const p = document.createElement("p");
   p.className = cls;
-  if (label) p.append(`${label}: `);
+  if (label) appendLabel(p, label);
   // Streaming text is rewritten with textContent as it grows; leave it plain.
   if (cls === "streaming") p.append(text);
   else appendWithSpeech(p, text);
@@ -834,7 +848,7 @@ function appendLine(transcript: HTMLDivElement, label: string, text: string, cls
 function appendSpeech(transcript: HTMLDivElement, speaker: string, text: string) {
   const p = document.createElement("p");
   p.className = "speech";
-  p.append(`${speaker.toUpperCase()}: `);
+  appendLabel(p, speaker.toUpperCase());
   const strong = document.createElement("strong");
   strong.textContent = text;
   p.append(strong);
