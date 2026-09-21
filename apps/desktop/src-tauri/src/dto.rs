@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use orison_core::emotion::{emotion_str, EmotionState, Rapport};
 use orison_core::inference::{HealthStatus, ModelHealth};
 use orison_core::ingest::IngestReport;
 use orison_core::knowledge::{Entity, EntityKind};
@@ -131,6 +132,40 @@ pub struct HistoryLineDto {
     pub role: String,
     pub text: String,
     pub sender: Option<String>,
+}
+
+/// A character's current emotional state and rapport, for the character
+/// screen (#33) — one snapshot off `EmotionEngine`, no per-event history.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterEmotionDto {
+    pub emotion: String,
+    pub intensity: f32,
+    pub target: String,
+    pub reason: String,
+    /// `-1.0..=1.0`.
+    pub affinity: f64,
+    /// The band `affinity` falls in, e.g. "Best Friend" — kept off the
+    /// frontend so the [emotions.md] bands live in exactly one place.
+    ///
+    /// [emotions.md]: ../../../../../docs/emotions.md
+    pub rapport_label: String,
+    pub rapport_behaviour: String,
+}
+
+impl CharacterEmotionDto {
+    pub fn new(state: &EmotionState, affinity: f64) -> Self {
+        let rapport = Rapport::of(affinity);
+        Self {
+            emotion: emotion_str(state.emotion).to_string(),
+            intensity: state.intensity,
+            target: state.target.clone(),
+            reason: state.reason.clone(),
+            affinity,
+            rapport_label: rapport.label().to_string(),
+            rapport_behaviour: rapport.behaviour().to_string(),
+        }
+    }
 }
 
 /// One folder of a vault that holds notes, with what ingest would call them

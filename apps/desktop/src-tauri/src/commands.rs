@@ -23,8 +23,8 @@ use orison_core::state::CampaignSummary;
 use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
 
 use crate::dto::{
-    EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto,
-    VaultFolderDto,
+    CharacterEmotionDto, EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto,
+    ModelsSummaryDto, VaultFolderDto,
 };
 use crate::state::{lock, AppState};
 
@@ -354,4 +354,17 @@ pub fn characters_present(
 pub fn locations(state: State<AppState>, campaign_id: String) -> Result<Vec<EntityDto>, String> {
     let engine = engine_or_err(&state, &campaign_id)?;
     Ok(engine.locations().iter().map(EntityDto::from).collect())
+}
+
+/// A character's current rapport and emotional state, for the character
+/// screen (#33). Read-only — see `TurnEngine::character_emotion`.
+#[tauri::command]
+pub fn character_emotion(
+    state: State<AppState>,
+    campaign_id: String,
+    entity_id: String,
+) -> Result<CharacterEmotionDto, String> {
+    let engine = engine_or_err(&state, &campaign_id)?;
+    let (emotion_state, affinity) = engine.character_emotion(&entity_id).map_err(err)?;
+    Ok(CharacterEmotionDto::new(&emotion_state, affinity))
 }
