@@ -11,3 +11,5 @@ apps/desktop/dist/
 
 # Seeded design canvas payloads (2 MB editor bundle, regenerated from the .dc.html sources)
 docs/design/*-ui.html
+
+orison.sqlite3

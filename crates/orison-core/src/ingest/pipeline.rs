@@ -159,7 +159,15 @@ pub fn ingest_documents(
         if kind == EntityKind::Note {
             report.notes_without_a_type += 1;
         }
-        built.push(build_entity(path, doc, kind, files, &others, &mut report));
+        built.push(build_entity(
+            path,
+            doc,
+            kind,
+            files,
+            &others,
+            &options.folder_types,
+            &mut report,
+        ));
     }
 
     if options.promote_scene_fallback && !built.iter().any(|e| e.kind == EntityKind::Scene) {
@@ -212,6 +220,7 @@ fn build_entity(
     kind: EntityKind,
     files: &scan::VaultFiles,
     others: &[(&str, &Document)],
+    folder_types: &BTreeMap<String, String>,
     report: &mut IngestReport,
 ) -> Entity {
     let fm = &doc.frontmatter;
@@ -246,7 +255,20 @@ fn build_entity(
     }
 
     if kind == EntityKind::Character {
-        let props = classify::creature_properties(fm, path);
+        let mut props = classify::creature_properties(fm, path);
+        // A folder the player called fauna/flora is a creature whatever it is
+        // named; frontmatter still wins, as it does for path hints.
+        if classify::explicit_creature(path, folder_types) {
+            if !fm.contains_key("is_creature") && !fm.contains_key("creature") {
+                props.is_creature = true;
+            }
+            if !fm.contains_key("can_speak") {
+                props.can_speak = false;
+            }
+            if !fm.contains_key("humanoid") {
+                props.humanoid = false;
+            }
+        }
         entity
             .properties
             .insert("is_creature".into(), props.is_creature.into());

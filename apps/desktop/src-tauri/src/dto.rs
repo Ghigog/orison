@@ -132,3 +132,15 @@ pub struct HistoryLineDto {
     pub text: String,
     pub sender: Option<String>,
 }
+
+/// One folder of a vault that holds notes, with what ingest would call them
+/// if the player said nothing.
+#[derive(Debug, Clone, Serialize)]
+pub struct VaultFolderDto {
+    /// Vault-relative, `/`-separated; empty for notes at the vault root.
+    pub folder: String,
+    pub notes: usize,
+    /// The folder-name heuristic's answer. A note's own `type:` frontmatter
+    /// can still differ, so this is a guess, not a promise.
+    pub guess: String,
+}

@@ -18,10 +18,14 @@ use tauri::{AppHandle, Emitter, State};
 use orison_cli::campaign;
 use orison_cli::config::{ModelArgs, Profile};
 use orison_core::inference;
+use orison_core::ingest::{classify, scan};
 use orison_core::state::CampaignSummary;
 use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
 
-use crate::dto::{EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto};
+use crate::dto::{
+    EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto,
+    VaultFolderDto,
+};
 use crate::state::{lock, AppState};
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -70,6 +74,40 @@ pub fn import_vault(
     let report =
         campaign::import(&state.store, &campaign_id, &vault, &folder_types).map_err(err)?;
     Ok(IngestReportDto::from(&report))
+}
+
+/// Every folder in a vault that holds notes, with the type ingest would give
+/// it unaided. The import screen lists these so the player corrects the few
+/// guesses that are wrong instead of writing a mapping from scratch.
+///
+/// Folder mappings match a note's own folder exactly, not its ancestors, so
+/// this lists every such folder rather than just the top level.
+#[tauri::command]
+pub fn scan_vault_folders(vault: PathBuf) -> Result<Vec<VaultFolderDto>, String> {
+    let files = scan::scan(&vault).map_err(err)?;
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for note in &files.notes {
+        let relative = scan::relative_string(note);
+        *counts
+            .entry(classify::parent_folder(&relative).to_string())
+            .or_default() += 1;
+    }
+    Ok(counts
+        .into_iter()
+        .map(|(folder, notes)| {
+            let probe = if folder.is_empty() {
+                "note.md".to_string()
+            } else {
+                format!("{folder}/note.md")
+            };
+            let guess = classify::classify(&BTreeMap::new(), &probe, &BTreeMap::new());
+            VaultFolderDto {
+                folder,
+                notes,
+                guess: guess.as_str().to_string(),
+            }
+        })
+        .collect())
 }
 
 /// Connect this campaign's two backends and build its `TurnEngine`. Every
@@ -146,6 +184,26 @@ pub async fn check_model_health(url: String, model: String) -> Result<ModelHealt
         .await
         .map(ModelHealthDto::from)
         .map_err(err)
+}
+
+/// Remove a campaign from Orison: its transcript, knowledge graph, emotions
+/// and passages. The vault folder it was compiled from is never touched, so
+/// importing it again starts a fresh campaign.
+#[tauri::command]
+pub fn delete_campaign(state: State<AppState>, campaign_id: String) -> Result<(), String> {
+    // Stop its engine first so no in-flight turn writes to a campaign that is
+    // being removed.
+    if let Some(engine) = state.remove_engine(&campaign_id) {
+        engine.shutdown();
+    }
+    let removed = lock(&state.store)
+        .delete_campaign(&campaign_id)
+        .map_err(err)?;
+    if removed {
+        Ok(())
+    } else {
+        Err(format!("no campaign named {campaign_id}"))
+    }
 }
 
 /// Whether this campaign already has a running engine, so a resume from the

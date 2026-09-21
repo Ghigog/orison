@@ -39,7 +39,8 @@ h1 {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   color: inherit;
   background: var(--paper);
@@ -47,6 +48,10 @@ textarea {
   border-radius: 2px;
   padding: 8px 10px;
   width: 100%;
+}
+
+select {
+  width: auto;
 }
 
 .mono {

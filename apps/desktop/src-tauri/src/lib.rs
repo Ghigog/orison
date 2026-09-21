@@ -40,6 +40,7 @@ fn database_path(app: &tauri::App) -> Result<std::path::PathBuf, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let db_path = database_path(app)?;
             let store: Arc<Mutex<CampaignStore>> = Arc::new(Mutex::new(
@@ -52,8 +53,10 @@ pub fn run() {
             commands::list_campaigns,
             commands::create_campaign,
             commands::import_vault,
+            commands::scan_vault_folders,
             commands::connect_models,
             commands::check_model_health,
+            commands::delete_campaign,
             commands::is_connected,
             commands::recent_history,
             commands::submit_player_input,

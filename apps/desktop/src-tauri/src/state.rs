@@ -30,6 +30,10 @@ impl AppState {
         lock(&self.sessions).get(campaign_id).cloned()
     }
 
+    pub fn remove_engine(&self, campaign_id: &str) -> Option<Arc<TurnEngine>> {
+        lock(&self.sessions).remove(campaign_id)
+    }
+
     pub fn insert_engine(&self, campaign_id: String, engine: Arc<TurnEngine>) {
         lock(&self.sessions).insert(campaign_id, engine);
     }

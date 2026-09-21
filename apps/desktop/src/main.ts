@@ -15,6 +15,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 
 // ---------------------------------------------------------------------------
 // Types mirroring the Rust side. TurnEvent/TurnState/DirectorState/
@@ -38,14 +39,14 @@ interface EntityDto {
 }
 
 interface IngestReportDto {
-  notes_seen: number;
-  sections_mapped: number;
-  sections_overflowed: number;
+  notesSeen: number;
+  sectionsMapped: number;
+  sectionsOverflowed: number;
   chunks: number;
-  notes_without_a_type: number;
-  unaccounted_sections: string[];
-  dangling_link_count: number;
-  gender_conflict_count: number;
+  notesWithoutAType: number;
+  unaccountedSections: string[];
+  danglingLinkCount: number;
+  genderConflictCount: number;
 }
 
 interface ModelsSummaryDto {
@@ -79,6 +80,12 @@ type TurnEvent =
   | { SystemMessage: { text: string } }
   | { Failed: { kind: string; detail: string } }
   | "TurnCompleted";
+
+interface VaultFolder {
+  folder: string;
+  notes: number;
+  guess: string;
+}
 
 interface HistoryLine {
   role: "player" | "character" | "narrator" | "system";
@@ -213,7 +220,10 @@ async function renderCampaigns() {
             <div class="title-lg">${escapeHtml(c.title)}</div>
             <div class="mono meta">${escapeHtml(c.id)} · last played ${escapeHtml(c.last_played)} · ${Math.round(c.playtime_seconds / 60)} min</div>
           </div>
-          <button class="btn" data-resume="${escapeHtml(c.id)}" data-title="${escapeHtml(c.title)}">RESUME</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn" data-resume="${escapeHtml(c.id)}" data-title="${escapeHtml(c.title)}">RESUME</button>
+            <button class="btn" data-delete="${escapeHtml(c.id)}" data-title="${escapeHtml(c.title)}">DELETE</button>
+          </div>
         </div>`,
               )
               .join("")
@@ -222,6 +232,23 @@ async function renderCampaigns() {
   `,
   );
   attachNav();
+  app.querySelectorAll<HTMLButtonElement>("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const campaignId = btn.dataset.delete!;
+      const yes = await ask(
+        `Delete "${btn.dataset.title}" from Orison? Its story so far, memories and compiled notes are removed. Your vault files are not touched, so you can compile them again later.`,
+        { title: "Delete campaign", kind: "warning", okLabel: "Delete", cancelLabel: "Keep" },
+      );
+      if (!yes) return;
+      try {
+        await invoke("delete_campaign", { campaignId });
+        if (lastPlayContext?.campaignId === campaignId) lastPlayContext = null;
+        await renderCampaigns();
+      } catch (e) {
+        alert(String(e));
+      }
+    });
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-resume]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const campaignId = btn.dataset.resume!;
@@ -475,6 +502,8 @@ function currentPlayCampaignId(): string | undefined {
 // The header line answers "is it working?" — without the turn state the
 // player's only signal during a 10-30 s turn was silence.
 let turnState = "Idle";
+// Where the current stream zone's text is going; null between zones.
+let streamTarget: HTMLElement | null = null;
 let directorState = "Idle";
 
 // The turn machine's own names, in words a player can read. "Applying" is
@@ -537,26 +566,46 @@ function handleTurnEvent(
     locationLabel.textContent = event.LocationChanged.label;
     return;
   }
+  if ("StreamStarted" in event) {
+    // One row per field: the narration and the character's speech arrive as
+    // separate zones and must not be run together into one paragraph.
+    clearThinking(transcript);
+    const { speaker } = event.StreamStarted;
+    const p = document.createElement("p");
+    p.className = "streaming";
+    if (typeof speaker === "object") {
+      p.classList.add("speech");
+      p.append(`${speaker.Character.toUpperCase()}: `);
+      streamTarget = document.createElement("strong");
+      p.append(streamTarget);
+    } else {
+      streamTarget = p;
+    }
+    transcript.appendChild(p);
+    return;
+  }
   if ("StreamDelta" in event) {
     clearThinking(transcript);
-    const last = transcript.lastElementChild;
-    if (last?.classList.contains("streaming")) {
-      last.textContent += event.StreamDelta.text;
-    } else {
-      appendLine(transcript, "", event.StreamDelta.text, "streaming");
-    }
+    streamTarget?.append(event.StreamDelta.text);
+    transcript.scrollTop = transcript.scrollHeight;
+    return;
+  }
+  if ("StreamEnded" in event) {
+    streamTarget = null;
     return;
   }
   if ("Message" in event) {
-    const last = transcript.lastElementChild;
     clearThinking(transcript);
-    if (last?.classList.contains("streaming")) last.remove(); // replaced by the parsed line
     const { speaker, text } = event.Message;
+    // The parsed line takes the place of its provisional stream row, so
+    // nothing jumps when the response finishes.
+    const provisional = transcript.querySelector(".streaming");
     if (typeof speaker === "object") {
       appendSpeech(transcript, speaker.Character, text);
     } else {
       appendLine(transcript, speakerLabel(speaker), text);
     }
+    if (provisional) provisional.replaceWith(transcript.lastElementChild!);
     return;
   }
   if ("SystemMessage" in event) {
@@ -734,28 +783,42 @@ async function renderImport() {
       </div>
       <div class="field">
         <label class="mono">VAULT PATH</label>
-        <input id="vault" placeholder="fixtures/vaults/minimal" />
+        <div style="display:flex;gap:8px">
+          <input id="vault" placeholder="fixtures/vaults/minimal" style="flex:1" />
+          <button class="btn" id="browse" type="button">BROWSE…</button>
+        </div>
       </div>
-      <div class="field">
-        <label class="mono">FOLDER TYPES — one per line, folder=type (type is character/location/lore/item/ignore)</label>
-        <textarea id="folder-types" rows="4" placeholder="People=character&#10;Places/Cities=location"></textarea>
+      <div class="field" id="folders-field" hidden>
+        <label class="mono">WHAT EACH FOLDER HOLDS — Orison's guess is preselected; change only what's wrong</label>
+        <div id="folders"></div>
       </div>
       <button class="btn btn-solid" id="compile">COMPILE</button>
       <p id="import-error" class="error mono"></p>
-      <pre id="import-report" class="mono"></pre>
+      <div id="import-report"></div>
     </div>
   `,
   );
   attachNav();
+  document.querySelector("#browse")!.addEventListener("click", async () => {
+    const picked = await open({ directory: true, title: "Choose your vault folder" }).catch(() => null);
+    if (typeof picked === "string") {
+      (document.querySelector("#vault") as HTMLInputElement).value = picked;
+      await showFolders(picked);
+    }
+  });
+  document.querySelector("#vault")!.addEventListener("change", (e) => {
+    const path = (e.target as HTMLInputElement).value.trim();
+    if (path) void showFolders(path);
+  });
   document.querySelector("#compile")!.addEventListener("click", async () => {
     const title = (document.querySelector("#title") as HTMLInputElement).value.trim();
     const vault = (document.querySelector("#vault") as HTMLInputElement).value.trim();
-    const folderTypesRaw = (document.querySelector("#folder-types") as HTMLTextAreaElement).value;
+    // Only the rows the player changed: "auto" leaves ingest's own heuristics
+    // (including each note's `type:` frontmatter) in charge.
     const folderTypes: Record<string, string> = {};
-    for (const line of folderTypesRaw.split("\n")) {
-      const [folder, kind] = line.split("=").map((s) => s.trim());
-      if (folder && kind) folderTypes[folder] = kind;
-    }
+    document.querySelectorAll<HTMLSelectElement>("#folders select").forEach((sel) => {
+      if (sel.value !== "auto") folderTypes[sel.dataset.folder!] = sel.value;
+    });
     try {
       const created = await invoke<CampaignSummary>("create_campaign", {
         title,
@@ -767,11 +830,72 @@ async function renderImport() {
         vault,
         folderTypes,
       });
-      document.querySelector("#import-report")!.textContent = JSON.stringify(report, null, 2);
+      const out = document.querySelector<HTMLElement>("#import-report")!;
+      out.innerHTML = importSummary(report);
+      out.querySelector("#play-now")?.addEventListener("click", () =>
+        render({ name: "connect", campaignId: created.id, campaignTitle: title }),
+      );
     } catch (e) {
       document.querySelector("#import-error")!.textContent = String(e);
     }
   });
+}
+
+/// The compile report in words. Every count is either reassurance or a next
+/// step; none is left for the player to interpret.
+function importSummary(r: IngestReportDto): string {
+  const n = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+  const good: string[] = [
+    `Read ${n(r.notesSeen, "note")} and made ${n(r.chunks, "passage")} the story can look up.`,
+  ];
+  if (r.unaccountedSections.length === 0) good.push("Nothing from your notes was lost.");
+  const check: string[] = [];
+  if (r.notesWithoutAType > 0)
+    check.push(
+      `${n(r.notesWithoutAType, "note")} couldn't be told apart (character, place, lore…) and were kept as plain notes. Pick a type for their folders above and compile again if that matters.`,
+    );
+  if (r.danglingLinkCount > 0)
+    check.push(`${n(r.danglingLinkCount, "link")} point at notes that don't exist in the vault.`);
+  if (r.genderConflictCount > 0)
+    check.push(`${n(r.genderConflictCount, "character")} described with conflicting genders — worth a read.`);
+  if (r.unaccountedSections.length > 0)
+    check.push(`Text from ${n(r.unaccountedSections.length, "section")} couldn't be placed: ${r.unaccountedSections.join(", ")}.`);
+  const list = (items: string[]) => items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
+  return `
+    <div class="sheet-block">
+      <div class="mono meta">COMPILED</div>
+      <ul>${list(good)}</ul>
+      ${check.length ? `<div class="mono meta">WORTH A LOOK</div><ul>${list(check)}</ul>` : ""}
+      <button class="btn btn-solid" id="play-now">PLAY THIS CAMPAIGN</button>
+    </div>`;
+}
+
+const FOLDER_KINDS = ["character", "location", "scene", "fauna", "flora", "lore", "item", "note"];
+
+async function showFolders(vault: string) {
+  const field = document.querySelector<HTMLElement>("#folders-field")!;
+  const list = document.querySelector<HTMLDivElement>("#folders")!;
+  const error = document.querySelector("#import-error")!;
+  error.textContent = "";
+  try {
+    const folders = await invoke<VaultFolder[]>("scan_vault_folders", { vault });
+    list.innerHTML = folders
+      .map(
+        (f) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0">
+        <span class="mono">${escapeHtml(f.folder || "(vault root)")} <span class="muted">· ${f.notes} note${f.notes === 1 ? "" : "s"}</span></span>
+        <select data-folder="${escapeHtml(f.folder)}">
+          <option value="auto">Auto — ${escapeHtml(f.guess)}</option>
+          ${FOLDER_KINDS.map((k) => `<option value="${k}">${k}</option>`).join("")}
+        </select>
+      </div>`,
+      )
+      .join("");
+    field.hidden = folders.length === 0;
+  } catch (e) {
+    field.hidden = true;
+    error.textContent = String(e);
+  }
 }
 
 // ---------------------------------------------------------------------------

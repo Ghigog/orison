@@ -29,6 +29,8 @@ pub fn classify(
     if let Some(mapped) = explicit_folders.get(relative_folder) {
         return match mapped.to_ascii_lowercase().as_str() {
             "scene" | "story" | "event" | "quest" => EntityKind::Scene,
+            // Creatures are characters; `explicit_creature` marks them as such.
+            "fauna" | "flora" | "creature" | "monster" => EntityKind::Character,
             other => EntityKind::from_str_lossy(other),
         };
     }
@@ -144,6 +146,19 @@ pub struct CreatureProperties {
     pub is_creature: bool,
     pub can_speak: bool,
     pub humanoid: bool,
+}
+
+/// Whether the player's own folder mapping calls this note's folder fauna,
+/// flora or another creature kind.
+pub fn explicit_creature(relative_path: &str, explicit_folders: &BTreeMap<String, String>) -> bool {
+    explicit_folders
+        .get(parent_folder(relative_path))
+        .is_some_and(|m| {
+            matches!(
+                m.to_ascii_lowercase().as_str(),
+                "fauna" | "flora" | "creature" | "monster"
+            )
+        })
 }
 
 pub fn creature_properties(

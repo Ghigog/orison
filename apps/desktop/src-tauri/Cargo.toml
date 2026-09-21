@@ -26,6 +26,7 @@ tokio = { workspace = true }
 
 orison-core = { path = "../../../crates/orison-core" }
 orison-cli = { path = "../../../crates/orison-cli" }
+tauri-plugin-dialog = "2"
 
 # Release profile tuning lives at the workspace root (Cargo ignores a
 # member's own [profile.*] once it joins a workspace); see the repository
