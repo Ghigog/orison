@@ -54,6 +54,8 @@ pub fn run() {
             commands::import_vault,
             commands::connect_models,
             commands::check_model_health,
+            commands::is_connected,
+            commands::recent_history,
             commands::submit_player_input,
             commands::cancel_current_turn,
             commands::select_character,

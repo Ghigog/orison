@@ -80,6 +80,12 @@ type TurnEvent =
   | { Failed: { kind: string; detail: string } }
   | "TurnCompleted";
 
+interface HistoryLine {
+  role: "player" | "character" | "narrator" | "system";
+  text: string;
+  sender: string | null;
+}
+
 interface TurnOutcome {
   latencyMs: number;
   timeToFirstTokenMs: number | null;
@@ -217,9 +223,12 @@ async function renderCampaigns() {
   );
   attachNav();
   app.querySelectorAll<HTMLButtonElement>("[data-resume]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      render({ name: "connect", campaignId: btn.dataset.resume!, campaignTitle: btn.dataset.title! }),
-    );
+    btn.addEventListener("click", async () => {
+      const campaignId = btn.dataset.resume!;
+      const campaignTitle = btn.dataset.title!;
+      const connected = await invoke<boolean>("is_connected", { campaignId }).catch(() => false);
+      render({ name: connected ? "play" : "connect", campaignId, campaignTitle });
+    });
   });
 }
 
@@ -287,7 +296,34 @@ function attachHealthCheck(input: HTMLInputElement, urlInput: HTMLInputElement, 
   urlInput.addEventListener("blur", run);
 }
 
+// The last connection that worked, so the connect screen opens on it. Not
+// per-campaign: the models are a property of the machine, not the story.
+const LAST_MODELS_KEY = "orison.lastModels";
+interface SavedModels {
+  url: string;
+  actorModel: string;
+  directorModel: string;
+  twoCalls: boolean;
+}
+
+function loadSavedModels(): SavedModels | null {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_MODELS_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveModels(m: SavedModels) {
+  try {
+    localStorage.setItem(LAST_MODELS_KEY, JSON.stringify(m));
+  } catch {
+    // Storage unavailable: the next connect just starts from the defaults.
+  }
+}
+
 async function renderConnect(campaignId: string, campaignTitle: string) {
+  const saved = loadSavedModels();
   app.innerHTML = shell(
     "campaigns",
     `
@@ -296,14 +332,14 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
       <p class="muted">Connecting to <b>${escapeHtml(campaignTitle)}</b>. One decides what happens next; one speaks.</p>
       <div class="field">
         <label class="mono">ENDPOINT</label>
-        <input id="url" value="http://127.0.0.1:11434" />
+        <input id="url" value="${escapeHtml(saved?.url ?? "http://127.0.0.1:11434")}" />
       </div>
       <div class="field">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <label class="mono">THE ACTOR — speaks in character</label>
           <span id="actor-health" class="mono health-badge"></span>
         </div>
-        <input id="actor-model" value="llama3.2:3b" />
+        <input id="actor-model" value="${escapeHtml(saved?.actorModel ?? "llama3.2:3b")}" />
         <div id="actor-health-detail" class="mono health-detail"></div>
       </div>
       <div class="field">
@@ -311,10 +347,10 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
           <label class="mono">THE DIRECTOR — composes what happens next (blank = same as the Actor)</label>
           <span id="director-health" class="mono health-badge"></span>
         </div>
-        <input id="director-model" placeholder="llama3.2:3b" />
+        <input id="director-model" placeholder="llama3.2:3b" value="${escapeHtml(saved?.directorModel ?? "")}" />
         <div id="director-health-detail" class="mono health-detail"></div>
       </div>
-      <label class="mono checkbox"><input type="checkbox" id="two-calls" /> Director + Actor (two calls; unchecked runs a single call)</label>
+      <label class="mono checkbox"><input type="checkbox" id="two-calls"${saved?.twoCalls ? " checked" : ""} /> Director + Actor (two calls; unchecked runs a single call)</label>
       <div style="margin-top:20px">
         <button class="btn btn-solid" id="connect">CONNECT</button>
       </div>
@@ -347,6 +383,7 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
         },
       });
       console.log("connected:", summary.summary);
+      saveModels({ url, actorModel, directorModel: directorModelRaw, twoCalls });
       render({ name: "play", campaignId, campaignTitle });
     } catch (e) {
       document.querySelector("#connect-error")!.textContent = String(e);
@@ -386,23 +423,38 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
   attachNav();
 
   const transcript = document.querySelector<HTMLDivElement>("#transcript")!;
-  const instrumentStrip = document.querySelector<HTMLDivElement>("#instrument-strip")!;
-  const directorIndicator = document.querySelector<HTMLDivElement>("#director-indicator")!;
-  const locationLabel = document.querySelector<HTMLDivElement>("#location-label")!;
   const draft = document.querySelector<HTMLInputElement>("#draft")!;
 
-  // listen() stacks a new handler on every render; this screen is only ever
-  // shown for one campaign at a time in this scaffold, so guard rather than
-  // unlisten on navigate-away (a real router would track the unlisten fn).
+  // The screen is rebuilt on every visit; the transcript lives in the store.
+  const history = await invoke<HistoryLine[]>("recent_history", { campaignId, limit: 40 }).catch(
+    () => [] as HistoryLine[],
+  );
+  for (const line of history) {
+    if (line.role === "player") appendLine(transcript, "YOU", line.text, "player");
+    else if (line.role === "system") appendLine(transcript, "SYSTEM", line.text, "system");
+    else if (line.role === "character") appendSpeech(transcript, line.sender ?? "", line.text);
+    else appendLine(transcript, "", line.text);
+  }
+
+  // listen() stacks a new handler on every render, so it is attached once.
+  // That means the handlers outlive this render's DOM: they must look the
+  // elements up when an event arrives, not close over the ones from the
+  // first render (which are detached after any navigate-away-and-back).
   if (!playListenersAttached) {
     playListenersAttached = true;
     await listen<{ campaignId: string; event: TurnEvent }>("turn-event", (e) => {
       if (e.payload.campaignId !== currentPlayCampaignId()) return;
-      handleTurnEvent(e.payload.event, transcript, directorIndicator, locationLabel);
+      const q = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel);
+      const transcript = q<HTMLDivElement>("#transcript");
+      const indicator = q<HTMLDivElement>("#director-indicator");
+      const location = q<HTMLDivElement>("#location-label");
+      if (!transcript || !indicator || !location) return;
+      handleTurnEvent(e.payload.event, transcript, indicator, location);
     });
     await listen<{ campaignId: string; outcome: TurnOutcome }>("turn-outcome", (e) => {
       if (e.payload.campaignId !== currentPlayCampaignId()) return;
-      renderInstrumentStrip(instrumentStrip, e.payload.outcome);
+      const strip = document.querySelector<HTMLDivElement>("#instrument-strip");
+      if (strip) renderInstrumentStrip(strip, e.payload.outcome);
     });
   }
 
@@ -420,6 +472,42 @@ function currentPlayCampaignId(): string | undefined {
   return current.name === "play" ? current.campaignId : undefined;
 }
 
+// The header line answers "is it working?" — without the turn state the
+// player's only signal during a 10-30 s turn was silence.
+let turnState = "Idle";
+let directorState = "Idle";
+
+// The turn machine's own names, in words a player can read. "Applying" is
+// the stretch after the reply has landed while state is written back — the
+// text is on screen but the turn is not over, which "STREAMING" got wrong.
+const TURN_LABEL: Record<string, string> = {
+  Preparing: "RECALLING",
+  Streaming: "WRITING",
+  Applying: "SETTLING",
+};
+
+function paintStatus(el: HTMLDivElement) {
+  const turn = TURN_LABEL[turnState];
+  el.textContent = turn
+    ? `${turn}… · DIRECTOR · ${directorState.toUpperCase()}`
+    : `DIRECTOR · ${directorState.toUpperCase()}`;
+  el.classList.toggle("busy", !!turn);
+}
+
+/// A row that says the turn is under way until the first text replaces it.
+function showThinking(transcript: HTMLDivElement) {
+  if (transcript.querySelector(".thinking")) return;
+  const p = document.createElement("p");
+  p.className = "thinking";
+  p.textContent = "…";
+  transcript.appendChild(p);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function clearThinking(transcript: HTMLDivElement) {
+  transcript.querySelector(".thinking")?.remove();
+}
+
 function handleTurnEvent(
   event: TurnEvent,
   transcript: HTMLDivElement,
@@ -429,8 +517,20 @@ function handleTurnEvent(
   if (typeof event === "string") {
     return; // TurnCompleted: the outcome event carries what's worth showing.
   }
+  if ("StateChanged" in event) {
+    turnState = event.StateChanged;
+    paintStatus(directorIndicator);
+    if (turnState === "Preparing") showThinking(transcript);
+    if (turnState === "Idle") clearThinking(transcript);
+    return;
+  }
   if ("DirectorStateChanged" in event) {
-    directorIndicator.textContent = `DIRECTOR · ${event.DirectorStateChanged.toUpperCase()}`;
+    directorState = event.DirectorStateChanged;
+    paintStatus(directorIndicator);
+    return;
+  }
+  if ("PlayerMessage" in event) {
+    appendLine(transcript, "YOU", event.PlayerMessage.text, "player");
     return;
   }
   if ("LocationChanged" in event) {
@@ -438,6 +538,7 @@ function handleTurnEvent(
     return;
   }
   if ("StreamDelta" in event) {
+    clearThinking(transcript);
     const last = transcript.lastElementChild;
     if (last?.classList.contains("streaming")) {
       last.textContent += event.StreamDelta.text;
@@ -448,8 +549,14 @@ function handleTurnEvent(
   }
   if ("Message" in event) {
     const last = transcript.lastElementChild;
+    clearThinking(transcript);
     if (last?.classList.contains("streaming")) last.remove(); // replaced by the parsed line
-    appendLine(transcript, speakerLabel(event.Message.speaker), event.Message.text);
+    const { speaker, text } = event.Message;
+    if (typeof speaker === "object") {
+      appendSpeech(transcript, speaker.Character, text);
+    } else {
+      appendLine(transcript, speakerLabel(speaker), text);
+    }
     return;
   }
   if ("SystemMessage" in event) {
@@ -472,9 +579,42 @@ function speakerLabel(speaker: Speaker): string {
 function appendLine(transcript: HTMLDivElement, label: string, text: string, cls = "") {
   const p = document.createElement("p");
   p.className = cls;
-  p.textContent = label ? `${label}: ${text}` : text;
+  if (label) p.append(`${label}: `);
+  // Streaming text is rewritten with textContent as it grows; leave it plain.
+  if (cls === "streaming") p.append(text);
+  else appendWithSpeech(p, text);
   transcript.appendChild(p);
   transcript.scrollTop = transcript.scrollHeight;
+}
+
+/// A character's line, in bold: speech is the part the player reads for.
+function appendSpeech(transcript: HTMLDivElement, speaker: string, text: string) {
+  const p = document.createElement("p");
+  p.className = "speech";
+  p.append(`${speaker.toUpperCase()}: `);
+  const strong = document.createElement("strong");
+  strong.textContent = text;
+  p.append(strong);
+  transcript.appendChild(p);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+// Quoted speech inside narration: "…" or '…'. A single quote only opens
+// after whitespace or a bracket and only closes before whitespace or
+// punctuation, so apostrophes (You're, I'd) don't count as quotes.
+const SPEECH = /"([^"]+)"|(?<=^|[\s(])'([^']{2,}?)'(?=[\s.,;:!?)]|$)/g;
+
+function appendWithSpeech(p: HTMLElement, text: string) {
+  let at = 0;
+  for (const m of text.matchAll(SPEECH)) {
+    const start = m.index!;
+    p.append(text.slice(at, start));
+    const strong = document.createElement("strong");
+    strong.textContent = m[0];
+    p.append(strong);
+    at = start + m[0].length;
+  }
+  p.append(text.slice(at));
 }
 
 // The Interrupted screen's decision (docs/design/Orison.dc.html "failure"),

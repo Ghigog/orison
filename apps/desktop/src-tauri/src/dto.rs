@@ -122,3 +122,13 @@ impl From<ModelHealth> for ModelHealthDto {
         }
     }
 }
+
+/// One line of a campaign's stored transcript, for repainting the play
+/// screen after the shell has navigated away from it.
+#[derive(Debug, Clone, Serialize)]
+pub struct HistoryLineDto {
+    /// `"player"`, `"character"`, `"narrator"` or `"system"`.
+    pub role: String,
+    pub text: String,
+    pub sender: Option<String>,
+}

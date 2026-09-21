@@ -21,8 +21,8 @@ use orison_core::inference;
 use orison_core::state::CampaignSummary;
 use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
 
-use crate::dto::{EntityDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto};
-use crate::state::AppState;
+use crate::dto::{EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto, ModelHealthDto, ModelsSummaryDto};
+use crate::state::{lock, AppState};
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -146,6 +146,35 @@ pub async fn check_model_health(url: String, model: String) -> Result<ModelHealt
         .await
         .map(ModelHealthDto::from)
         .map_err(err)
+}
+
+/// Whether this campaign already has a running engine, so a resume from the
+/// campaigns list can skip the connect screen instead of making the player
+/// re-enter models the shell is still connected to.
+#[tauri::command]
+pub fn is_connected(state: State<AppState>, campaign_id: String) -> bool {
+    state.engine_for(&campaign_id).is_some()
+}
+
+/// The stored transcript, oldest first. The play screen keeps no history of
+/// its own, so it asks for this each time it is shown.
+#[tauri::command]
+pub fn recent_history(
+    state: State<AppState>,
+    campaign_id: String,
+    limit: usize,
+) -> Result<Vec<HistoryLineDto>, String> {
+    let entries = lock(&state.store)
+        .recent_history(&campaign_id, limit)
+        .map_err(err)?;
+    Ok(entries
+        .into_iter()
+        .map(|e| HistoryLineDto {
+            role: e.role.as_str().to_string(),
+            text: e.content,
+            sender: e.sender,
+        })
+        .collect())
 }
 
 fn engine_or_err(

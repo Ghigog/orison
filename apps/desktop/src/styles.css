@@ -256,6 +256,25 @@ textarea {
   font-style: italic;
 }
 
+.transcript p.player {
+  color: var(--ink-3);
+}
+
+.transcript p.thinking {
+  color: var(--ink-3);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.meta.busy {
+  color: var(--lamp);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
 .transcript p.error {
   color: var(--lamp);
 }
