@@ -315,6 +315,11 @@ select {
   font-size: 16px;
 }
 
+.composer-hint {
+  padding: 0 30px 14px;
+  font-size: 11px;
+}
+
 .lamp {
   color: var(--lamp);
 }
