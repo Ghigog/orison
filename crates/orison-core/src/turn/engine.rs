@@ -25,7 +25,7 @@ use crate::emotion::{EmotionEngine, EmotionState};
 use crate::inference::{
     ChatMessage, ChatRequest, InferenceBackend, InferenceError, ResponseFormat,
 };
-use crate::knowledge::{CanonicalField, Entity, EntityId, EntityKind};
+use crate::knowledge::{CanonicalField, EdgeKind, Entity, EntityId, EntityKind};
 use crate::memory::{CompactionPlan, DistillationPlan, MemoryManager};
 use crate::prompt::assembly::{
     player_message, CharacterCard, DirectorPrompt, PlayerCard, TurnPrompt, WorldSnapshot,
@@ -94,6 +94,17 @@ pub struct TurnOutcome {
     /// The world-state half of the response, on the single-call arm. `None`
     /// on the two-call arm, where the Director composes it separately.
     pub beat: Option<DirectorResponse>,
+}
+
+/// One edge of the knowledge graph, both endpoints resolved to a label, for
+/// the Map screen's drawn graph (#34) — see [`TurnEngine::graph_edges`].
+#[derive(Debug, Clone)]
+pub struct GraphEdge {
+    pub from_id: String,
+    pub from_label: String,
+    pub to_id: String,
+    pub to_label: String,
+    pub kind: EdgeKind,
 }
 
 struct Machine {
@@ -307,6 +318,40 @@ impl TurnEngine {
             .collect();
         all.sort_by(|a, b| a.label.cmp(&b.label));
         all
+    }
+
+    /// One relationship the graph knows about, resolved to both endpoints'
+    /// labels — what the Map screen (#34) needs to render `A —mentions→ B`
+    /// without a second lookup per edge.
+    pub fn graph_edges(&self) -> Vec<GraphEdge> {
+        let graph = self.session.graph();
+        let mut out: Vec<GraphEdge> = graph
+            .edges()
+            .into_iter()
+            .filter_map(|edge| {
+                let from = graph.get(&edge.from)?;
+                let to = graph.get(&edge.to)?;
+                // RAPTOR summary nodes (levels 1-2) are retrieval
+                // infrastructure, not notes the player wrote, and nothing
+                // else in the desktop shell surfaces them — excluded here
+                // rather than shown as unexplained extra nodes.
+                if from.level != 0 || to.level != 0 {
+                    return None;
+                }
+                Some(GraphEdge {
+                    from_id: from.id.as_str().to_string(),
+                    from_label: from.label.clone(),
+                    to_id: to.id.as_str().to_string(),
+                    to_label: to.label.clone(),
+                    kind: edge.kind,
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            (a.from_label.as_str(), a.to_label.as_str())
+                .cmp(&(b.from_label.as_str(), b.to_label.as_str()))
+        });
+        out
     }
 
     /// Locations reachable in one step from where the player is standing.

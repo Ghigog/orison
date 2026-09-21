@@ -161,6 +161,21 @@ async fn who_is_present_follows_the_graph_and_excludes_what_cannot_speak() {
     assert!(!here.contains(&"The Kettle".to_string()));
 }
 
+/// The Map screen's drawn graph (#34) needs the vault's own connections
+/// resolved to labels, not just ids a second lookup would have to resolve.
+#[tokio::test]
+async fn graph_edges_expose_the_vaults_own_connections_with_labels() {
+    let engine = engine().await;
+    let edges = engine.graph_edges();
+    assert!(
+        edges.iter().any(|e| {
+            (e.from_label == "Stonebridge" && e.to_label == "Thornwick Archive")
+                || (e.from_label == "Thornwick Archive" && e.to_label == "Stonebridge")
+        }),
+        "the mill road connecting the two locations should be a resolved edge: {edges:#?}"
+    );
+}
+
 /// B-19: a beat composed while the player walks away must not walk them back.
 ///
 /// `compose_beat` runs fire-and-forget after the Actor's turn resolves, and

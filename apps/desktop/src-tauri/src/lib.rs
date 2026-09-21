@@ -67,6 +67,7 @@ pub fn run() {
             commands::exits,
             commands::characters_present,
             commands::locations,
+            commands::graph_edges,
             commands::character_emotion,
         ])
         .run(tauri::generate_context!())
