@@ -1074,8 +1074,20 @@ async function showFolders(vault: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Settings (docs/design/Orison.dc.html "settings" — the theme/verbosity
-// toggles are view-only local state here; nothing persists them yet.)
+// Settings (docs/design/Orison.dc.html "settings"). The Lamp/E-ink toggle is
+// wired to `document.documentElement.dataset.theme`, which every screen's
+// CSS custom properties key off (styles.css `:root[data-theme="eink"]`) — so
+// flipping it re-themes the whole shell, not just this screen. Session-only:
+// it resets on restart until #35 adds persistence. Verbosity is still a
+// no-op; no command exists to act on it yet.
+
+type ThemeName = "lamplight" | "eink";
+let currentTheme: ThemeName = "lamplight";
+
+function applyTheme(theme: ThemeName) {
+  currentTheme = theme;
+  document.documentElement.dataset.theme = theme;
+}
 
 function renderSettings() {
   app.innerHTML = shell(
@@ -1084,17 +1096,40 @@ function renderSettings() {
     <div class="pad">
       <h1>The room you read in</h1>
       <div class="sheet-block">
+        <div class="mono meta">LIGHT</div>
+        <div class="theme-grid" style="margin-top:14px">
+          <button class="theme-card${currentTheme === "lamplight" ? " active" : ""}" data-theme-choice="lamplight">
+            <div class="theme-swatch lamplight"></div>
+            <div class="theme-card-title">Lamplight</div>
+            <div class="mono theme-card-caption">warm paper, amber accent</div>
+          </button>
+          <button class="theme-card${currentTheme === "eink" ? " active" : ""}" data-theme-choice="eink">
+            <div class="theme-swatch eink"></div>
+            <div class="theme-card-title">E-ink</div>
+            <div class="mono theme-card-caption">pure black on white, no motion</div>
+          </button>
+        </div>
+        <p class="muted" style="margin-top:16px">E-ink drops every shadow and animation and holds
+        contrast above 10:1. Resets to Lamplight when you restart the app.</p>
+      </div>
+      <div class="sheet-block">
         <div class="mono meta">WHAT LEAVES THIS MACHINE</div>
         <p style="font-size:20px;margin:0">Nothing.</p>
         <p class="muted">Orison reaches one address, and you typed it. No telemetry, no crash reports.</p>
       </div>
-      <p class="muted">Theme and verbosity toggles (Lamp/E-ink, Instrumented/Narrative/Quiet) are
-      drawn in docs/design/Orison.dc.html but not wired to this shell yet — no
-      settings command exists to persist them.</p>
+      <p class="muted">Verbosity (Instrumented/Narrative/Quiet) is drawn in
+      docs/design/Orison.dc.html but not wired to this shell yet — no
+      settings command exists to persist it.</p>
     </div>
   `,
   );
   attachNav();
+  app.querySelectorAll<HTMLButtonElement>("[data-theme-choice]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyTheme(btn.dataset.themeChoice as ThemeName);
+      renderSettings();
+    });
+  });
 }
 
 render({ name: "campaigns" });
