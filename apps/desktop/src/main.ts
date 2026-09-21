@@ -1157,11 +1157,15 @@ async function showFolders(vault: string) {
 // Settings (docs/design/Orison.dc.html "settings"). The Lamp/E-ink toggle is
 // wired to `document.documentElement.dataset.theme`, which every screen's
 // CSS custom properties key off (styles.css `:root[data-theme="eink"]`) — so
-// flipping it re-themes the whole shell, not just this screen. Session-only:
-// it resets on restart until #35 adds persistence. Verbosity is still a
-// no-op; no command exists to act on it yet.
+// flipping it re-themes the whole shell, not just this screen. Persisted to
+// `shell_settings.json` beside the campaign database (#35): `bootstrap()`
+// loads it before the first screen renders, and picking a theme here saves
+// it back. Verbosity is still a no-op; no command exists to act on it yet.
 
 type ThemeName = "lamplight" | "eink";
+interface ShellSettingsDto {
+  theme: ThemeName;
+}
 let currentTheme: ThemeName = "lamplight";
 
 function applyTheme(theme: ThemeName) {
@@ -1190,7 +1194,7 @@ function renderSettings() {
           </button>
         </div>
         <p class="muted" style="margin-top:16px">E-ink drops every shadow and animation and holds
-        contrast above 10:1. Resets to Lamplight when you restart the app.</p>
+        contrast above 10:1.</p>
       </div>
       <div class="sheet-block">
         <div class="mono meta">WHAT LEAVES THIS MACHINE</div>
@@ -1205,11 +1209,32 @@ function renderSettings() {
   );
   attachNav();
   app.querySelectorAll<HTMLButtonElement>("[data-theme-choice]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      applyTheme(btn.dataset.themeChoice as ThemeName);
+    btn.addEventListener("click", async () => {
+      const theme = btn.dataset.themeChoice as ThemeName;
+      applyTheme(theme);
       renderSettings();
+      try {
+        await invoke("save_settings", { settings: { theme } });
+      } catch (e) {
+        console.error("Failed to save shell settings:", e);
+      }
     });
   });
 }
 
-render({ name: "campaigns" });
+// Loaded before the first screen renders (#35), so the shell opens in
+// whatever theme the player left it in rather than flashing the default.
+// A missing or corrupt shell_settings.json is not an error worth stopping
+// startup for — `get_settings` already falls back to defaults on the Rust
+// side, so this only needs to guard against the IPC call itself failing.
+async function bootstrap() {
+  try {
+    const settings = await invoke<ShellSettingsDto>("get_settings");
+    applyTheme(settings.theme);
+  } catch (e) {
+    console.error("Failed to load shell settings:", e);
+  }
+  render({ name: "campaigns" });
+}
+
+bootstrap();

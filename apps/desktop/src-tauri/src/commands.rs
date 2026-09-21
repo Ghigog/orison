@@ -26,10 +26,26 @@ use crate::dto::{
     CharacterEmotionDto, EdgeDto, EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto,
     ModelHealthDto, ModelsSummaryDto, VaultFolderDto,
 };
+use crate::settings::{self, ShellSettings};
 use crate::state::{lock, AppState};
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
+}
+
+/// The player's saved shell preferences (theme, #35), read once at startup
+/// so the first screen renders in the theme they left in rather than the
+/// default.
+#[tauri::command]
+pub fn get_settings(state: State<AppState>) -> ShellSettings {
+    settings::load(&state.settings_path)
+}
+
+/// Persist a shell preference change (e.g. a theme pick on the Settings
+/// screen) so it survives a restart.
+#[tauri::command]
+pub fn save_settings(state: State<AppState>, settings: ShellSettings) -> Result<(), String> {
+    crate::settings::save(&state.settings_path, &settings)
 }
 
 #[tauri::command]
