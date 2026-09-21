@@ -5,8 +5,10 @@
 
 mod commands;
 mod dto;
+mod settings;
 mod state;
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
@@ -15,25 +17,36 @@ use orison_core::state::CampaignStore;
 
 use state::AppState;
 
-/// Where the campaign database lives on this machine.
-///
-/// `orison_cli::campaign::default_database` falls back to a relative
-/// `orison.sqlite3` for a terminal's working directory, which is right for a
-/// CLI and wrong for a window with no working directory the player chose.
-/// The desktop shell asks Tauri for the OS-appropriate app-data directory
-/// instead — `~/Library/Application Support/orison` on macOS, the Settings
-/// screen's own answer to "what leaves this machine": nothing, and here is
-/// where what stays lives.
-fn database_path(app: &tauri::App) -> Result<std::path::PathBuf, String> {
-    if let Some(path) = std::env::var_os("ORISON_DB") {
-        return Ok(path.into());
-    }
+/// The OS-appropriate app-data directory — `~/Library/Application
+/// Support/orison` on macOS — the Settings screen's own answer to "what
+/// leaves this machine": nothing, and here is where what stays lives.
+/// Shared by `database_path` and `settings_path` below, each of which adds
+/// its own filename.
+fn app_data_dir(app: &tauri::App) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("could not resolve the app data directory: {e}"))?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("orison.db"))
+    Ok(dir)
+}
+
+/// Where the campaign database lives on this machine.
+///
+/// `orison_cli::campaign::default_database` falls back to a relative
+/// `orison.sqlite3` for a terminal's working directory, which is right for a
+/// CLI and wrong for a window with no working directory the player chose.
+fn database_path(app: &tauri::App) -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("ORISON_DB") {
+        return Ok(path.into());
+    }
+    Ok(app_data_dir(app)?.join("orison.db"))
+}
+
+/// Where the player's shell-level preferences (theme, #35) are stored —
+/// beside the database, not inside it (see `settings.rs`).
+fn settings_path(app: &tauri::App) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("shell_settings.json"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -46,10 +59,12 @@ pub fn run() {
             let store: Arc<Mutex<CampaignStore>> = Arc::new(Mutex::new(
                 CampaignStore::open(&db_path).map_err(|e| e.to_string())?,
             ));
-            app.manage(AppState::new(store));
+            app.manage(AppState::new(store, settings_path(app)?));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_settings,
+            commands::save_settings,
             commands::list_campaigns,
             commands::create_campaign,
             commands::import_vault,

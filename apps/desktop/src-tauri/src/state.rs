@@ -8,6 +8,7 @@
 //! open across its lifetime.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use orison_core::state::CampaignStore;
@@ -16,13 +17,19 @@ use orison_core::turn::TurnEngine;
 pub struct AppState {
     pub store: Arc<Mutex<CampaignStore>>,
     pub sessions: Mutex<HashMap<String, Arc<TurnEngine>>>,
+    /// Where `shell_settings.json` lives (#35). Read and written directly
+    /// from disk on each command rather than cached in memory: the file is
+    /// tiny, touched rarely, and a cache would just be one more thing that
+    /// could drift from what the file actually says.
+    pub settings_path: PathBuf,
 }
 
 impl AppState {
-    pub fn new(store: Arc<Mutex<CampaignStore>>) -> Self {
+    pub fn new(store: Arc<Mutex<CampaignStore>>, settings_path: PathBuf) -> Self {
         Self {
             store,
             sessions: Mutex::new(HashMap::new()),
+            settings_path,
         }
     }
 
