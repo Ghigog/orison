@@ -259,6 +259,26 @@ impl TurnEngine {
         Ok(())
     }
 
+    /// A character's current emotional state and rapport, for the character
+    /// screen (#33).
+    ///
+    /// Read-only: unlike [`Self::select_character`] this emits no event and
+    /// queues no baseline deduction, because opening the screen is not an
+    /// emotional event either. A character with no recorded state yet reads
+    /// as [`EmotionState::neutral`] and zero affinity, the same values a
+    /// fresh [`crate::state::CharacterState`] row implies.
+    pub fn character_emotion(&self, entity_id: &str) -> Result<(EmotionState, f64), TurnError> {
+        let campaign_id = self.session.campaign_id().to_string();
+        self.session.with_store(|store| {
+            let state = self.emotion.current(store, &campaign_id, entity_id)?;
+            let affinity = store
+                .character_state(&campaign_id, entity_id)?
+                .map(|s| s.affinity)
+                .unwrap_or(0.0);
+            Ok((state, affinity))
+        })
+    }
+
     /// Where the player is standing, if anywhere.
     ///
     /// A campaign whose vault has no locations never sets one, and that is a

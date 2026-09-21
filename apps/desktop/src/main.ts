@@ -8,8 +8,9 @@
 // argues against the thing it's shipping.
 //
 // Wired to real commands: Campaigns, Import, Models, Play (streamed events
-// plus a turn-outcome instrument strip), and a read-only slice of Character
-// and Map (whatever EntityDto carries). Not wired: rapport/emotion history
+// plus a turn-outcome instrument strip), Character (vault description plus
+// live rapport and current emotion), and a read-only slice of Map (whatever
+// EntityDto carries). Not wired: the per-turn "what she felt, and why" log
 // and knowledge-graph edges — no command exposes them yet, so those sections
 // say so instead of inventing numbers.
 
@@ -36,6 +37,16 @@ interface EntityDto {
   label: string;
   kind: "character" | "location" | "scene" | "lore" | "item" | "note";
   description: string;
+}
+
+interface CharacterEmotionDto {
+  emotion: string;
+  intensity: number;
+  target: string;
+  reason: string;
+  affinity: number;
+  rapportLabel: string;
+  rapportBehaviour: string;
 }
 
 interface IngestReportDto {
@@ -872,11 +883,53 @@ function renderInstrumentStrip(el: HTMLDivElement, outcome: TurnOutcome) {
 }
 
 // ---------------------------------------------------------------------------
-// Character (partial — docs/design/Orison.dc.html "character" also shows
-// rapport and an emotion-event log; no command exposes EmotionEngine state
-// yet, so this section says so rather than inventing numbers.)
+// Character (partial — docs/design/Orison.dc.html "character" also shows a
+// per-turn "what she felt, and why" event log; there is no persisted history
+// of past emotion events yet, only this one live snapshot, so that section
+// says so rather than inventing entries. #33.)
 
-async function renderCharacter(_campaignId: string, entity: EntityDto) {
+async function renderCharacter(campaignId: string, entity: EntityDto) {
+  let emotion: CharacterEmotionDto | null = null;
+  let error = "";
+  try {
+    emotion = await invoke<CharacterEmotionDto>("character_emotion", {
+      campaignId,
+      entityId: entity.id,
+    });
+  } catch (e) {
+    error = String(e);
+  }
+
+  const rapportBlock = error
+    ? `<p class="error mono">${escapeHtml(error)}</p>`
+    : emotion
+      ? `
+      <div class="rapport-head">
+        <span class="rapport-label">${escapeHtml(emotion.rapportLabel)}</span>
+        <span class="mono rapport-score">${emotion.affinity >= 0 ? "+" : ""}${emotion.affinity.toFixed(2)}</span>
+      </div>
+      <div class="rapport-meter">
+        <div class="rapport-meter-mark" style="left:${(((emotion.affinity + 1) / 2) * 100).toFixed(1)}%"></div>
+      </div>
+      <div class="rapport-scale mono">
+        <span>NEMESIS −1</span><span>0</span><span>+1 DEVOTED</span>
+      </div>
+      <p class="rapport-behaviour">${escapeHtml(emotion.rapportBehaviour)}</p>
+    `
+      : "";
+
+  const feelingBlock =
+    !error && emotion
+      ? `
+      <div class="mono meta" style="margin-top:18px">CURRENT FEELING</div>
+      <p class="capitalize">${escapeHtml(emotion.emotion)} (intensity ${emotion.intensity.toFixed(1)}/1.0) toward ${escapeHtml(emotion.target)}${
+        emotion.reason ? ` — ${escapeHtml(emotion.reason)}` : ""
+      }</p>
+      <p class="muted">What she felt on past turns isn't tracked yet — this is the current
+      state only.</p>
+    `
+      : "";
+
   app.innerHTML = shell(
     "play",
     `
@@ -888,9 +941,9 @@ async function renderCharacter(_campaignId: string, entity: EntityDto) {
         <p>${escapeHtml(entity.description) || "<em>No description on file.</em>"}</p>
       </div>
       <div class="sheet-block">
-        <div class="mono meta">RAPPORT, AND WHAT SHE FELT AND WHY</div>
-        <p class="muted">Not wired yet — no command exposes per-character emotion state.
-        See docs/design/Orison.dc.html for the target shape.</p>
+        <div class="mono meta">RAPPORT</div>
+        ${rapportBlock}
+        ${feelingBlock}
       </div>
     </div>
   `,

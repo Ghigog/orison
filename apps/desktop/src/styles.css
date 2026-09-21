@@ -282,6 +282,57 @@ select {
   margin-top: 20px;
 }
 
+.capitalize {
+  text-transform: capitalize;
+}
+
+.rapport-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4px;
+}
+
+.rapport-label {
+  font-size: 18px;
+}
+
+.rapport-score {
+  font-size: 12px;
+  color: var(--lamp);
+}
+
+.rapport-meter {
+  position: relative;
+  height: 1px;
+  background: var(--rule);
+  margin: 18px 0 0;
+}
+
+.rapport-meter-mark {
+  position: absolute;
+  top: -8px;
+  width: 2px;
+  height: 17px;
+  background: var(--lamp-mark);
+  transform: translateX(-1px);
+}
+
+.rapport-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+
+.rapport-behaviour {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  font-style: italic;
+}
+
 .play-header {
   display: flex;
   justify-content: space-between;
