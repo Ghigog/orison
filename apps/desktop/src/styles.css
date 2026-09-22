@@ -391,6 +391,55 @@ button.row {
   margin: 0 0 14px;
 }
 
+/* Transcript virtualisation (migration_plan.md §6.4).
+   
+   The plan assumed a JS list virtualiser here, replacing
+   VirtualScrollContainer.gd. Measured, that is the wrong buy — see
+   bench/transcript-streaming.mjs and docs/handoff_phase6.md.
+   
+   The cost that matters is not first paint, it is streaming: every
+   StreamDelta appends text and then sets `scrollTop = scrollHeight`, which
+   reads geometry and so forces a synchronous layout of the whole scroll
+   container. At 20-40 tok/s over a 15-second turn that is hundreds of
+   full-transcript layouts, and the cost grows with transcript length.
+   
+   Per streamed delta, Chromium, median of 3:
+   
+     rows   plain DOM   windowed (ceiling)   this rule
+       40     0.52 ms              0.26 ms     0.008 ms
+      200     0.31 ms              0.48 ms     0.006 ms
+     1000     0.86 ms              0.14 ms     0.005 ms
+     5000     6.36 ms              0.16 ms     0.021 ms
+   
+   Containment beats an idealised windowed list at every size, because
+   windowing still lays out its container on each delta while this lets the
+   browser skip offscreen rows outright. It also keeps the append-only DOM
+   that StreamDelta and the provisional-row replacement depend on, which a
+   virtualiser would have required rewriting. Rows stay in the DOM, so
+   find-in-page and the accessibility tree still reach them (#38).
+   
+   Where it is unsupported — WebKitGTK under 2.46, macOS under Safari 18 —
+   the property is ignored and the transcript behaves exactly as it did
+   before, which the "plain DOM" column shows is fine at any realistic
+   length. `auto` in contain-intrinsic-size means a row that has been
+   rendered once keeps its real measured height, so the estimate below only
+   ever applies to rows nobody has scrolled to yet. */
+.transcript p,
+.transcript .md,
+.transcript .interrupted {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+
+/* The row currently being streamed into is at the bottom and on screen, and
+   it changes on every delta. Exempting it keeps the browser from
+   re-evaluating its containment hundreds of times per turn for a row that is
+   visible throughout. */
+.transcript p.streaming,
+.transcript p.thinking {
+  content-visibility: visible;
+}
+
 /* Markdown rows (issue #15, markdown.ts). A narration line with structure
    in it renders as a <div class="md"> instead of a <p>, because a list or a
    table cannot live inside one; it carries the same rhythm as the <p> it
