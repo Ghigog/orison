@@ -216,8 +216,8 @@ func _get_emotion_emoji(emotion: String) -> String:
 		_: return ""
 
 func spawn_floating_text(text_content: String) -> void:
-	var emoji_scene = preload("res://scenes/ui/FloatingEmoji.tscn")
-	var emoji_instance = emoji_scene.instantiate()
+	var EmojiScene = preload("res://scenes/ui/FloatingEmoji.tscn")
+	var emoji_instance = EmojiScene.instantiate()
 	add_child(emoji_instance)
 	emoji_instance.setup(text_content, emoji_spawn_point.position)
 

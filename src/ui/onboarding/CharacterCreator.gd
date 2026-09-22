@@ -320,8 +320,8 @@ func _set_wand_status(message: String, is_error: bool) -> void:
 	if is_error:
 		pc_wand_status_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 	else:
-		var _muted_c = ThemeManager.color_text; _muted_c.a = 0.65
-		pc_wand_status_label.add_theme_color_override("font_color", _muted_c)
+		var muted_c = ThemeManager.color_text; muted_c.a = 0.65
+		pc_wand_status_label.add_theme_color_override("font_color", muted_c)
 
 func set_compilation_progress(text: String, is_completed: bool, warmup_success: bool) -> void:
 	pc_bg_progress_label.visible = true

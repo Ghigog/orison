@@ -54,14 +54,13 @@ static func from_dict(char_id: String, d: Dictionary) -> CharacterProfile:
 static func get_relationship_label(affinity_score: float) -> String:
 	if affinity_score <= -0.6:
 		return "Nemesis"
-	elif affinity_score <= -0.2:
+	if affinity_score <= -0.2:
 		return "Enemy"
-	elif affinity_score <= 0.19:
+	if affinity_score <= 0.19:
 		return "Acquaintance"
-	elif affinity_score <= 0.59:
+	if affinity_score <= 0.59:
 		return "Friend"
-	else:
-		return "Best Friend"
+	return "Best Friend"
 
 # Returns the relationship label dynamically based on active affinity
 func get_relationship_label_dynamic() -> String:

@@ -50,17 +50,16 @@ func set_message(msg: Dictionary, is_light: bool) -> void:
 func _get_adjusted_sender_color(sender: String, is_light: bool) -> String:
 	if sender == "user" or sender == "player":
 		return "#EA580C" if is_light else "#FF5F38"
-	elif sender == "system":
+	if sender == "system":
 		return "#4B5563" if is_light else "#A59EBF"
-	elif sender == "narrator":
+	if sender == "narrator":
 		return "#4A3F35" if is_light else "#FFF8F2"
-	else:
-		var character = CampaignState.get_character(sender)
-		if not character.is_empty():
-			var emotions = character.get("emotions", [])
-			var last_emotion = emotions[-1].get("emotion", "serenity") if not emotions.is_empty() else "serenity"
-			return _get_emotion_hex_color(last_emotion, is_light)
-		return "#BE123C" if is_light else "#F43F5E"
+	var character = CampaignState.get_character(sender)
+	if not character.is_empty():
+		var emotions = character.get("emotions", [])
+		var last_emotion = emotions[-1].get("emotion", "serenity") if not emotions.is_empty() else "serenity"
+		return _get_emotion_hex_color(last_emotion, is_light)
+	return "#BE123C" if is_light else "#F43F5E"
 
 func _get_emotion_hex_color(emotion: String, is_light: bool) -> String:
 	match emotion.to_lower():

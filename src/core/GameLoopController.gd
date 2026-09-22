@@ -394,7 +394,7 @@ func load_existing_campaign(campaign_id: String) -> void:
 	campaign_loaded.emit(campaign_id)
 	input_disabled_changed.emit(false)
 
-func _on_beginning_generation_completed(success: bool, response_text: String, error_msg: String) -> void:
+func _on_beginning_generation_completed(success: bool, response_text: String, _error_msg: String) -> void:
 	_is_generating_beginning = false
 	_current_turn_state = TurnState.IDLE
 	turn_state_changed.emit(_current_turn_state)

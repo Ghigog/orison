@@ -637,7 +637,7 @@ func _generate_next_narration() -> void:
 	print("[OnboardingFlow] Requesting Pass 2 narration for hook %d/3 from model '%s' (prompt: %d chars)..." % [_current_hook_idx + 1, active_model, prompt.length()])
 	LLMClient.send_custom_stream_request(prompt, active_model, on_chunk, on_completed, on_failed, 300.0, true)
 
-func _handle_narration_failure(error_msg: String) -> void:
+func _handle_narration_failure(_error_msg: String) -> void:
 	var fallbacks = _generate_fallback_starters(_selected_clusters)
 	if _current_hook_idx < fallbacks.size():
 		_generated_starters.append(fallbacks[_current_hook_idx])
