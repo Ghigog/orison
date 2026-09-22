@@ -119,7 +119,7 @@ The second is the right default. The first is only right if somebody has
 measured that the dense half improves play, and [testing_backlog.md](testing_backlog.md)
 records no such measurement.
 
-### 3. `LlamaCppBackend` has never run against real weights
+### 3. `LlamaCppBackend` has never run against real weights — and D-3 now depends on it
 
 `crates/orison-core/src/inference/llamacpp.rs` says so in its own header. It
 compiles under `--features llama-cpp` and its conformance cases are gated
@@ -128,13 +128,22 @@ file and no way to fetch one. CI does not build it: the `rust` job's comment
 explains that `llama-cpp-2` builds llama.cpp from source via cmake and a C++
 toolchain.
 
-This matters because [D-3](migration_plan.md#appendix-d--decisions-and-open-questions)
-says the in-process backend is *"likely the eventual default once model
-acquisition is guided"* — and Phase 7 **is** guided model acquisition. The
-decision D-3 deferred has arrived, and the backend it points at is the one
-piece of the engine that has never been executed.
+This matters more than it did when this section was drafted. **D-3 is now
+decided**: the direction is in-process `llama.cpp`, and Phase 7's acquisition
+flow targets GGUF files rather than `ollama pull`. That decision is the right
+one on every axis except evidence — it removes the separate Ollama install,
+removes the "is the server running?" failure class, delivers a tokenizer with
+the weights (finding 1), and is the only path that serves Phase 8.
 
-### 4. The updater contradicts §2.3, and the plan lists both
+It also rests entirely on code nobody has run.
+
+**So this is the first task of the phase, ahead of any screen**: one real GGUF,
+one machine, one afternoon. If it works, the acquisition flow is designed
+around it with confidence. If it does not, D-3 reverts to Ollama, finding 1
+needs a different answer, and that was discovered for the cost of an afternoon
+rather than a phase. Do not design the flow before running the backend.
+
+### 4. The updater contradicted §2.3 — resolved: there will be no updater
 
 §2.3 puts permanently out of scope: *"Any telemetry or network egress beyond
 the user's own configured local endpoints."* Phase 7 lists *"Tauri's built-in
@@ -147,18 +156,20 @@ binary that silently contacts a release server on launch breaks the sentence
 the README sells the product on, and the Settings screen currently answers
 "WHAT LEAVES THIS MACHINE" with the single word **Nothing.**
 
-This is not a reason to drop the updater. It is a reason to decide it in the
-open and write the decision down. Three defensible answers:
+**Decided: no updater.** Releases are downloads. The pillar wins over the
+feature, rather than the pillar being amended to accommodate it.
 
-| Option | What it costs |
-|---|---|
-| No updater; releases are downloads | Users run stale builds indefinitely. Honest, and the least work. |
-| Updater, **opt-in**, off by default, no identifiers, shown in Settings | A checkbox, an honest Settings line, and §2.3 amended to name the exception. |
-| Updater on by default | Contradicts the pillar. Only viable if the pillar is rewritten, which is a product decision, not a packaging one. |
+The cost is real and is accepted rather than argued away: **users run whatever
+build they installed until they choose to fetch another**, and there is no
+mechanism to reach someone running a version with a bug in it. For a
+local-first tool with no account, no server and no telemetry, that is the
+consistent position — there is no channel to reach them by, and inventing one
+is the thing §2.3 exists to prevent.
 
-Whichever is chosen, `migration_plan.md` §2.3 and the Settings screen's
-"Nothing." must end up agreeing with the binary. Today they agree with each
-other and Phase 7 is scheduled to break that.
+What this buys: §2.3 needs no exception clause, the Settings screen's
+"Nothing." stays literally true, and nobody has to explain why the privacy
+pillar has a footnote. Do not add `tauri-plugin-updater`; its signing keypair
+and manifest endpoint are work that no longer has a reason.
 
 ---
 
@@ -211,20 +222,25 @@ since a phone cannot spawn a sidecar.
 It also rests on a backend that has never executed (finding 3), and requires
 cmake and a C++ toolchain in the release build.
 
-**The recommendation**: Path B is where this is going, and D-3 already says so
-— but the first task is not the download UI. It is **running
-`LlamaCppBackend` against a real GGUF on a real machine and seeing whether it
-works.** That is an afternoon, it is the cheapest possible test of the
-assumption the whole path rests on, and if it fails, Phase 7 is Path A and
-the tokenizer problem needs a different answer. Do not design the flow before
-running the backend.
+**Decided: Path B**, with the verification gate from finding 3. The first task
+is not the download UI. It is **running `LlamaCppBackend` against a real GGUF
+on a real machine and seeing whether it works** — an afternoon, and the
+cheapest possible test of the assumption the whole path rests on. If it fails,
+Phase 7 is Path A and the tokenizer problem needs a different answer.
 
-### 7.3 The updater
+Ollama is not being removed. `InferenceBackend` is a trait and both
+implementations stay; what changes is which one a new user gets without
+choosing. Somebody who already runs Ollama should keep being able to point
+Orison at it, and the Models screen already does exactly that
+([#29](https://github.com/Ghigog/orison/issues/29)).
 
-See finding 4. **Decide the §2.3 question first**, then build whatever the
-decision permits. `tauri-plugin-updater` needs a signing keypair and a static
-manifest endpoint; neither is hard, and both are wasted work if the answer
-turns out to be "no updater".
+### 7.3 The updater — resolved to nothing
+
+See finding 4. **There will be no updater**, so there is nothing to build here.
+`tauri-plugin-updater`, its signing keypair and its manifest endpoint are all
+off the list. What remains is a documentation task: the release page has to be
+somewhere a user can find it again, because it is the only way they will ever
+get a newer build.
 
 ### 7.4 Godot-era saves — resolve D-6
 
@@ -233,11 +249,15 @@ since it was written, with a note to decide it before Phase 3.1. Phase 3.1
 shipped. The plan permits an explicit "they do not carry", and §2.1 requires
 one or the other.
 
-This is a one-question decision and it belongs to whoever has the saves: **do
-any Godot-era saves exist that somebody wants to keep?** If the honest answer
-is no — and for a pre-release project with one maintainer it very likely is —
-write that into D-6 and close it. A one-shot JSON-to-SQLite importer is cheap
-but not free, and an importer nobody runs is worse than a sentence.
+**Decided: they do not carry.** No Godot-era saves exist that are worth
+keeping, so the importer is not being written and nothing is owed. A Godot-era
+save is not migrated, not detected and not warned about; the Rust build simply
+does not read them.
+
+**There is no work in this item.** It is listed only so the next person does
+not go looking for a migration path that was deliberately not built. If
+somebody later finds a save they want, the Godot build is still under feature
+freeze and can read it, and the importer remains cheap to write then.
 
 ---
 
@@ -261,17 +281,20 @@ become the reason it happens by accident.
 ## Before Phase 7 starts
 
 **Phase 6 is not closed**, and its exit criteria are in
-[migration_plan.md](migration_plan.md). Four things remain:
+[migration_plan.md](migration_plan.md). Three things remain:
 
 1. The first-run path (`WelcomeScreen`, `SetupWizard`) — there is none.
 2. The character creator — never ported.
-3. [D-7](migration_plan.md#appendix-d--decisions-and-open-questions), image
-   generation — a decision, not work.
-4. `design_philosophy.md` rewritten to the round 2 palette it never caught up
+3. `design_philosophy.md` rewritten to the round 2 palette it never caught up
    with.
 
 Then the playtest that [#30](https://github.com/Ghigog/orison/issues/30)
 deferred.
+
+[D-7](migration_plan.md#appendix-d--decisions-and-open-questions) was the
+fourth and is now decided: image generation is not ported, so
+`AssetStatusOverlay`, `DrawThingsTutorial` and `ImageGenSettingsPanel` stop
+being parity gaps and nothing is owed for them.
 
 **Item 1 is not merely a Phase 6 leftover — it is Phase 7's main screen.**
 "First-run path" and "guided model acquisition" are the same surface described
@@ -300,9 +323,14 @@ phases use — each one either verifiable or explicitly amended:
 - [ ] Token counting is exact in the shipped application, or the approximation
       is a recorded decision with its consequences for B-1 written down.
 - [ ] The setup checklist asks for no model the engine does not use.
-- [ ] D-6 resolved; D-3 resolved; D-7 resolved.
-- [ ] §2.3, the Settings screen, and the shipped binary agree about what leaves
-      the machine.
+- [x] **D-3, D-6, D-7 and the updater resolved.** In-process `llama.cpp` gated
+      on running it once; saves do not carry; image generation is not ported;
+      no updater. D-3 is the only one with work attached, and that work is the
+      verification gate, not the decision. D-8 was closed at the same time on
+      Phase 3.4's measured null result.
+- [x] **§2.3, the Settings screen, and the shipped binary agree about what
+      leaves the machine** — by dropping the updater rather than amending the
+      pillar. Re-check this if anything ever proposes a network call again.
 - [ ] The judge baseline is captured, or the Godot build is still present and
       runnable.
 

@@ -229,15 +229,20 @@ Phase 6 exit criteria:
 2. **The character creator.** `OnboardingFlow.gd`'s adventure-starter half
    was ported; the player-character half — avatar, description, the
    vision-model magic wand — was not, and the core has no equivalent.
-3. **Decide [D-7](migration_plan.md#appendix-d--decisions-and-open-questions)**
-   (image generation). Three Godot screens hang on it, and they can be called
-   neither missing nor dropped while it is Open.
+3. ~~**Decide [D-7](migration_plan.md#appendix-d--decisions-and-open-questions)**
+   (image generation).~~ **Done: not ported.** The Draw Things / A1111 contract
+   stays in the Godot build and `orison-core` gets no `media/` module, so
+   `AssetStatusOverlay`, `DrawThingsTutorial` and `ImageGenSettingsPanel` stop
+   being parity gaps. Nothing to build.
 4. **Rewrite [design_philosophy.md](../design_philosophy.md) to round 2.** It
    still specifies the round 1 dark presets and the Lora/Outfit type stack;
    the shell ships Lamplight/E-ink with Spectral and IBM Plex Mono. Until it
    is rewritten, "the design token set" names two different things depending
    on which file you open.
 5. **Then playtest**, and let that decide whether Phase 6 is done.
+
+Items 1 and 2 are the only building left, and item 1 is also Phase 7's main
+screen — see [handoff_phase7.md](handoff_phase7.md). Build them together.
 
 ---
 
