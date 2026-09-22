@@ -10,13 +10,15 @@ signal delete_requested(campaign_id: String)
 
 var campaign_id: String = ""
 
+
 func _ready() -> void:
 	select_button.pressed.connect(func(): selected.emit(campaign_id))
 	delete_button.pressed.connect(func(): delete_requested.emit(campaign_id))
 
+
 func setup(save) -> void:
 	campaign_id = save.id
-	
+
 	# Thumbnail preview
 	var base64_thumb = save.get("thumbnail", "")
 	if base64_thumb and not base64_thumb.is_empty():
@@ -28,13 +30,13 @@ func setup(save) -> void:
 			thumbnail.visible = false
 	else:
 		thumbnail.visible = false
-		
+
 	var playtime_str = _format_playtime(save.get("playtime_seconds", 0.0))
-	select_button.text = "%s\nLast Played: %s | Playtime: %s" % [
-		save.get("title", campaign_id),
-		save.get("last_played", "Unknown Date"),
-		playtime_str
-	]
+	select_button.text = (
+		"%s\nLast Played: %s | Playtime: %s"
+		% [save.get("title", campaign_id), save.get("last_played", "Unknown Date"), playtime_str]
+	)
+
 
 func _get_texture_from_base64(base64_str: String) -> Texture2D:
 	if base64_str.is_empty():
@@ -47,6 +49,7 @@ func _get_texture_from_base64(base64_str: String) -> Texture2D:
 	if err == OK:
 		return ImageTexture.create_from_image(img)
 	return null
+
 
 func _format_playtime(seconds: float) -> String:
 	var total_seconds = int(seconds)

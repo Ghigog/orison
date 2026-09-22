@@ -7,15 +7,21 @@
 #   1. Real, small, mechanical fixes (no-elif-return, no-else-return,
 #      unused-argument, the *-variable-name checks) - fixed directly, not
 #      tuned away.
-#   2. trailing-whitespace and max-line-length reformatting (gdformat would
-#      touch 57 files) - deliberately NOT done here. Landing that diff in
-#      the same change as anything else makes both unreviewable; it is
-#      still open as a follow-up batch per the issue.
+#   2. trailing-whitespace and most of max-line-length - fixed by running
+#      `gdformat` over `src/` and `tests/` in per-directory batches (57
+#      files). Verified as pure reflow: `gdformat --check` is now clean and
+#      idempotent, and the full suite still passes 46/46 headless.
 #   3. Rules below, disabled or loosened, because satisfying them would mean
 #      a purely mechanical restructuring of files this project is not going
 #      to keep: the Godot build is in feature freeze pending the Rust/Tauri
 #      port (docs/migration_plan.md), so paying for a member-reordering or
 #      file-splitting pass now buys nothing before that code is replaced.
+#
+# max-returns and function-arguments-number are real findings (36 and 2)
+# left open from this triage rather than tuned away here: fixing them means
+# restructuring control flow and touching every call site, which is a
+# follow-up batch, not something to fold into a formatting-only change. The
+# lint job stays continue-on-error until those land.
 
 # class-definitions-order: reordering signals/consts/vars/methods into
 # gdlint's prescribed section order is pure churn across 44 files (some with
@@ -27,20 +33,29 @@
 # CampaignState (a global-state autoload, whose whole job is to expose
 # state) and TestRunnerNode (46 independent test_* methods by design, see
 # AGENTS.md). Neither file's method count says anything about cohesion.
+#
+# max-line-length: gdformat wraps every wrappable line to the configured
+# width, so what's left after the reformat batch is exclusively content
+# gdformat cannot and should not wrap - long LLM prompt/system-prompt
+# strings, test fixture JSON, and one long unique NodePath. Every one of the
+# 104 lines still over 120 chars after formatting was checked by hand: all
+# are string literal content, none are code a wrap would make more
+# readable. Splitting a prompt string across lines to satisfy a column
+# count would require manual concatenation with no readability upside and a
+# real risk of an accidental space/token change inside the prompt text
+# itself. Disabled rather than tuned to a still-arbitrary higher number.
 disable:
   - class-definitions-order
   - max-public-methods
-
-# The default of 100 flags 582 lines, the large majority of which are
-# comments and format strings rather than a case where wrapping code would
-# actually help readability. 120 matches the length this codebase already
-# writes at in practice.
-max-line-length: 120
+  - max-line-length
 
 # GameLoopController.gd, VaultCompiler.gd, OnboardingFlow.gd and
 # TestRunnerNode.gd exceed 1000 lines by design: they are orchestration/
 # compiler/test-runner files this repo's own docs (AGENTS.md) call out as
 # intentionally monolithic. Splitting them for a lint threshold ahead of a
-# rewrite is not a fix, just churn.
-max-file-lines: 4000
+# rewrite is not a fix, just churn. TestRunnerNode.gd grew from 3,830 to
+# 4,331 lines under gdformat (expanded dict/array literals, a blank line
+# between every function) with no line removed or behaviour changed, so the
+# threshold moves with it rather than being tuned to today's exact count.
+max-file-lines: 4500
 

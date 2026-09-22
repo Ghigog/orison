@@ -2,6 +2,7 @@
 extends RefCounted
 class_name MarkdownParser
 
+
 ## Parses a Markdown file, splitting YAML frontmatter from the body content
 static func parse_file(path: String) -> Dictionary:
 	var file = FileAccess.open(path, FileAccess.READ)
@@ -15,21 +16,21 @@ static func parse_file(path: String) -> Dictionary:
 			"callouts": [],
 			"tables": []
 		}
-		
+
 	var lines: Array[String] = []
 	while not file.eof_reached():
 		lines.append(file.get_line())
 	file.close()
-	
+
 	var frontmatter_lines: Array[String] = []
 	var body_lines: Array[String] = []
 	var in_frontmatter = false
 	var frontmatter_count = 0
-	
+
 	for i in range(lines.size()):
 		var line = lines[i]
 		var trimmed = line.strip_edges()
-		
+
 		if trimmed == "---":
 			frontmatter_count += 1
 			if frontmatter_count == 1:
@@ -38,7 +39,7 @@ static func parse_file(path: String) -> Dictionary:
 			elif frontmatter_count == 2:
 				in_frontmatter = false
 				continue
-				
+
 		if in_frontmatter:
 			frontmatter_lines.append(line)
 		else:
@@ -46,15 +47,15 @@ static func parse_file(path: String) -> Dictionary:
 			if body_lines.is_empty() and trimmed == "":
 				continue
 			body_lines.append(line)
-			
+
 	var frontmatter = _parse_yaml(frontmatter_lines)
 	var body = "\n".join(body_lines)
-	
+
 	var wiki_links = _extract_wiki_links(body)
 	var hashtags = _extract_hashtags(body)
 	var callouts = _extract_callouts(body_lines)
 	var tables = _extract_tables(body_lines)
-	
+
 	return {
 		"frontmatter": frontmatter,
 		"body": body,
@@ -64,17 +65,18 @@ static func parse_file(path: String) -> Dictionary:
 		"tables": tables
 	}
 
+
 ## Extremely simple YAML parser to parse frontmatter key-values
 static func _parse_yaml(lines: Array[String]) -> Dictionary:
 	var data = {}
 	var current_list_key = ""
-	
+
 	for line in lines:
 		# Skip comments
 		var trimmed = line.strip_edges()
 		if trimmed.begins_with("#") or trimmed.is_empty():
 			continue
-			
+
 		# Check for list item
 		if trimmed.begins_with("-") and not current_list_key.is_empty():
 			var val = trimmed.substr(1).strip_edges()
@@ -82,20 +84,20 @@ static func _parse_yaml(lines: Array[String]) -> Dictionary:
 			if data.has(current_list_key) and data[current_list_key] is Array:
 				data[current_list_key].append(val)
 			continue
-			
+
 		var colon_pos = line.find(":")
 		if colon_pos != -1:
 			var key = line.substr(0, colon_pos).strip_edges()
 			var val = line.substr(colon_pos + 1).strip_edges()
-			
+
 			# If value is empty, it might be the start of a multiline list
 			if val.is_empty():
 				current_list_key = key
 				data[key] = []
 				continue
-				
-			current_list_key = "" # reset list context
-			
+
+			current_list_key = ""  # reset list context
+
 			# Check for inline list brackets e.g. [a, b, c]
 			if val.begins_with("[") and val.ends_with("]"):
 				var items = val.substr(1, val.length() - 2).split(",")
@@ -107,13 +109,15 @@ static func _parse_yaml(lines: Array[String]) -> Dictionary:
 				# Normal value
 				val = _strip_quotes(val)
 				data[key] = _cast_value(val)
-				
+
 	return data
 
+
 static func _strip_quotes(s: String) -> String:
-	if (s.begins_with("\"") and s.ends_with("\"")) or (s.begins_with("'") and s.ends_with("'")):
+	if (s.begins_with('"') and s.ends_with('"')) or (s.begins_with("'") and s.ends_with("'")):
 		return s.substr(1, s.length() - 2)
 	return s
+
 
 static func _cast_value(s: String) -> Variant:
 	if s.to_lower() == "true":
@@ -125,6 +129,7 @@ static func _cast_value(s: String) -> Variant:
 	if s.is_valid_float():
 		return s.to_float()
 	return s
+
 
 ## Extracts wiki-links of the form [[Target Entity]] or [[Target Entity|Display Label]]
 static func _extract_wiki_links(body: String) -> Array[Dictionary]:
@@ -143,12 +148,10 @@ static func _extract_wiki_links(body: String) -> Array[Dictionary]:
 			target = parts[0].strip_edges()
 			if parts.size() > 1:
 				label = parts[1].strip_edges()
-		
-		wiki_links.append({
-			"target": target,
-			"label": label
-		})
+
+		wiki_links.append({"target": target, "label": label})
 	return wiki_links
+
 
 ## Extracts hashtags of the form #tag/subtag, ignoring hex colors and headings
 static func _extract_hashtags(body: String) -> Array[String]:
@@ -168,15 +171,16 @@ static func _extract_hashtags(body: String) -> Array[String]:
 			hashtags.append(tag)
 	return hashtags
 
+
 ## Extracts callout blocks of the form > [!info] or > [!secret]
 static func _extract_callouts(lines: Array[String]) -> Array[Dictionary]:
 	var callouts: Array[Dictionary] = []
 	var in_callout = false
 	var current_callout = {}
-	
+
 	var callout_header_regex = RegEx.new()
 	callout_header_regex.compile("^>\\s*\\[!([a-zA-Z0-9_\\-]+)\\](.*)")
-	
+
 	for line in lines:
 		var trimmed = line.strip_edges()
 		var match_header = callout_header_regex.search(trimmed)
@@ -186,11 +190,7 @@ static func _extract_callouts(lines: Array[String]) -> Array[Dictionary]:
 			var type = match_header.get_string(1).to_lower()
 			var title = match_header.get_string(2).strip_edges()
 			in_callout = true
-			current_callout = {
-				"type": type,
-				"title": title,
-				"content": ""
-			}
+			current_callout = {"type": type, "title": title, "content": ""}
 		elif in_callout and trimmed.begins_with(">"):
 			var content_line = trimmed.substr(1).strip_edges()
 			if current_callout["content"].is_empty():
@@ -201,19 +201,20 @@ static func _extract_callouts(lines: Array[String]) -> Array[Dictionary]:
 			callouts.append(current_callout)
 			in_callout = false
 			current_callout = {}
-			
+
 	if in_callout:
 		callouts.append(current_callout)
-		
+
 	return callouts
+
 
 ## Extracts Markdown tables from the document lines
 static func _extract_tables(lines: Array[String]) -> Array[Dictionary]:
 	var tables: Array[Dictionary] = []
 	var current_table = null
-	var table_state = 0 # 0: outside, 1: found header, 2: parsing data rows
+	var table_state = 0  # 0: outside, 1: found header, 2: parsing data rows
 	var potential_headers: Array[String] = []
-	
+
 	for line in lines:
 		var trimmed = line.strip_edges()
 		if trimmed.begins_with("|") and trimmed.ends_with("|"):
@@ -236,10 +237,7 @@ static func _extract_tables(lines: Array[String]) -> Array[Dictionary]:
 						is_separator = false
 						break
 				if is_separator:
-					current_table = {
-						"headers": potential_headers,
-						"rows": []
-					}
+					current_table = {"headers": potential_headers, "rows": []}
 					table_state = 2
 				else:
 					potential_headers = cells
@@ -252,11 +250,12 @@ static func _extract_tables(lines: Array[String]) -> Array[Dictionary]:
 			table_state = 0
 			current_table = null
 			potential_headers = []
-			
+
 	if table_state == 2 and current_table != null:
 		tables.append(current_table)
-		
+
 	return tables
+
 
 static func _parse_table_row(row: String) -> Array[String]:
 	var content = row.strip_edges()

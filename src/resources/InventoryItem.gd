@@ -6,12 +6,10 @@ class_name InventoryItem
 @export var quantity: int = 1
 @export var properties: Dictionary = {}
 
+
 func to_dict() -> Dictionary:
-	return {
-		"item": item_name,
-		"quantity": quantity,
-		"properties": properties
-	}
+	return {"item": item_name, "quantity": quantity, "properties": properties}
+
 
 static func from_dict(d: Dictionary) -> InventoryItem:
 	var instance = InventoryItem.new()

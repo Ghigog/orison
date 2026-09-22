@@ -9,6 +9,7 @@ class_name EmotionEvent
 @export var context: String = ""
 @export var rapport_delta: float = 0.0
 
+
 func to_dict() -> Dictionary:
 	return {
 		"timestamp": timestamp,
@@ -18,6 +19,7 @@ func to_dict() -> Dictionary:
 		"context": context,
 		"rapport_delta": rapport_delta
 	}
+
 
 static func from_dict(d: Dictionary) -> EmotionEvent:
 	var instance = EmotionEvent.new()
