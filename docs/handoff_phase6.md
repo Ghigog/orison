@@ -132,8 +132,8 @@ Full scope is in [migration_plan.md](migration_plan.md) Phase 6. In short:
 Tauri 2, a typed command layer over `orison-core`, streaming deltas over
 Tauri's event channel, and a port of the existing information architecture —
 onboarding and vault import, model configuration with connection checking,
-campaign list, gameplay viewport, character detail, mind map, settings. The 25
-existing `.tscn` scenes are an accurate inventory of what must exist.
+campaign list, gameplay viewport, character detail, mind map, settings. The 24
+`.tscn` scenes under `scenes/` are an accurate inventory of what must exist.
 
 [design_philosophy.md](../design_philosophy.md) already specifies colour
 tokens, typography, spacing, radii, shadows and motion timing.
@@ -163,6 +163,81 @@ ever implemented in Godot. In CSS the rest is nearly free.
 3. **Play the CLI.** Ten minutes, `docs/first_run.md`. Everything above is a
    number until you have waited fifteen seconds for Bram Holt to tell you the
    toll.
+
+---
+
+## Where Phase 6 actually got to
+
+Everything above this heading was written before the first screen existed. It
+still describes the brief correctly; this section says what came of it.
+
+**Built and wired to real commands** — eight screens: Campaigns, Models
+(with live reachability), Starters, Play, Character, Map, Import, Settings.
+All ten follow-up tickets filed after the scaffold ([#29-#38](https://github.com/Ghigog/orison/issues/29))
+are merged, plus adventure-starter generation ported to the core
+([#41](https://github.com/Ghigog/orison/issues/41)).
+
+**The three §6.4 components**, with one correction to the plan:
+
+- **Markdown in chat** — bought (`marked` + `DOMPurify`). Streaming stays
+  plain, because half-arrived markdown is broken markdown; links and images
+  never become elements, because §2.3 makes no-egress a pillar and this
+  renderer sees model output that has passed through a vault.
+- **The mind map** — bought (Cytoscape.js), lazily imported, with the node
+  and edge lists kept beside the canvas as the keyboard path.
+- **Chat virtualisation** — *not* bought. Measured against an idealised
+  windowed list and lost to one CSS rule at every transcript size; see
+  `migration_plan.md` §6.4 for the table and
+  `apps/desktop/bench/transcript-streaming.mjs` to re-run it.
+  `VirtualScrollContainer.gd` existed because Godot `Control` nodes are
+  expensive to hold in quantity. Paragraphs are not. The port inherited the
+  constraint along with the component.
+
+**The three things this document said to do before the first screen**: B-15
+was already done and the register was stale (recorded above); vault import
+*was* designed around the 48% problem — `scan_vault_folders` shows every
+folder with its note count and the ingest layer's own guess, preselected, so
+the player corrects rather than re-runs ([#36](https://github.com/Ghigog/orison/issues/36));
+the CLI playthrough is the one that did not happen, and that matters more
+than it looks.
+
+### The thing to know before doing anything else
+
+**Nobody has ever run this application.** Every screen has been verified by
+`cargo clippy`, `cargo test`, `tsc`, `vitest` and `vite build`, in an
+environment with no display and no Ollama.
+[#30](https://github.com/Ghigog/orison/issues/30) existed to fix that and was
+closed without a playthrough, on the reasoning that a playtest before parity
+would rediscover known gaps rather than surface new ones. That is a
+defensible sequencing call. It is also why no Phase 6 exit criterion has been
+confirmed by use — including "keyboard-navigable throughout", which is
+currently an argument from how the markup was written, not an observation of
+anyone navigating it.
+
+So the advice at the top of this document — *do not open Figma before playing
+the CLI for ten minutes* — has a successor, and it is the same advice:
+**do not call Phase 6 done before playing the shell.**
+
+### What remains
+
+In the order it should be done, and the reasoning is in `migration_plan.md`'s
+Phase 6 exit criteria:
+
+1. **The first-run path** (`WelcomeScreen`, `SetupWizard`). The shell opens
+   on an empty campaign list, which assumes somebody who already knows what
+   Orison is. Small, and it is the first thing a new player meets.
+2. **The character creator.** `OnboardingFlow.gd`'s adventure-starter half
+   was ported; the player-character half — avatar, description, the
+   vision-model magic wand — was not, and the core has no equivalent.
+3. **Decide [D-7](migration_plan.md#appendix-d--decisions-and-open-questions)**
+   (image generation). Three Godot screens hang on it, and they can be called
+   neither missing nor dropped while it is Open.
+4. **Rewrite [design_philosophy.md](../design_philosophy.md) to round 2.** It
+   still specifies the round 1 dark presets and the Lora/Outfit type stack;
+   the shell ships Lamplight/E-ink with Spectral and IBM Plex Mono. Until it
+   is rewritten, "the design token set" names two different things depending
+   on which file you open.
+5. **Then playtest**, and let that decide whether Phase 6 is done.
 
 ---
 

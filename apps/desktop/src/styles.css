@@ -391,6 +391,152 @@ button.row {
   margin: 0 0 14px;
 }
 
+/* Transcript virtualisation (migration_plan.md §6.4).
+   
+   The plan assumed a JS list virtualiser here, replacing
+   VirtualScrollContainer.gd. Measured, that is the wrong buy — see
+   bench/transcript-streaming.mjs and docs/handoff_phase6.md.
+   
+   The cost that matters is not first paint, it is streaming: every
+   StreamDelta appends text and then sets `scrollTop = scrollHeight`, which
+   reads geometry and so forces a synchronous layout of the whole scroll
+   container. At 20-40 tok/s over a 15-second turn that is hundreds of
+   full-transcript layouts, and the cost grows with transcript length.
+   
+   Per streamed delta, Chromium, median of 3:
+   
+     rows   plain DOM   windowed (ceiling)   this rule
+       40     0.52 ms              0.26 ms     0.008 ms
+      200     0.31 ms              0.48 ms     0.006 ms
+     1000     0.86 ms              0.14 ms     0.005 ms
+     5000     6.36 ms              0.16 ms     0.021 ms
+   
+   Containment beats an idealised windowed list at every size, because
+   windowing still lays out its container on each delta while this lets the
+   browser skip offscreen rows outright. It also keeps the append-only DOM
+   that StreamDelta and the provisional-row replacement depend on, which a
+   virtualiser would have required rewriting. Rows stay in the DOM, so
+   find-in-page and the accessibility tree still reach them (#38).
+   
+   Where it is unsupported — WebKitGTK under 2.46, macOS under Safari 18 —
+   the property is ignored and the transcript behaves exactly as it did
+   before, which the "plain DOM" column shows is fine at any realistic
+   length. `auto` in contain-intrinsic-size means a row that has been
+   rendered once keeps its real measured height, so the estimate below only
+   ever applies to rows nobody has scrolled to yet. */
+.transcript p,
+.transcript .md,
+.transcript .interrupted {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+
+/* The row currently being streamed into is at the bottom and on screen, and
+   it changes on every delta. Exempting it keeps the browser from
+   re-evaluating its containment hundreds of times per turn for a row that is
+   visible throughout. */
+.transcript p.streaming,
+.transcript p.thinking {
+  content-visibility: visible;
+}
+
+/* Markdown rows (issue #15, markdown.ts). A narration line with structure
+   in it renders as a <div class="md"> instead of a <p>, because a list or a
+   table cannot live inside one; it carries the same rhythm as the <p> it
+   replaces so the transcript does not change shape around it. Everything
+   below is the rendered subset and nothing more — there is no `a` or `img`
+   rule because those tags never reach the DOM. */
+.transcript .md {
+  margin: 0 0 14px;
+}
+
+.transcript .md > :first-child {
+  margin-top: 0;
+}
+
+.transcript .md > :last-child {
+  margin-bottom: 0;
+}
+
+.transcript .md p {
+  margin: 0 0 10px;
+}
+
+.transcript .md h1,
+.transcript .md h2,
+.transcript .md h3,
+.transcript .md h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+
+.transcript .md ul,
+.transcript .md ol {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+}
+
+.transcript .md li {
+  margin: 0 0 4px;
+}
+
+/* An aside the narration steps out of: set in from the text on a rule,
+   which is how the rest of the sheet marks a quotation. */
+.transcript .md blockquote {
+  margin: 10px 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.transcript .md hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 14px 0;
+}
+
+.transcript code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.9em;
+  background: var(--paper-3);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.transcript .md pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--paper-3);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+/* A fenced block already has the plate behind it; the code inside it must
+   not draw a second one. */
+.transcript .md pre code {
+  background: none;
+  padding: 0;
+}
+
+.transcript .md table {
+  border-collapse: collapse;
+  margin: 0 0 10px;
+  font-size: 0.94em;
+}
+
+.transcript .md th,
+.transcript .md td {
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+  text-align: left;
+}
+
+.transcript .md th {
+  background: var(--paper-2);
+  font-weight: 600;
+}
+
 .transcript p.system {
   color: var(--ink-3);
   font-style: italic;
@@ -593,5 +739,36 @@ pre.mono {
   /* Everything the hint line spells out is a tap away via /help instead. */
   .composer-hint {
     display: none;
+  }
+}
+
+/* The knowledge graph (graph.ts, issue #34, migration_plan.md §6.4).
+   A fixed height rather than an aspect ratio: the panel has to be tall
+   enough for a force-directed layout to be readable, and Cytoscape lays out
+   against the container's real size, so it must not be zero or elastic. */
+.graph {
+  height: 420px;
+  margin-top: 14px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper-2);
+}
+
+.graph-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.graph-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 180px;
+}
+
+@media (max-width: 720px) {
+  .graph {
+    height: 300px;
   }
 }

@@ -242,3 +242,47 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace
+
+  desktop:
+    name: Desktop front end (apps/desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The Rust job above covers apps/desktop/src-tauri; nothing covered the
+    # TypeScript half, so ~1,400 lines of main.ts reached main having never
+    # been type-checked. This job is the front-end counterpart: it runs the
+    # same two commands a contributor runs locally and nothing more. No
+    # webkit2gtk here — `tsc` and `vite build` do not link a webview, so
+    # this job stays fast and independent of the Tauri bundle.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: npm ci
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: tsc --noEmit
+        working-directory: apps/desktop
+        run: npx tsc --noEmit
+
+      - name: vitest run
+        # src/__tests__ covers markdown.ts, which is the one front-end module
+        # that renders untrusted input: a vault note, or a prompt injection
+        # inside one, reaches it as a character's line. Its "a link never
+        # becomes an element" and "raw HTML never executes" properties are
+        # asserted here rather than assumed.
+        working-directory: apps/desktop
+        run: npm test
+
+      - name: vite build
+        # Catches what `tsc` cannot: an import that type-checks but does not
+        # resolve or bundle. The shell has to build offline-complete, with
+        # every dependency bundled rather than fetched at runtime (§2.3).
+        working-directory: apps/desktop
+        run: npx vite build
