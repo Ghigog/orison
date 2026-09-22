@@ -10,15 +10,16 @@ class_name CharacterProfile
 @export var emotions: Array[EmotionEvent] = []
 @export var writing_style: String = ""
 
+
 func to_dict() -> Dictionary:
 	var inv_list: Array[Dictionary] = []
 	for item in inventory:
 		inv_list.append(item.to_dict())
-		
+
 	var emo_list: Array[Dictionary] = []
 	for event in emotions:
 		emo_list.append(event.to_dict())
-		
+
 	return {
 		"name": name,
 		"biography": biography,
@@ -28,6 +29,7 @@ func to_dict() -> Dictionary:
 		"writing_style": writing_style
 	}
 
+
 static func from_dict(char_id: String, d: Dictionary) -> CharacterProfile:
 	var instance = CharacterProfile.new()
 	instance.id = char_id
@@ -35,20 +37,21 @@ static func from_dict(char_id: String, d: Dictionary) -> CharacterProfile:
 	instance.biography = d.get("biography", "")
 	instance.affinity = d.get("affinity", 0.0)
 	instance.writing_style = d.get("writing_style", "")
-	
+
 	var raw_inv = d.get("inventory", [])
 	instance.inventory = []
 	for item_dict in raw_inv:
 		if item_dict is Dictionary:
 			instance.inventory.append(InventoryItem.from_dict(item_dict))
-			
+
 	var raw_emo = d.get("emotions", [])
 	instance.emotions = []
 	for emo_dict in raw_emo:
 		if emo_dict is Dictionary:
 			instance.emotions.append(EmotionEvent.from_dict(emo_dict))
-			
+
 	return instance
+
 
 # Translates affinity score to a user-friendly relationship label
 static func get_relationship_label(affinity_score: float) -> String:
@@ -61,6 +64,7 @@ static func get_relationship_label(affinity_score: float) -> String:
 	if affinity_score <= 0.59:
 		return "Friend"
 	return "Best Friend"
+
 
 # Returns the relationship label dynamically based on active affinity
 func get_relationship_label_dynamic() -> String:
