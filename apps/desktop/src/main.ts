@@ -155,7 +155,7 @@ function shell(railActive: string, body: string): string {
       <span class="mark">${id === railActive ? "●" : "·"}</span><span>${label}</span>
     </button>`;
   return `
-    <nav class="rail">
+    <nav class="rail" aria-label="Primary">
       <div class="brand mono">ORISON</div>
       <div class="brand-sub mono">local · offline · yours</div>
       <div class="nav-group mono">SESSION</div>
@@ -377,12 +377,12 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
       <h1>Two minds, both on this machine</h1>
       <p class="muted">Connecting to <b>${escapeHtml(campaignTitle)}</b>. One decides what happens next; one speaks.</p>
       <div class="field">
-        <label class="mono">ENDPOINT</label>
+        <label class="mono" for="url">ENDPOINT</label>
         <input id="url" value="${escapeHtml(saved?.url ?? "http://127.0.0.1:11434")}" />
       </div>
       <div class="field">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <label class="mono">THE ACTOR — speaks in character</label>
+          <label class="mono" for="actor-model">THE ACTOR — speaks in character</label>
           <span id="actor-health" class="mono health-badge"></span>
         </div>
         <input id="actor-model" value="${escapeHtml(saved?.actorModel ?? "llama3.2:3b")}" />
@@ -390,7 +390,7 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
       </div>
       <div class="field">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <label class="mono">THE DIRECTOR — composes what happens next (blank = same as the Actor)</label>
+          <label class="mono" for="director-model">THE DIRECTOR — composes what happens next (blank = same as the Actor)</label>
           <span id="director-health" class="mono health-badge"></span>
         </div>
         <input id="director-model" placeholder="llama3.2:3b" value="${escapeHtml(saved?.directorModel ?? "")}" />
@@ -611,15 +611,15 @@ async function renderPlay(campaignId: string, campaignTitle: string) {
       <div class="play-header">
         <div>
           <div class="title-lg" id="location-label">${escapeHtml(campaignTitle)}</div>
-          <div class="mono meta" id="director-indicator">DIRECTOR · IDLE</div>
+          <div class="mono meta" id="director-indicator" aria-live="polite">DIRECTOR · IDLE</div>
         </div>
       </div>
       <div class="sheet">
-        <div id="transcript" class="transcript"></div>
+        <div id="transcript" class="transcript" role="log" aria-live="polite" aria-label="Story so far"></div>
         <div id="instrument-strip" class="instrument mono"></div>
         <div class="composer">
-          <span class="mono lamp">&rsaquo;</span>
-          <input id="draft" placeholder="say something, or type / for commands" autofocus />
+          <span class="mono lamp" aria-hidden="true">&rsaquo;</span>
+          <input id="draft" placeholder="say something, or type / for commands" aria-label="Say something, or type / for commands" autofocus />
         </div>
         <div class="composer-hint mono muted">
           /who · /talk &lt;name&gt; · /where · /go &lt;place&gt; · /status · /save · /quit — esc to stop a turn
@@ -1004,11 +1004,17 @@ async function renderMap(campaignId: string) {
   } catch (e) {
     error = String(e);
   }
-  const row = (e: EntityDto, clickable: boolean) => `
-    <div class="row"${clickable ? ` data-entity="${escapeHtml(e.id)}"` : ""} style="${clickable ? "cursor:pointer" : ""}">
+  // A present character is a real <button> so it's reachable and
+  // activatable by keyboard, not just a click target (#38); a location row
+  // has nothing to activate, so it stays a plain <div>.
+  const row = (e: EntityDto, clickable: boolean) => {
+    const tag = clickable ? "button" : "div";
+    return `
+    <${tag} class="row"${clickable ? ` type="button" data-entity="${escapeHtml(e.id)}"` : ""}>
       <div><div class="title-lg">${escapeHtml(e.label)}</div>
       <p class="muted">${escapeHtml(e.description)}</p></div>
-    </div>`;
+    </${tag}>`;
+  };
   const edgeRow = (e: EdgeDto) => `
     <div class="row mono">
       ${escapeHtml(e.fromLabel)} —${escapeHtml(edgeVerb(e.kind))}→ ${escapeHtml(e.toLabel)}
@@ -1030,7 +1036,7 @@ async function renderMap(campaignId: string) {
   `,
   );
   attachNav();
-  app.querySelectorAll<HTMLDivElement>("[data-entity]").forEach((el) => {
+  app.querySelectorAll<HTMLButtonElement>("[data-entity]").forEach((el) => {
     const entity = characters.find((c) => c.id === el.dataset.entity);
     if (entity) el.addEventListener("click", () => render({ name: "character", campaignId, entity }));
   });
@@ -1047,11 +1053,11 @@ async function renderImport() {
     <div class="pad">
       <h1>Compile a vault</h1>
       <div class="field">
-        <label class="mono">CAMPAIGN TITLE (creates a new campaign)</label>
+        <label class="mono" for="title">CAMPAIGN TITLE (creates a new campaign)</label>
         <input id="title" placeholder="Thornwick" />
       </div>
       <div class="field">
-        <label class="mono">VAULT PATH</label>
+        <label class="mono" for="vault">VAULT PATH</label>
         <div style="display:flex;gap:8px">
           <input id="vault" placeholder="fixtures/vaults/minimal" style="flex:1" />
           <button class="btn" id="browse" type="button">BROWSE…</button>
@@ -1152,8 +1158,8 @@ async function showFolders(vault: string) {
       .map(
         (f) => `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0">
-        <span class="mono">${escapeHtml(f.folder || "(vault root)")} <span class="muted">· ${f.notes} note${f.notes === 1 ? "" : "s"}</span></span>
-        <select data-folder="${escapeHtml(f.folder)}">
+        <span class="mono" id="folder-label-${escapeHtml(f.folder)}">${escapeHtml(f.folder || "(vault root)")} <span class="muted">· ${f.notes} note${f.notes === 1 ? "" : "s"}</span></span>
+        <select data-folder="${escapeHtml(f.folder)}" aria-labelledby="folder-label-${escapeHtml(f.folder)}">
           <option value="auto">Auto — ${escapeHtml(f.guess)}</option>
           ${FOLDER_KINDS.map((k) => `<option value="${k}">${k}</option>`).join("")}
         </select>
