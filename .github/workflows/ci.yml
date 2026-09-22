@@ -95,10 +95,13 @@ jobs:
     name: Lint (non-blocking)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The codebase has never been linted; the first run is expected to
-    # surface a large number of findings. This job is intentionally
-    # non-blocking (see the follow-up triage issue) rather than gating on
-    # a 19,600-line reformat done in the same change as CI setup.
+    # Triaged in https://github.com/Ghigog/orison/issues/3: gdformat has been
+    # run over src/ and tests/ (see .gdlintrc for the rule tuning), and
+    # gdlint is down to 38 findings (max-returns, function-arguments-number)
+    # that are real but require restructuring control flow and call sites,
+    # left for a follow-up batch rather than folded into that formatting
+    # pass. This job stays non-blocking until those land and gdlint is
+    # clean.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
