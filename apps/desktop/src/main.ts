@@ -1255,8 +1255,12 @@ async function renderMap(campaignId: string) {
 let activeGraph: GraphHandle | null = null;
 
 // ---------------------------------------------------------------------------
-// Import (docs/design/Orison.dc.html "import", the folder-type mapping
-// screen simplified to one free-text mapping field for this scaffold)
+// Import (docs/design/Orison.dc.html "import"). The folder-type mapping is
+// real (#36): scan_vault_folders returns each folder with its note count and
+// the ingest layer's own guess, preselected, and the player corrects only
+// what is wrong. That is the answer to the 48% problem in
+// docs/handoff_phase6.md — a CLI user re-runs with --folder-type, a UI user
+// never would.
 
 async function renderImport() {
   app.innerHTML = shell(

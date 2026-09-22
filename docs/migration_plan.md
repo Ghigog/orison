@@ -564,7 +564,7 @@ Tauri 2, stable since October 2024 and on the 2.11 line as of mid-2026, with pro
 
 ### 6.2 Screens
 
-Port the existing information architecture, which is sound: onboarding and vault import, LLM configuration with connection checking, campaign list, main gameplay viewport with chat and character sidebar, character detail, mind map, settings. The current 25 `.tscn` scenes are an accurate inventory of what needs to exist.
+Port the existing information architecture, which is sound: onboarding and vault import, LLM configuration with connection checking, campaign list, main gameplay viewport with chat and character sidebar, character detail, mind map, settings. The 24 `.tscn` scenes under `scenes/` are an accurate inventory of what needs to exist.
 
 ### 6.3 Design system
 
@@ -576,14 +576,99 @@ Port the existing information architecture, which is sound: onboarding and vault
 - Markdown rendering in chat: this is backlog ticket TKT027, unbuilt in Godot, and roughly a one-line import on the web.
 - Mind map: Cytoscape.js or similar, replacing `CampaignGraphView.gd`. Gets search, filter, force-directed layout and minimap for free, addressing [orison_audit.md §23](orison_audit.md).
 
+**Outcome: two of the three were bought, and the third was measured and declined.**
+
+| Item | Outcome |
+|---|---|
+| Markdown in chat | **Bought.** `marked` + `DOMPurify`, in `apps/desktop/src/markdown.ts`, closing the markdown half of [#15](https://github.com/Ghigog/orison/issues/15). Nearly the one-line import this section predicted, plus three constraints it did not: links and images never become elements (§2.3 makes no-egress a pillar, and model output reaching this renderer has passed through a vault); streaming stays plain text, because half-arrived markdown is broken markdown and a row parsed on every delta would flicker for the length of a 15-second turn; and the quoted-speech bolding rule is reapplied over the rendered tree rather than dropped. 21 tests, run in CI. |
+| Mind map | **Bought.** Cytoscape.js, in `apps/desktop/src/graph.ts`, [#34](https://github.com/Ghigog/orison/issues/34). Dynamically imported, because it is ~440 kB and exactly one screen needs it. The canvas is `aria-hidden` and the node and edge lists stay beside it as the keyboard and screen-reader path. |
+| Chat virtualisation | **Declined, on measurement.** See below. |
+
+**The virtualiser is the one this section got wrong**, and it is worth writing
+out because the reasoning generalises. The cost that scales in this transcript
+is not first paint, it is streaming: every `StreamDelta` appends text and then
+sets `scrollTop = scrollHeight`, which reads geometry and forces a synchronous
+layout of the whole scroll container. `apps/desktop/bench/transcript-streaming.mjs`
+measures exactly that, in Chromium, against three arms — the DOM as written, the
+same DOM under CSS containment, and an idealised windowed list holding only the
+visible rows, which is a ceiling no library reaches:
+
+| rows | plain DOM | windowed (ceiling) | `content-visibility` |
+|---:|---:|---:|---:|
+| 40 | 0.52 ms | 0.26 ms | 0.008 ms |
+| 200 | 0.31 ms | 0.48 ms | 0.006 ms |
+| 1000 | 0.86 ms | 0.14 ms | 0.005 ms |
+| 5000 | 6.36 ms | 0.16 ms | 0.021 ms |
+
+The ceiling loses at every size, because a windowed list still lays out its
+container on each delta while containment lets the browser skip offscreen rows
+outright. Buying the library would also have meant replacing the append-only
+DOM that `StreamDelta` and the provisional-row-then-committed-line pattern
+depend on — a real architectural cost, for a slower result. One CSS rule in
+`styles.css` does it instead, and where the property is unsupported
+(WebKitGTK < 2.46, Safari < 18) it is ignored and behaviour is what the
+plain-DOM column shows, which is fine at any realistic transcript length.
+
+`VirtualScrollContainer.gd` existed because Godot's `Control` nodes are
+expensive to hold in quantity. Paragraphs are not, and the port inherited the
+constraint along with the component. The general form: a component the old
+platform needed is not automatically a component the new one needs, and §6.4's
+whole premise — that the web has solved these — cuts both ways.
+
 ### 6.5 Accessibility
 
 Keyboard navigation, focus management, screen-reader semantics and contrast validation, all listed as unaddressed in the audit's minor findings. The web platform makes these tractable in a way Godot's Control nodes do not.
 
 **Phase 6 exit criteria**
-- [ ] Feature parity with the Godot build across all screens.
-- [ ] Full design token set implemented.
-- [ ] Keyboard-navigable throughout.
+- [ ] **Feature parity with the Godot build across all screens.** **Not met.** Eight screens are built and wired to real commands — Campaigns, Models, Starters, Play, Character, Map, Import, Settings — against 24 `.tscn` files. Three groups remain, and they are not the same kind of gap: see the table below.
+- [x] **Full design token set implemented.** *(`apps/desktop/src/styles.css`, [#32](https://github.com/Ghigog/orison/issues/32). **Read the amendment below before trusting this tick**: the token set that is implemented is round 2's, and [design_philosophy.md](../design_philosophy.md) — the document this criterion points at — still specifies round 1's.)*
+- [x] **Keyboard-navigable throughout.** *([#38](https://github.com/Ghigog/orison/issues/38): every interactive control is a real `<button>`, `<input>` or `<select>` rather than a click handler on a `<div>`; `--control-border` and `--focus-ring` are tokens; Esc cancels a turn from anywhere on the Play screen; the graph canvas added since is `aria-hidden` with the lists as its keyboard path. Verified by reading and by construction, **not by a person using a keyboard**, for the reason in the next paragraph.*
+
+**Nobody has clicked this application.** Every screen and command in
+`apps/desktop` has been verified by `cargo clippy`, `cargo test`, `tsc`,
+`vitest` and `vite build`, in an environment with no display and no Ollama.
+[#30](https://github.com/Ghigog/orison/issues/30) existed to fix that and was
+closed without a playthrough, deliberately: a playtest before parity would
+rediscover known gaps rather than surface new defects. That is a defensible
+call about sequencing, but it means **no Phase 6 exit criterion has been
+confirmed by use**, and the accessibility tick above in particular is an
+argument rather than an observation. The playtest is the first thing the
+remaining parity work is for.
+
+**What parity is missing, in three kinds:**
+
+| Godot screen | Kind of gap |
+|---|---|
+| `WelcomeScreen`, `SetupWizard` | **Real, and small.** There is no first-run path. The shell opens on an empty campaign list, which assumes somebody who already knows what Orison is. |
+| `CharacterCreator` | **Real.** `OnboardingFlow.gd`'s adventure-starter half was ported to the core and the shell ([#41](https://github.com/Ghigog/orison/issues/41)); the player-character half — avatar, description, the vision-model magic wand — was not, and `orison-core` has no equivalent. |
+| `AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel` | **Blocked on a decision, not on work.** All three are image generation. [D-7](#appendix-d--decisions-and-open-questions) is still Open and `orison-core` has no `media/` module, so these cannot be called missing or dismissed until D-7 is decided. Appendix A still maps `ImageGenManager.gd` to `media/`. |
+| `ToastMessage`, `FloatingEmoji` | **Not gaps.** Round 2 chose an inline Interrupted state over toasts on purpose (see [docs/design/README.md](design/README.md)), and floating emoji are round 1 flourish the paper direction dropped. |
+
+Two screens are built but partial, and say so in the UI rather than faking it:
+Settings draws the Instrumented/Narrative/Quiet verbosity control but nothing
+persists or acts on it, and the Character screen shows live rapport and
+emotion but not the per-turn "what she felt, and why" log, because no command
+exposes one.
+
+**The design-token amendment.** [#32](https://github.com/Ghigog/orison/issues/32)
+implemented the full token set for the **round 2 paper direction**: Lamplight
+and E-ink, `oklch()` surfaces, Spectral and IBM Plex Mono.
+[design_philosophy.md](../design_philosophy.md) still specifies round 1 — four
+dark-first presets (Dawn, Ethereal Codex, Daybreak Meadow, Solstice Obsidian)
+and a Lora/Outfit type stack — none of which the shell implements or intends
+to. [docs/design/README.md](design/README.md) records that the file needs
+rewriting to match and that it has not been. So the criterion is ticked
+against what shipped, and the document it names is stale. Rewriting
+`design_philosophy.md` to round 2 is the cheap half of closing this properly;
+until it is done, "the design token set" names two different things depending
+on which file you open.
+
+> **Phase 6 is not closed.** Two of three criteria are met, the third needs
+> the parity work above, and none of the three has been confirmed by a person
+> using the application. The order that follows from this: build the
+> first-run path and the character creator, decide D-7, rewrite
+> `design_philosophy.md`, then playtest — and let the playtest, not the
+> checklist, decide whether Phase 6 is done.
 
 ---
 
@@ -978,7 +1063,7 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
 | D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
 | D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
-| D-5 | Frontend framework inside Tauri | **Open**: defer to Phase 6. Not load-bearing. |
+| D-5 | Frontend framework inside Tauri | **Decided**: none. The shell is vanilla TypeScript over the Tauri command layer — one `main.ts` router, plus `markdown.ts` and `graph.ts`. This was not argued for, it is just what Phase 6 built and it held; recorded here so the next person knows it was a default rather than a conclusion, and is free to revisit it if a screen ever needs more than a re-render. |
 | D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
 | D-8 | Reranker model | **Open**: which cross-encoder is small enough to run locally without materially hurting turn latency. Measure in Phase 3.4. |
