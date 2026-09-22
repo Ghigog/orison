@@ -669,10 +669,20 @@ on which file you open.
 > first-run path and the character creator, decide D-7, rewrite
 > `design_philosophy.md`, then playtest — and let the playtest, not the
 > checklist, decide whether Phase 6 is done.
+>
+> Phase 7 is written up at [handoff_phase7.md](handoff_phase7.md), and its
+> first item — the first-run path — is the same surface as Phase 6's missing
+> welcome flow. Whoever picks up either should read both.
 
 ---
 
 ## Phase 7 — Packaging and distribution
+
+> **Executable brief**: [handoff_phase7.md](handoff_phase7.md). It carries four
+> findings that were not known when this section was written and that change
+> what the model-acquisition item is for, the §2.3 conflict the updater item
+> walks into, the decisions this phase owes, and proposed exit criteria — this
+> section has none.
 
 **Duration estimate**: 1-2 weeks.
 
@@ -680,6 +690,19 @@ on which file you open.
 - Model acquisition flow: guided download with progress and checksum verification, not "go install Ollama and run these commands." First-run friction is where most local-AI applications lose their users. Backlog ticket OBD001 already scoped this; build it properly here.
 - Tauri's built-in updater.
 - A save-migration path from Godot-era saves, or an explicit statement that they do not carry (see [D-6](#appendix-d--decisions-and-open-questions)).
+
+**Four things the list above does not account for**, each written up in the
+handoff:
+
+1. **The desktop shell hardcodes `tokenizer: None`** (`apps/desktop/src-tauri/src/commands.rs:47`), so every desktop session budgets context by counting words. B-1 was a critical defect about over-budgeted prompts and its fix is only as good as the counter. A tokenizer arrives with a model or not at all, so the acquisition flow owns this.
+2. **Dense retrieval and RAPTOR are built, tested and unwired** (`turn/engine.rs:802` passes `None`; `knowledge/raptor.rs` is called by nothing outside its own tests). OBD001's four-row checklist asks the player to download `nomic-embed-text`, which the engine would never call. Ship three rows, or wire the dense half first — but not the checklist as written.
+3. **`LlamaCppBackend` has never run against real weights.** [D-3](#appendix-d--decisions-and-open-questions) says it is likely the eventual default "once model acquisition is guided", which is this phase. Run it against a real GGUF before designing a download flow around it.
+4. **The updater contradicts [§2.3](#23-permanently-out-of-scope).** An update check is egress to an endpoint the user did not configure, and the shell's Settings screen currently answers "what leaves this machine" with "Nothing." Decide the exception explicitly, or drop the updater; do not let the binary and the pillar quietly disagree.
+
+**Phase 7 exit criteria** are proposed in [handoff_phase7.md](handoff_phase7.md),
+since this section never carried any. The one that matters: a new user reaches
+their first conversation without opening a terminal, on a machine with no
+Ollama and no models — observed, not argued.
 
 ---
 
@@ -1061,10 +1084,10 @@ Migration does not mean starting over. These survive intact and represent most o
 |---|---|---|
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
-| D-3 | Default inference backend | **Decided**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. |
+| D-3 | Default inference backend | **Decided for Phases 2-6, and due again in Phase 7**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. Phase 7 *is* guided model acquisition, so the deferral has expired. Note before choosing: `LlamaCppBackend` compiles under `--features llama-cpp` and has never been executed against real weights (its own header says so; CI does not build it). Run it before betting the acquisition flow on it. |
 | D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
 | D-5 | Frontend framework inside Tauri | **Decided**: none. The shell is vanilla TypeScript over the Tauri command layer — one `main.ts` router, plus `markdown.ts` and `graph.ts`. This was not argued for, it is just what Phase 6 built and it held; recorded here so the next person knows it was a default rather than a conclusion, and is free to revisit it if a screen ever needs more than a re-render. |
-| D-6 | Godot-era save compatibility | **Open**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. Decide before Phase 3.1. |
+| D-6 | Godot-era save compatibility | **Open, and overdue**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. The note said decide before Phase 3.1; Phase 3.1 shipped. It is now Phase 7's, and §2.1 requires an answer either way — including the answer that they do not carry. It turns on one question only: do any Godot-era saves exist that somebody wants to keep? |
 | D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
 | D-8 | Reranker model | **Open**: which cross-encoder is small enough to run locally without materially hurting turn latency. Measure in Phase 3.4. |
 
