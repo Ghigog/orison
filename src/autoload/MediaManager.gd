@@ -159,51 +159,52 @@ func generate_image(prompt: String, category: String, output_path: String) -> vo
 
 ## Helper to dynamically load audio files (OGG, MP3, WAV) from path
 func load_audio_file(path: String) -> AudioStream:
-	if path.begins_with("res://"):
-		var res = load(path)
-		if res is AudioStream:
-			return res
+	# Collapsed to a single return (issue #3: max-returns). `elif` mirrors
+	# each early-exit's fall-through in the original: a res:// path whose
+	# resource isn't an AudioStream, a missing file, or an unopenable file
+	# all leave `result` null exactly as the old early `return null`s did.
+	var result: AudioStream = null
+	var res_stream = load(path) if path.begins_with("res://") else null
+	if res_stream is AudioStream:
+		result = res_stream
+	elif FileAccess.file_exists(path):
+		var ext = path.get_extension().to_lower()
+		var file = FileAccess.open(path, FileAccess.READ)
+		if file:
+			var bytes = file.get_buffer(file.get_length())
+			file.close()
 
-	if not FileAccess.file_exists(path):
-		return null
+			if ext == "ogg":
+				# Validate OGG magic header 'OggS' ([0x4f, 0x67, 0x67, 0x53]) to avoid native hangs on corrupt files
+				if (
+					bytes.size() >= 4
+					and bytes[0] == 0x4f
+					and bytes[1] == 0x67
+					and bytes[2] == 0x67
+					and bytes[3] == 0x53
+				):
+					result = AudioStreamOggVorbis.load_from_file(path)
+				else:
+					printerr(
+						"[MediaManager] Invalid OGG file magic header (missing 'OggS') for: ", path
+					)
+			elif ext == "mp3":
+				var stream = AudioStreamMP3.new()
+				stream.data = bytes
+				result = stream
+			elif ext == "wav":
+				var stream = AudioStreamWAV.new()
+				# Simple WAV header bypass to load raw PCM data
+				if bytes.size() > 44:
+					stream.data = bytes.slice(44)
+				else:
+					stream.data = bytes
+				stream.format = AudioStreamWAV.FORMAT_16_BITS
+				stream.mix_rate = 44100
+				stream.stereo = true
+				result = stream
 
-	var ext = path.get_extension().to_lower()
-	var file = FileAccess.open(path, FileAccess.READ)
-	if not file:
-		return null
-
-	var bytes = file.get_buffer(file.get_length())
-	file.close()
-
-	if ext == "ogg":
-		# Validate OGG magic header 'OggS' ([0x4f, 0x67, 0x67, 0x53]) to avoid native hangs on corrupt files
-		if (
-			bytes.size() >= 4
-			and bytes[0] == 0x4f
-			and bytes[1] == 0x67
-			and bytes[2] == 0x67
-			and bytes[3] == 0x53
-		):
-			return AudioStreamOggVorbis.load_from_file(path)
-		printerr("[MediaManager] Invalid OGG file magic header (missing 'OggS') for: ", path)
-		return null
-	if ext == "mp3":
-		var stream = AudioStreamMP3.new()
-		stream.data = bytes
-		return stream
-	if ext == "wav":
-		var stream = AudioStreamWAV.new()
-		# Simple WAV header bypass to load raw PCM data
-		if bytes.size() > 44:
-			stream.data = bytes.slice(44)
-		else:
-			stream.data = bytes
-		stream.format = AudioStreamWAV.FORMAT_16_BITS
-		stream.mix_rate = 44100
-		stream.stereo = true
-		return stream
-
-	return null
+	return result
 
 
 ## Dynamically generates a soft sine wave audio stream

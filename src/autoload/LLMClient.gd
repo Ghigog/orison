@@ -1142,75 +1142,89 @@ func cancel() -> void:
 
 ## Gets the 768-dimensional embedding vector for a given text using nomic-embed-text
 func get_embedding(text: String) -> Array:
+	# Collapsed to a single return (issue #3: max-returns) via a `done` flag
+	# that mirrors each original early `return`: once set, later blocks are
+	# skipped and `result` (default []) carries whatever that early return
+	# used to hand back. `temp_http.queue_free()` stays at exactly the call
+	# sites it originally guarded.
+	var result: Array = []
+	var done := false
+
 	if mock_embedding_handler.is_valid():
 		var mock_res = mock_embedding_handler.call(text)
 		if mock_res is Array:
-			return mock_res
+			result = mock_res
+			done = true
 
-	if text.strip_edges().is_empty():
-		return []
+	if not done and text.strip_edges().is_empty():
+		done = true
 
-	var temp_http = HTTPRequest.new()
-	add_child(temp_http)
+	if not done:
+		var temp_http = HTTPRequest.new()
+		add_child(temp_http)
 
-	var active_url = api_url.rstrip("/").path_join("api/embeddings")
-	var headers = ["Content-Type: application/json"]
-	var req_body = {"model": "nomic-embed-text", "prompt": text}
+		var active_url = api_url.rstrip("/").path_join("api/embeddings")
+		var headers = ["Content-Type: application/json"]
+		var req_body = {"model": "nomic-embed-text", "prompt": text}
 
-	var err = temp_http.request(
-		active_url, headers, HTTPClient.METHOD_POST, JSON.stringify(req_body)
-	)
-	if err != OK:
-		temp_http.queue_free()
-		return []
+		var err = temp_http.request(
+			active_url, headers, HTTPClient.METHOD_POST, JSON.stringify(req_body)
+		)
+		if err != OK:
+			temp_http.queue_free()
+			done = true
+		else:
+			var response = await temp_http.request_completed
+			var http_result = response[0]
+			var response_code = response[1]
+			var body = response[3]
 
-	var response = await temp_http.request_completed
-	var result = response[0]
-	var response_code = response[1]
-	var body = response[3]
+			if http_result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+				var response_text = body.get_string_from_utf8()
+				var json = JSON.new()
+				if json.parse(response_text) == OK and json.data is Dictionary:
+					var data = json.data
+					if data.has("embedding"):
+						var emb = data["embedding"]
+						if emb is Array:
+							var float_emb: Array[float] = []
+							for val in emb:
+								float_emb.append(float(val))
+							temp_http.queue_free()
+							result = float_emb
+							done = true
 
-	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-		var response_text = body.get_string_from_utf8()
-		var json = JSON.new()
-		if json.parse(response_text) == OK and json.data is Dictionary:
-			var data = json.data
-			if data.has("embedding"):
-				var emb = data["embedding"]
-				if emb is Array:
-					var float_emb: Array[float] = []
-					for val in emb:
-						float_emb.append(float(val))
+			if not done:
+				# Fallback to /api/embed if /api/embeddings failed (e.g. 404)
+				var embed_url = api_url.rstrip("/").path_join("api/embed")
+				var embed_body = {"model": "nomic-embed-text", "input": text}
+				err = temp_http.request(
+					embed_url, headers, HTTPClient.METHOD_POST, JSON.stringify(embed_body)
+				)
+				if err != OK:
 					temp_http.queue_free()
-					return float_emb
+				else:
+					response = await temp_http.request_completed
+					temp_http.queue_free()
 
-	# Fallback to /api/embed if /api/embeddings failed (e.g. 404)
-	var embed_url = api_url.rstrip("/").path_join("api/embed")
-	var embed_body = {"model": "nomic-embed-text", "input": text}
-	err = temp_http.request(embed_url, headers, HTTPClient.METHOD_POST, JSON.stringify(embed_body))
-	if err != OK:
-		temp_http.queue_free()
-		return []
+					http_result = response[0]
+					response_code = response[1]
+					body = response[3]
 
-	response = await temp_http.request_completed
-	temp_http.queue_free()
+					if http_result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+						var response_text = body.get_string_from_utf8()
+						var json = JSON.new()
+						if json.parse(response_text) == OK and json.data is Dictionary:
+							var data = json.data
+							if data.has("embeddings"):
+								var embs = data["embeddings"]
+								if embs is Array and not embs.is_empty() and embs[0] is Array:
+									var float_emb: Array[float] = []
+									for val in embs[0]:
+										float_emb.append(float(val))
+									result = float_emb
 
-	result = response[0]
-	response_code = response[1]
-	body = response[3]
-
-	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-		var response_text = body.get_string_from_utf8()
-		var json = JSON.new()
-		if json.parse(response_text) == OK and json.data is Dictionary:
-			var data = json.data
-			if data.has("embeddings"):
-				var embs = data["embeddings"]
-				if embs is Array and not embs.is_empty() and embs[0] is Array:
-					var float_emb: Array[float] = []
-					for val in embs[0]:
-						float_emb.append(float(val))
-					return float_emb
-	return []
+	return result
 
 
 ## Returns true if the nomic-embed-text model is available locally in Ollama

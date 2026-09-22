@@ -162,15 +162,17 @@ func start_new_campaign(
 		CampaignState.init_character(
 			char_key,
 			char_data.name,
-			char_data.biography,
-			char_data.get("writing_style", ""),
-			char_data.get("avatar", ""),
-			char_data.get("base_emotion", ""),
-			char_data.get("base_intensity", -1.0),
-			char_data.affinity,
-			char_data.get("is_creature", false),
-			char_data.get("can_speak", true),
-			char_data.get("humanoid", true)
+			{
+				"biography": char_data.biography,
+				"writing_style": char_data.get("writing_style", ""),
+				"avatar": char_data.get("avatar", ""),
+				"base_emotion": char_data.get("base_emotion", ""),
+				"base_intensity": char_data.get("base_intensity", -1.0),
+				"affinity": char_data.affinity,
+				"is_creature": char_data.get("is_creature", false),
+				"can_speak": char_data.get("can_speak", true),
+				"humanoid": char_data.get("humanoid", true)
+			}
 		)
 
 	# 4.5. Initialize player character if present
@@ -183,9 +185,7 @@ func start_new_campaign(
 		CampaignState.init_character(
 			"player",
 			pc.get("name", "Player"),
-			pc.get("physical_description", ""),
-			"",  # writing style
-			pc.get("avatar", "")
+			{"biography": pc.get("physical_description", ""), "avatar": pc.get("avatar", "")}
 		)
 		CampaignState.set_player_character(pc)
 		CampaignState.update_character_properties(

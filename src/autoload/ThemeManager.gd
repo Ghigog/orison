@@ -162,25 +162,27 @@ func _init_shadows() -> void:
 
 func get_emotion_color(emotion: String) -> Color:
 	var is_light = color_bg.get_luminance() > 0.5
+	var color: Color
 	match emotion.to_lower():
 		"joy":
-			return Color("#D97706") if is_light else Color("#F59E0B")
+			color = Color("#D97706") if is_light else Color("#F59E0B")
 		"anger":
-			return Color("#B91C1C") if is_light else Color("#DC2626")
+			color = Color("#B91C1C") if is_light else Color("#DC2626")
 		"sadness":
-			return Color("#1D4ED8") if is_light else Color("#3B82F6")
+			color = Color("#1D4ED8") if is_light else Color("#3B82F6")
 		"fear":
-			return Color("#6D28D9") if is_light else Color("#7C3AED")
+			color = Color("#6D28D9") if is_light else Color("#7C3AED")
 		"trust":
-			return Color("#047857") if is_light else Color("#059669")
+			color = Color("#047857") if is_light else Color("#059669")
 		"disgust":
-			return Color("#4D7C0F") if is_light else Color("#65A30D")
+			color = Color("#4D7C0F") if is_light else Color("#65A30D")
 		"surprise":
-			return Color("#0891B2") if is_light else Color("#06B6D4")
+			color = Color("#0891B2") if is_light else Color("#06B6D4")
 		"serenity":
-			return Color("#4B5563") if is_light else Color("#D1D5DB")
+			color = Color("#4B5563") if is_light else Color("#D1D5DB")
 		_:
-			return Color("#4B5563") if is_light else Color("#D1D5DB")
+			color = Color("#4B5563") if is_light else Color("#D1D5DB")
+	return color
 
 
 func load_themes() -> void:
@@ -361,9 +363,7 @@ func apply_active_theme() -> void:
 		color_border,
 		0.2,
 		0.1,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -373,9 +373,7 @@ func apply_active_theme() -> void:
 		color_accent,
 		0.15,
 		1.0,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -385,9 +383,7 @@ func apply_active_theme() -> void:
 		color_accent,
 		0.15,
 		1.0,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -397,9 +393,7 @@ func apply_active_theme() -> void:
 		color_border,
 		btn_normal_opacity,
 		btn_border_opacity,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -409,9 +403,7 @@ func apply_active_theme() -> void:
 		color_accent,
 		0.4,
 		1.0,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 
 	_update_sb(
@@ -422,9 +414,7 @@ func apply_active_theme() -> void:
 		color_accent,
 		0.6,
 		0.8,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -434,9 +424,7 @@ func apply_active_theme() -> void:
 		color_border,
 		lineedit_opacity,
 		lineedit_border,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 	_update_sb(
 		active_theme,
@@ -446,9 +434,7 @@ func apply_active_theme() -> void:
 		color_border,
 		lineedit_opacity * 0.8,
 		lineedit_border * 0.5,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 
 	_update_sb(
@@ -459,11 +445,13 @@ func apply_active_theme() -> void:
 		color_border,
 		panel_opacity,
 		panel_border,
-		radius_lg,
-		spacing_md,
-		spacing_md,
-		shadow_medium.shadow_size,
-		shadow_medium.shadow_color
+		{
+			"radius": radius_lg,
+			"margin_h": spacing_md,
+			"margin_v": spacing_md,
+			"shadow_size": shadow_medium.shadow_size,
+			"shadow_color": shadow_medium.shadow_color
+		}
 	)
 
 	# 3. Style TabContainer dynamically for a minimalist look
@@ -698,9 +686,7 @@ func apply_active_theme() -> void:
 		color_accent,
 		0.2,
 		1.0,
-		radius_md,
-		spacing_md,
-		spacing_sm
+		{"radius": radius_md, "margin_h": spacing_md, "margin_v": spacing_sm}
 	)
 
 	active_theme.emit_changed()
@@ -734,6 +720,10 @@ func _load_custom(theme_name: String) -> void:
 	color_accent = Color(c["color_accent"])
 
 
+# `geometry` bundles the optional corner/margin/shadow fields (issue #3:
+# function-arguments-number). Recognized keys, all optional: radius,
+# margin_h, margin_v, shadow_size, shadow_color. Defaults below match the
+# ones this signature used to declare positionally.
 func _update_sb(
 	theme: Theme,
 	style_name: String,
@@ -742,12 +732,13 @@ func _update_sb(
 	border: Color,
 	bg_a: float,
 	border_a: float,
-	radius: float = -1.0,
-	margin_h: float = -1.0,
-	margin_v: float = -1.0,
-	shadow_size: int = -1,
-	shadow_color: Color = Color(0, 0, 0, 0)
+	geometry: Dictionary = {}
 ) -> void:
+	var radius: float = geometry.get("radius", -1.0)
+	var margin_h: float = geometry.get("margin_h", -1.0)
+	var margin_v: float = geometry.get("margin_v", -1.0)
+	var shadow_size: int = geometry.get("shadow_size", -1)
+	var shadow_color: Color = geometry.get("shadow_color", Color(0, 0, 0, 0))
 	var sb = theme.get_stylebox(style_name, type_name) as StyleBoxFlat
 	if sb:
 		var b_color = bg

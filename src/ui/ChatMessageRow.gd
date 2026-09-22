@@ -72,22 +72,24 @@ func _get_adjusted_sender_color(sender: String, is_light: bool) -> String:
 
 
 func _get_emotion_hex_color(emotion: String, is_light: bool) -> String:
+	var hex: String
 	match emotion.to_lower():
 		"joy":
-			return "#D97706" if is_light else "#F59E0B"
+			hex = "#D97706" if is_light else "#F59E0B"
 		"anger":
-			return "#B91C1C" if is_light else "#DC2626"
+			hex = "#B91C1C" if is_light else "#DC2626"
 		"sadness":
-			return "#1D4ED8" if is_light else "#3B82F6"
+			hex = "#1D4ED8" if is_light else "#3B82F6"
 		"fear":
-			return "#6D28D9" if is_light else "#7C3AED"
+			hex = "#6D28D9" if is_light else "#7C3AED"
 		"trust":
-			return "#047857" if is_light else "#059669"
+			hex = "#047857" if is_light else "#059669"
 		"disgust":
-			return "#4D7C0F" if is_light else "#65A30D"
+			hex = "#4D7C0F" if is_light else "#65A30D"
 		"surprise":
-			return "#0891B2" if is_light else "#06B6D4"
+			hex = "#0891B2" if is_light else "#06B6D4"
 		"serenity":
-			return "#4B5563" if is_light else "#D1D5DB"
+			hex = "#4B5563" if is_light else "#D1D5DB"
 		_:
-			return "#BE123C" if is_light else "#F43F5E"
+			hex = "#BE123C" if is_light else "#F43F5E"
+	return hex
