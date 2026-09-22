@@ -18,6 +18,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 
+import { renderInlineMarkdown, renderMarkdown } from "./markdown";
+
 // ---------------------------------------------------------------------------
 // Types mirroring the Rust side. TurnEvent/TurnState/DirectorState/
 // FailureKind are serde's default externally-tagged representation: a
@@ -954,45 +956,37 @@ function appendLabel(p: HTMLElement, label: string) {
   p.append(span);
 }
 
+// Where markdown is applied, and where it is not (issue #15). A row with no
+// class is narration — prose a model wrote — and is rendered. SYSTEM, YOU and
+// ERROR rows are engine output, the player's own typed words, and a Rust
+// error string respectively: none of those is authored prose, and rendering
+// them would mean the shell silently rewrote text somebody expects to see
+// exactly as they sent it. markdown.ts carries the rest of the reasoning.
 function appendLine(transcript: HTMLDivElement, label: string, text: string, cls = "") {
-  const p = document.createElement("p");
-  p.className = cls;
-  if (label) appendLabel(p, label);
-  // Streaming text is rewritten with textContent as it grows; leave it plain.
-  if (cls === "streaming") p.append(text);
-  else appendWithSpeech(p, text);
-  transcript.appendChild(p);
+  const prose = cls === "" ? renderMarkdown(text) : null;
+  // Structure — a list, a table, a quote — cannot live inside a <p>, so a
+  // row that has any gets a <div> instead. One paragraph, which is nearly
+  // every line, keeps the <p> and every style already written against it.
+  const row = document.createElement(prose?.kind === "block" ? "div" : "p");
+  row.className = prose?.kind === "block" ? "md" : cls;
+  if (label) appendLabel(row, label);
+  row.append(prose ? prose.nodes : text);
+  transcript.appendChild(row);
   transcript.scrollTop = transcript.scrollHeight;
 }
 
 /// A character's line, in bold: speech is the part the player reads for.
+/// Rendered inline whatever it contains — a spoken line is one utterance by
+/// definition, so block syntax in it is a model slip, not an intention.
 function appendSpeech(transcript: HTMLDivElement, speaker: string, text: string) {
   const p = document.createElement("p");
   p.className = "speech";
   appendLabel(p, speaker.toUpperCase());
   const strong = document.createElement("strong");
-  strong.textContent = text;
+  strong.append(renderInlineMarkdown(text));
   p.append(strong);
   transcript.appendChild(p);
   transcript.scrollTop = transcript.scrollHeight;
-}
-
-// Quoted speech inside narration: "…" or '…'. A single quote only opens
-// after whitespace or a bracket and only closes before whitespace or
-// punctuation, so apostrophes (You're, I'd) don't count as quotes.
-const SPEECH = /"([^"]+)"|(?<=^|[\s(])'([^']{2,}?)'(?=[\s.,;:!?)]|$)/g;
-
-function appendWithSpeech(p: HTMLElement, text: string) {
-  let at = 0;
-  for (const m of text.matchAll(SPEECH)) {
-    const start = m.index!;
-    p.append(text.slice(at, start));
-    const strong = document.createElement("strong");
-    strong.textContent = m[0];
-    p.append(strong);
-    at = start + m[0].length;
-  }
-  p.append(text.slice(at));
 }
 
 // The Interrupted screen's decision (docs/design/Orison.dc.html "failure"),

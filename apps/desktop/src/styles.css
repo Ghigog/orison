@@ -391,6 +391,103 @@ button.row {
   margin: 0 0 14px;
 }
 
+/* Markdown rows (issue #15, markdown.ts). A narration line with structure
+   in it renders as a <div class="md"> instead of a <p>, because a list or a
+   table cannot live inside one; it carries the same rhythm as the <p> it
+   replaces so the transcript does not change shape around it. Everything
+   below is the rendered subset and nothing more — there is no `a` or `img`
+   rule because those tags never reach the DOM. */
+.transcript .md {
+  margin: 0 0 14px;
+}
+
+.transcript .md > :first-child {
+  margin-top: 0;
+}
+
+.transcript .md > :last-child {
+  margin-bottom: 0;
+}
+
+.transcript .md p {
+  margin: 0 0 10px;
+}
+
+.transcript .md h1,
+.transcript .md h2,
+.transcript .md h3,
+.transcript .md h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+
+.transcript .md ul,
+.transcript .md ol {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+}
+
+.transcript .md li {
+  margin: 0 0 4px;
+}
+
+/* An aside the narration steps out of: set in from the text on a rule,
+   which is how the rest of the sheet marks a quotation. */
+.transcript .md blockquote {
+  margin: 10px 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.transcript .md hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 14px 0;
+}
+
+.transcript code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.9em;
+  background: var(--paper-3);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.transcript .md pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--paper-3);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+/* A fenced block already has the plate behind it; the code inside it must
+   not draw a second one. */
+.transcript .md pre code {
+  background: none;
+  padding: 0;
+}
+
+.transcript .md table {
+  border-collapse: collapse;
+  margin: 0 0 10px;
+  font-size: 0.94em;
+}
+
+.transcript .md th,
+.transcript .md td {
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+  text-align: left;
+}
+
+.transcript .md th {
+  background: var(--paper-2);
+  font-weight: 600;
+}
+
 .transcript p.system {
   color: var(--ink-3);
   font-style: italic;
