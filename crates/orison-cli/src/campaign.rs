@@ -149,6 +149,15 @@ fn first_by_label(graph: &KnowledgeGraph, kind: EntityKind) -> Option<String> {
     all.first().map(|e| e.id.as_str().to_string())
 }
 
+/// Load a campaign's row. `open_session` loads its graph; this loads the
+/// campaign fields themselves — title, writing style, player character,
+/// whichever location and character are active.
+pub fn load(store: &Arc<Mutex<CampaignStore>>, campaign_id: &str) -> Result<Campaign, CliError> {
+    lock(store)
+        .load_campaign(campaign_id)?
+        .ok_or_else(|| CliError::NoSuchCampaign(campaign_id.to_string()))
+}
+
 /// Load a campaign's graph and build its index.
 pub fn open_session(
     store: &Arc<Mutex<CampaignStore>>,
@@ -169,6 +178,6 @@ pub fn is_empty(session: &Session) -> bool {
     session.graph().is_empty()
 }
 
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }

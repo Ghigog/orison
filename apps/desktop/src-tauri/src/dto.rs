@@ -195,6 +195,45 @@ impl CharacterEmotionDto {
     }
 }
 
+/// One adventure-starter hook: a pickable opening the starters screen shows
+/// between compile and play. Round-trips both ways — `generate_starters`
+/// returns these, and the one the player picks comes back as the argument to
+/// `pick_starter` — so it derives both `Serialize` and `Deserialize` rather
+/// than needing a second shape for the pick.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StarterDto {
+    pub title: String,
+    pub description: String,
+    pub location_id: String,
+    pub character_id: String,
+    pub narration: String,
+}
+
+impl From<&orison_core::onboarding::Starter> for StarterDto {
+    fn from(s: &orison_core::onboarding::Starter) -> Self {
+        Self {
+            title: s.title.clone(),
+            description: s.description.clone(),
+            location_id: s.location_id.clone(),
+            character_id: s.character_id.clone(),
+            narration: s.narration.clone(),
+        }
+    }
+}
+
+impl From<StarterDto> for orison_core::onboarding::Starter {
+    fn from(s: StarterDto) -> Self {
+        Self {
+            title: s.title,
+            description: s.description,
+            location_id: s.location_id,
+            character_id: s.character_id,
+            narration: s.narration,
+        }
+    }
+}
+
 /// One folder of a vault that holds notes, with what ingest would call them
 /// if the player said nothing.
 #[derive(Debug, Clone, Serialize)]

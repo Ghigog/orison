@@ -19,18 +19,34 @@ use orison_cli::campaign;
 use orison_cli::config::{ModelArgs, Profile};
 use orison_core::inference;
 use orison_core::ingest::{classify, scan};
+use orison_core::onboarding::StarterProgress;
 use orison_core::state::CampaignSummary;
-use orison_core::turn::{CancelReason, TurnConfig, TurnEngine};
+use orison_core::turn::{CancelReason, CancelToken, TurnConfig, TurnEngine};
 
 use crate::dto::{
     CharacterEmotionDto, EdgeDto, EntityDto, HistoryLineDto, IngestReportDto, ModelArgsDto,
-    ModelHealthDto, ModelsSummaryDto, VaultFolderDto,
+    ModelHealthDto, ModelsSummaryDto, StarterDto, VaultFolderDto,
 };
 use crate::settings::{self, ShellSettings};
 use crate::state::{lock, AppState};
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
+}
+
+fn model_args(dto: ModelArgsDto) -> ModelArgs {
+    ModelArgs {
+        url: dto.url,
+        actor_model: dto.actor_model,
+        director_model: dto.director_model,
+        profile: if dto.two_calls {
+            Profile::TwoCalls
+        } else {
+            Profile::SingleCall
+        },
+        tokenizer: None,
+        context_limit: dto.context_limit,
+    }
 }
 
 /// The player's saved shell preferences (theme, #35), read once at startup
@@ -143,20 +159,9 @@ pub async fn connect_models(
         ));
     }
 
-    let model_args = ModelArgs {
-        url: args.url,
-        actor_model: args.actor_model,
-        director_model: args.director_model,
-        profile: if args.two_calls {
-            Profile::TwoCalls
-        } else {
-            Profile::SingleCall
-        },
-        tokenizer: None,
-        context_limit: args.context_limit,
-    };
-    let tokenizer_is_approximate = model_args.tokenizer_is_approximate();
-    let backends = model_args.connect().await.map_err(err)?;
+    let args = model_args(args);
+    let tokenizer_is_approximate = args.tokenizer_is_approximate();
+    let backends = args.connect().await.map_err(err)?;
     let context_length = backends.actor.context_length();
 
     let config = TurnConfig {
@@ -393,4 +398,86 @@ pub fn character_emotion(
     let engine = engine_or_err(&state, &campaign_id)?;
     let (emotion_state, affinity) = engine.character_emotion(&entity_id).map_err(err)?;
     Ok(CharacterEmotionDto::new(&emotion_state, affinity))
+}
+
+/// Generate up to 3 adventure-starter hooks for the starters screen, shown
+/// between compile and play. Connects its own backends independently of
+/// `connect_models` — a starter is a couple of one-shot calls, not a turn
+/// loop, so it needs no `TurnEngine` — and emits `"starter-progress"` events
+/// as each pass runs so the screen can show "Writing hook 2/3" rather than a
+/// silent wait. Never fails on a model error: a bad Pass 1 or Pass 2 answer
+/// degrades to the deterministic fallback (`onboarding::generate`'s job),
+/// so this only errs on a bad connection or an empty vault.
+#[tauri::command]
+pub async fn generate_starters(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    campaign_id: String,
+    args: ModelArgsDto,
+) -> Result<Vec<StarterDto>, String> {
+    let session = campaign::open_session(&state.store, &campaign_id).map_err(err)?;
+    if campaign::is_empty(&session) {
+        return Err(format!(
+            "{campaign_id} has no vault compiled into it yet. Compile one first."
+        ));
+    }
+    let campaign_row = campaign::load(&state.store, &campaign_id).map_err(err)?;
+
+    let backends = model_args(args).connect().await.map_err(err)?;
+    let config = TurnConfig {
+        profile: backends.profile,
+        ..TurnConfig::default()
+    };
+    let cancel = CancelToken::new();
+    let progress_campaign_id = campaign_id.clone();
+
+    let starters = orison_cli::onboarding::generate(
+        session.graph(),
+        &campaign_row,
+        backends.director.as_ref(),
+        backends.actor.as_ref(),
+        config.director_sampling.clone(),
+        config.actor_sampling.clone(),
+        config.keep_alive,
+        &cancel,
+        |progress| {
+            let (stage, index, total) = match progress {
+                StarterProgress::BuildingClusters => ("building_clusters", None, None),
+                StarterProgress::SelectingHooks => ("selecting_hooks", None, None),
+                StarterProgress::WritingNarration { index, total } => {
+                    ("writing_narration", Some(index), Some(total))
+                }
+            };
+            let payload = serde_json::json!({
+                "campaignId": progress_campaign_id,
+                "stage": stage,
+                "index": index,
+                "total": total,
+            });
+            let _ = app.emit("starter-progress", payload);
+        },
+    )
+    .await
+    .map_err(|reason| reason.to_string())?;
+
+    Ok(starters.iter().map(StarterDto::from).collect())
+}
+
+/// Persist the player's pick: its location and character become active, its
+/// narration becomes the campaign's `intro_narration` and the first line of
+/// the transcript. See `orison_cli::onboarding::pick`.
+#[tauri::command]
+pub fn pick_starter(
+    state: State<AppState>,
+    campaign_id: String,
+    starter: StarterDto,
+) -> Result<(), String> {
+    let mut campaign_row = campaign::load(&state.store, &campaign_id).map_err(err)?;
+    orison_cli::onboarding::pick(
+        &state.store,
+        &mut campaign_row,
+        &starter.into(),
+        &orison_cli::shell::timestamp(),
+    )
+    .map_err(err)
 }

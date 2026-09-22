@@ -233,6 +233,35 @@ impl CombinedTurnResponse {
     }
 }
 
+/// One cluster's chosen character and hook concept, Pass 1 of adventure-
+/// starter generation. Ported from the JSON schema embedded in
+/// `SystemPrompts.get_starters_selection_prompt()`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StarterConcept {
+    pub title: String,
+    pub concept: String,
+    pub location_id: String,
+    pub character_id: String,
+}
+
+/// Pass 1's response: one concept per starting cluster, in the same order
+/// the clusters were given.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StartersSelectionResponse {
+    pub starters: Vec<StarterConcept>,
+}
+
+/// Pass 2's response: one hook's finished opening narration. Ported from the
+/// JSON schema embedded in `SystemPrompts.get_starter_narration_prompt()`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct StarterNarrationResponse {
+    pub title: String,
+    pub description: String,
+    pub location_id: String,
+    pub character_id: String,
+    pub narration: String,
+}
+
 /// The Director ReAct loop's per-step response, ported from
 /// `SystemPrompts.get_director_react_system_prompt()` for completeness
 /// against §2.4's exit bar. **Superseded by native tool calling (§2.6):**
@@ -306,6 +335,38 @@ mod tests {
         let parsed: DirectorResponse = serde_json::from_value(payload).unwrap();
         assert_eq!(parsed.choices.len(), 2);
         assert_eq!(parsed.choices[0].kind, ChoiceType::Do);
+    }
+
+    #[test]
+    fn starters_selection_response_schema_generates_and_round_trips() {
+        let _format = ResponseFormat::for_type::<StartersSelectionResponse>();
+        let payload = serde_json::json!({
+            "starters": [
+                {
+                    "title": "The Burning Sigil",
+                    "concept": "A mark has appeared over the gatehouse overnight.",
+                    "location_id": "stonebridge",
+                    "character_id": "bram_holt"
+                }
+            ]
+        });
+        let parsed: StartersSelectionResponse = serde_json::from_value(payload).unwrap();
+        assert_eq!(parsed.starters.len(), 1);
+        assert_eq!(parsed.starters[0].location_id, "stonebridge");
+    }
+
+    #[test]
+    fn starter_narration_response_schema_generates_and_round_trips() {
+        let _format = ResponseFormat::for_type::<StarterNarrationResponse>();
+        let payload = serde_json::json!({
+            "title": "The Burning Sigil",
+            "description": "A mark has appeared over the gatehouse overnight.",
+            "location_id": "stonebridge",
+            "character_id": "bram_holt",
+            "narration": "The gate's iron is warm to the touch, though no fire burns near it."
+        });
+        let parsed: StarterNarrationResponse = serde_json::from_value(payload).unwrap();
+        assert_eq!(parsed.character_id, "bram_holt");
     }
 
     #[test]

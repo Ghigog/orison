@@ -13,6 +13,7 @@ pub mod emotion;
 pub mod ingest;
 pub mod knowledge;
 pub mod memory;
+pub mod onboarding;
 pub mod retrieval;
 pub mod state;
 pub mod turn;
