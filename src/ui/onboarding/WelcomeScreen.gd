@@ -9,6 +9,7 @@ signal settings_pressed
 @onready var load_btn: Button = %LoadButton
 @onready var settings_btn: Button = %SettingsButton
 
+
 func _ready() -> void:
 	start_new_btn.pressed.connect(func(): start_new_pressed.emit())
 	load_btn.pressed.connect(func(): load_pressed.emit())

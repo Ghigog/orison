@@ -10,26 +10,29 @@ class_name AssetStatusOverlay
 
 var target_path: String = ""
 
+
 func _ready() -> void:
 	# Hide overlay elements initially
 	spinner_container.visible = false
 	error_container.visible = false
-	
+
 	_apply_theme_colors()
 	if ThemeManager:
 		ThemeManager.theme_changed.connect(_apply_theme_colors)
-		
+
 	if ImageGenManager:
 		ImageGenManager.asset_generation_started.connect(_on_generation_started)
 		ImageGenManager.asset_generation_completed.connect(_on_generation_completed)
 		ImageGenManager.asset_generation_failed.connect(_on_generation_failed)
-		
+
 	# Trigger initial check on size change
 	resized.connect(_update_ui)
+
 
 func setup(path: String) -> void:
 	target_path = path
 	_update_ui()
+
 
 func _apply_theme_colors() -> void:
 	if not is_inside_tree():
@@ -39,15 +42,16 @@ func _apply_theme_colors() -> void:
 	if error_label and ThemeManager:
 		error_label.add_theme_color_override("font_color", ThemeManager.color_danger)
 
+
 func _update_ui() -> void:
 	if not is_inside_tree() or target_path.is_empty():
 		spinner_container.visible = false
 		error_container.visible = false
 		return
-		
+
 	var state = ImageGenManager.get_asset_state(target_path)
 	var is_small = size.x > 0 and size.y > 0 and (size.x < 120 or size.y < 120)
-	
+
 	match state.status:
 		"generating":
 			spinner_container.visible = true
@@ -95,13 +99,16 @@ func _update_ui() -> void:
 			if error_container.has_node("TinyErrorLabel"):
 				error_container.get_node("TinyErrorLabel").visible = false
 
+
 func _on_generation_started(path: String) -> void:
 	if path == target_path or path.get_file() == target_path.get_file():
 		_update_ui()
 
+
 func _on_generation_completed(path: String) -> void:
 	if path == target_path or path.get_file() == target_path.get_file():
 		_update_ui()
+
 
 func _on_generation_failed(path: String, _error_msg: String) -> void:
 	if path == target_path or path.get_file() == target_path.get_file():
