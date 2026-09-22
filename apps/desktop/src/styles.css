@@ -741,3 +741,34 @@ pre.mono {
     display: none;
   }
 }
+
+/* The knowledge graph (graph.ts, issue #34, migration_plan.md §6.4).
+   A fixed height rather than an aspect ratio: the panel has to be tall
+   enough for a force-directed layout to be readable, and Cytoscape lays out
+   against the container's real size, so it must not be zero or elastic. */
+.graph {
+  height: 420px;
+  margin-top: 14px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper-2);
+}
+
+.graph-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.graph-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 180px;
+}
+
+@media (max-width: 720px) {
+  .graph {
+    height: 300px;
+  }
+}

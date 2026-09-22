@@ -19,6 +19,10 @@ import { listen } from "@tauri-apps/api/event";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 
 import { renderInlineMarkdown, renderMarkdown } from "./markdown";
+// Types only: graph.ts pulls in Cytoscape, which is ~440 kB of the bundle
+// and is needed by exactly one screen. It is imported for real inside
+// renderMap() so the other seven screens never parse it.
+import type { GraphEdgeInput, GraphHandle, GraphNodeInput } from "./graph";
 
 // ---------------------------------------------------------------------------
 // Types mirroring the Rust side. TurnEvent/TurnState/DirectorState/
@@ -213,6 +217,12 @@ function attachNav() {
 }
 
 async function render(screen: Screen) {
+  // Leaving the map detaches its container but not the Cytoscape instance
+  // behind it, which keeps a canvas and its own window listeners alive.
+  if (current.name === "map" && screen.name !== "map") {
+    activeGraph?.destroy();
+    activeGraph = null;
+  }
   current = screen;
   switch (screen.name) {
     case "campaigns":
@@ -1119,6 +1129,43 @@ async function renderMap(campaignId: string) {
   } catch (e) {
     error = String(e);
   }
+
+  // Nodes come from the edges as well as from the entity lists, because the
+  // graph reaches things neither list returns — lore notes, items, a RAPTOR
+  // summary. Dropping an endpoint because it is not a location or a present
+  // character would draw an edge to nothing, or quietly hide a hop the
+  // engine really does make. Known entities keep their kind and description;
+  // an endpoint nothing else describes is a note.
+  const known = new Map<string, EntityDto>();
+  for (const e of [...locations, ...characters]) known.set(e.id, e);
+  const present = new Set(characters.map((c) => c.id));
+
+  const graphNodes = new Map<string, GraphNodeInput>();
+  const addNode = (id: string, label: string) => {
+    if (graphNodes.has(id)) return;
+    const entity = known.get(id);
+    graphNodes.set(id, {
+      id,
+      label: entity?.label ?? label,
+      kind: entity?.kind ?? "note",
+      present: present.has(id),
+    });
+  };
+  for (const e of edges) {
+    addNode(e.fromId, e.fromLabel);
+    addNode(e.toId, e.toLabel);
+  }
+  // An entity with no edges at all is still something the campaign knows, and
+  // "nothing links to this yet" is a finding rather than a reason to hide it.
+  for (const e of [...locations, ...characters]) addNode(e.id, e.label);
+
+  const nodes = [...graphNodes.values()];
+  const graphEdges: GraphEdgeInput[] = edges.map((e) => ({
+    source: e.fromId,
+    target: e.toId,
+    label: edgeVerb(e.kind),
+  }));
+
   // A present character is a real <button> so it's reachable and
   // activatable by keyboard, not just a click target (#38); a location row
   // has nothing to activate, so it stays a plain <div>.
@@ -1134,28 +1181,78 @@ async function renderMap(campaignId: string) {
     <div class="row mono">
       ${escapeHtml(e.fromLabel)} —${escapeHtml(edgeVerb(e.kind))}→ ${escapeHtml(e.toLabel)}
     </div>`;
+
   app.innerHTML = shell(
     "map",
     `
     <div class="pad">
       <div class="mono meta">KNOWLEDGE GRAPH</div>
       <h1>What this campaign knows</h1>
+      <p class="muted">
+        Every line is a link the engine really follows when it builds a prompt —
+        a wiki-link, a frontmatter connection, or one note naming another in its
+        prose. Where things sit means nothing; what they join to does.
+      </p>
       ${error ? `<p class="error mono">${escapeHtml(error)}</p>` : ""}
+      <div class="graph-toolbar">
+        <input id="graph-search" type="search" placeholder="find a note, a person, a place"
+               aria-label="Filter the graph" ${nodes.length ? "" : "disabled"} />
+        <button class="btn" id="graph-refit" type="button" ${nodes.length ? "" : "disabled"}>REDRAW</button>
+        <span class="mono muted" id="graph-count">${nodes.length} nodes · ${edges.length} links</span>
+      </div>
+      ${
+        nodes.length
+          ? `<div id="graph" class="graph" aria-hidden="true"></div>`
+          : `<p class="muted">Nothing is linked to anything yet. Compile a vault to give it something to know.</p>`
+      }
       <div class="mono meta" style="margin-top:24px">PRESENT NOW</div>
       ${characters.map((c) => row(c, true)).join("") || `<p class="muted">Nobody here.</p>`}
       <div class="mono meta" style="margin-top:24px">LOCATIONS</div>
       ${locations.map((l) => row(l, false)).join("")}
       <div class="mono meta" style="margin-top:24px">CONNECTIONS</div>
+      <p class="muted">The same links as the drawing above, in a form you can tab through and a screen reader can read.</p>
       ${edges.map(edgeRow).join("") || `<p class="muted">Nothing links to anything yet.</p>`}
     </div>
   `,
   );
   attachNav();
+
+  const openCharacter = (id: string) => {
+    const entity = characters.find((c) => c.id === id);
+    if (entity) render({ name: "character", campaignId, entity });
+  };
   app.querySelectorAll<HTMLButtonElement>("[data-entity]").forEach((el) => {
-    const entity = characters.find((c) => c.id === el.dataset.entity);
-    if (entity) el.addEventListener("click", () => render({ name: "character", campaignId, entity }));
+    el.addEventListener("click", () => openCharacter(el.dataset.entity!));
   });
+
+  const container = document.querySelector<HTMLDivElement>("#graph");
+  if (!container) return;
+
+  // Torn down and rebuilt on every visit, like the rest of the screen. It
+  // holds a canvas and its own event listeners, so leaving the old one
+  // attached to a detached container leaks both.
+  activeGraph?.destroy();
+  const { mountGraph } = await import("./graph");
+  // Awaiting the import gives the router time to move on; mounting into a
+  // container that is no longer the screen would leave an orphan canvas.
+  if (current.name !== "map" || !container.isConnected) return;
+  activeGraph = mountGraph(container, nodes, graphEdges, { onSelect: openCharacter });
+
+  const search = document.querySelector<HTMLInputElement>("#graph-search")!;
+  const count = document.querySelector<HTMLSpanElement>("#graph-count")!;
+  search.addEventListener("input", () => {
+    const matched = activeGraph!.filter(search.value);
+    count.textContent = search.value.trim()
+      ? `${matched} of ${nodes.length} nodes match`
+      : `${nodes.length} nodes · ${edges.length} links`;
+  });
+  document.querySelector("#graph-refit")!.addEventListener("click", () => activeGraph!.refit());
 }
+
+/// The mounted graph, if the map screen is the one showing. Module-level
+/// because navigating away replaces the DOM without telling Cytoscape, and
+/// the instance has to be destroyed rather than dropped.
+let activeGraph: GraphHandle | null = null;
 
 // ---------------------------------------------------------------------------
 // Import (docs/design/Orison.dc.html "import", the folder-type mapping
