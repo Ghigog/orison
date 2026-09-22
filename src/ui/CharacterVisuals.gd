@@ -275,25 +275,27 @@ func apply_emotion(emotion: String, _affinity: float) -> void:
 
 
 func _get_emotion_emoji(emotion: String) -> String:
+	var emoji: String
 	match emotion:
 		"joy":
-			return "😄"
+			emoji = "😄"
 		"anger":
-			return "💢"
+			emoji = "💢"
 		"sadness":
-			return "😢"
+			emoji = "😢"
 		"fear":
-			return "😨"
+			emoji = "😨"
 		"trust":
-			return "💖"
+			emoji = "💖"
 		"disgust":
-			return "🤢"
+			emoji = "🤢"
 		"surprise":
-			return "😲"
+			emoji = "😲"
 		"serenity":
-			return "✨"
+			emoji = "✨"
 		_:
-			return ""
+			emoji = ""
+	return emoji
 
 
 func spawn_floating_text(text_content: String) -> void:

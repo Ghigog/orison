@@ -557,7 +557,7 @@ func _run_transcript_suite(fixture: String, compiled: Dictionary) -> void:
 
 	var node: Dictionary = nodes[char_id]
 	var node_props: Dictionary = node.get("properties", {})
-	CampaignState.init_character(char_id, char_name, str(node.get("desc", "")))
+	CampaignState.init_character(char_id, char_name, {"biography": str(node.get("desc", ""))})
 	CampaignState.update_character_properties(char_id, node_props)
 
 	var graph := KnowledgeGraphManager.new()

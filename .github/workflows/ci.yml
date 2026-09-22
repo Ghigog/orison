@@ -92,17 +92,14 @@ jobs:
           echo "All $total tests passed and the process exit code was 0."
 
   lint:
-    name: Lint (non-blocking)
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Triaged in https://github.com/Ghigog/orison/issues/3: gdformat has been
-    # run over src/ and tests/ (see .gdlintrc for the rule tuning), and
-    # gdlint is down to 38 findings (max-returns, function-arguments-number)
-    # that are real but require restructuring control flow and call sites,
-    # left for a follow-up batch rather than folded into that formatting
-    # pass. This job stays non-blocking until those land and gdlint is
-    # clean.
-    continue-on-error: true
+    # Triaged and closed out in https://github.com/Ghigog/orison/issues/3:
+    # gdformat has been run over src/ and tests/ (see .gdlintrc for the rule
+    # tuning), and the remaining max-returns / function-arguments-number
+    # findings were fixed by restructuring control flow and call sites.
+    # gdlint is clean, so this job is now blocking.
     steps:
       - uses: actions/checkout@v4
 
@@ -115,11 +112,9 @@ jobs:
 
       - name: gdformat --check
         run: gdformat --check src/ tests/
-        continue-on-error: true
 
       - name: gdlint
         run: gdlint src/ tests/
-        continue-on-error: true
 
   eval:
     name: Evaluation harness

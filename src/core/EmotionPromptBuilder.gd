@@ -52,25 +52,27 @@ func build_emotion_block(char_id: String) -> String:
 
 
 func _get_tone_guidance(emotion: String) -> String:
+	var guidance: String
 	match emotion:
 		"serenity":
-			return "Calm, warm, clear, and steady. Your responses feel balanced."
+			guidance = "Calm, warm, clear, and steady. Your responses feel balanced."
 		"joy":
-			return "Upbeat, eager, helpful, cooperative, and enthusiastic."
+			guidance = "Upbeat, eager, helpful, cooperative, and enthusiastic."
 		"sadness":
-			return "Gentle, quiet, slightly flat, or melancholic. You speak softly."
+			guidance = "Gentle, quiet, slightly flat, or melancholic. You speak softly."
 		"anger":
-			return "Clipped, blunt, impatient, or tense. Your dialogue is sharp."
+			guidance = "Clipped, blunt, impatient, or tense. Your dialogue is sharp."
 		"fear":
-			return "Careful, tentative, defensive, or guarded. You hesitate to trust."
+			guidance = "Careful, tentative, defensive, or guarded. You hesitate to trust."
 		"trust":
-			return "Open, warm, supportive, and willing to share details."
+			guidance = "Open, warm, supportive, and willing to share details."
 		"disgust":
-			return "Cold, dismissive, revolted, or highly disapproving."
+			guidance = "Cold, dismissive, revolted, or highly disapproving."
 		"surprise":
-			return "Expressive, unsettled, highly reactive, or stunned."
+			guidance = "Expressive, unsettled, highly reactive, or stunned."
 		_:
-			return "Balanced and calm."
+			guidance = "Balanced and calm."
+	return guidance
 
 
 func _get_relationship_guidance(level: String) -> String:

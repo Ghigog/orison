@@ -443,25 +443,27 @@ func _get_adjusted_sender_color(sender: String, is_light: bool) -> String:
 
 
 func _get_emotion_hex_color(emotion: String, is_light: bool) -> String:
+	var hex: String
 	match emotion.to_lower():
 		"joy":
-			return "#D97706" if is_light else "#F59E0B"
+			hex = "#D97706" if is_light else "#F59E0B"
 		"anger":
-			return "#B91C1C" if is_light else "#DC2626"
+			hex = "#B91C1C" if is_light else "#DC2626"
 		"sadness":
-			return "#1D4ED8" if is_light else "#3B82F6"
+			hex = "#1D4ED8" if is_light else "#3B82F6"
 		"fear":
-			return "#6D28D9" if is_light else "#7C3AED"
+			hex = "#6D28D9" if is_light else "#7C3AED"
 		"trust":
-			return "#047857" if is_light else "#059669"
+			hex = "#047857" if is_light else "#059669"
 		"disgust":
-			return "#4D7C0F" if is_light else "#65A30D"
+			hex = "#4D7C0F" if is_light else "#65A30D"
 		"surprise":
-			return "#0891B2" if is_light else "#06B6D4"
+			hex = "#0891B2" if is_light else "#06B6D4"
 		"serenity":
-			return "#4B5563" if is_light else "#D1D5DB"
+			hex = "#4B5563" if is_light else "#D1D5DB"
 		_:
-			return "#BE123C" if is_light else "#F43F5E"
+			hex = "#BE123C" if is_light else "#F43F5E"
+	return hex
 
 
 func _display_system_message(msg: String) -> void:
@@ -892,32 +894,33 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var is_cmd_or_ctrl = event.is_command_or_control_pressed()
 
+	# Each branch below already excludes every other by keycode/modifier, so
+	# chaining them with `elif` keeps the exact same dispatch behavior as the
+	# original `if ...: ...; return` sequence with a single return (issue #3:
+	# max-returns), while making that mutual exclusivity explicit.
+
 	# 1. Escape: Close active modal / toggle settings
 	if event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
 		_close_or_toggle_settings()
-		return
 
 	# 2. Ctrl+S / Cmd+S: Quick save
-	if is_cmd_or_ctrl and event.keycode == KEY_S and not event.shift_pressed:
+	elif is_cmd_or_ctrl and event.keycode == KEY_S and not event.shift_pressed:
 		get_viewport().set_input_as_handled()
 		_quick_save()
-		return
 
 	# 3. Ctrl+Shift+S: Save as
-	if is_cmd_or_ctrl and event.keycode == KEY_S and event.shift_pressed:
+	elif is_cmd_or_ctrl and event.keycode == KEY_S and event.shift_pressed:
 		get_viewport().set_input_as_handled()
 		_open_save_as()
-		return
 
 	# 4. Ctrl+M / Cmd+M: Toggle mind map
-	if is_cmd_or_ctrl and event.keycode == KEY_M:
+	elif is_cmd_or_ctrl and event.keycode == KEY_M:
 		get_viewport().set_input_as_handled()
 		_on_mind_map_pressed()
-		return
 
 	# 5. / or Enter: Focus chat input
-	if (
+	elif (
 		(event.keycode == KEY_SLASH or event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER)
 		and not is_cmd_or_ctrl
 	):
@@ -927,10 +930,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			input_field.grab_focus()
 			if event.keycode == KEY_SLASH:
 				input_field.text = ""
-		return
 
 	# 6. Tab / Shift+Tab: Navigate sidebar character list
-	if event.keycode == KEY_TAB and not is_cmd_or_ctrl:
+	elif event.keycode == KEY_TAB and not is_cmd_or_ctrl:
 		get_viewport().set_input_as_handled()
 		_navigate_character_list(event.shift_pressed)
 		return

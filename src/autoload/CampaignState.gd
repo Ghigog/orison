@@ -90,6 +90,12 @@ func apply_state_change(change: Dictionary) -> Variant:
 
 func _apply_change_internal(change: Dictionary) -> Variant:
 	var type = change.get("type", "")
+	# One `result` slot assigned per branch instead of returning from inside
+	# the match, so the function keeps a single exit point (see issue #3:
+	# max-returns). Early exits that used to `return` mid-branch are now
+	# if/else splits within that same branch, preserving the original order
+	# of side effects and which value comes back for each case.
+	var result: Variant = null
 	match type:
 		"initialize":
 			campaign_id = change["id"]
@@ -144,17 +150,14 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 				playtime_seconds,
 				"s)."
 			)
-			return null
 
 		"set_campaign_meta":
 			var key = change["key"]
 			var value = change["value"]
 			state.adventure_meta[key] = value
-			return null
 
 		"set_plot_state":
 			state.plot_states[change["key"]] = change["value"]
-			return null
 
 		"init_character":
 			var char_id = change["char_id"]
@@ -223,19 +226,18 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 					var node = graph_manager.get_node(char_id)
 					node["label"] = name
 					node["desc"] = biography
-			return null
 
 		"adjust_affinity":
 			var char_id = change["char_id"]
 			var delta = change["delta"]
 			var character = _get_character_internal(char_id)
 			if character.is_empty():
-				return 0.0
-
-			var current_affinity = character.get("affinity", 0.0)
-			var new_affinity = clamp(current_affinity + delta, -1.0, 1.0)
-			character["affinity"] = new_affinity
-			return new_affinity
+				result = 0.0
+			else:
+				var current_affinity = character.get("affinity", 0.0)
+				var new_affinity = clamp(current_affinity + delta, -1.0, 1.0)
+				character["affinity"] = new_affinity
+				result = new_affinity
 
 		"add_emotion_event":
 			var char_id = change["char_id"]
@@ -245,7 +247,6 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 			var context = change["context"]
 			var rapport_delta = change["rapport_delta"]
 			_add_emotion_event_internal(char_id, emotion, intensity, target, context, rapport_delta)
-			return null
 
 		"add_to_inventory":
 			var char_id = change["char_id"]
@@ -254,24 +255,21 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 			var properties = change["properties"]
 
 			var character = _get_character_internal(char_id)
-			if character.is_empty():
-				return null
+			if not character.is_empty():
+				var inventory: Array = character.get("inventory", [])
+				var found = false
+				for item in inventory:
+					if item is Dictionary and item.get("item") == item_name:
+						item["quantity"] = item.get("quantity", 0) + quantity
+						found = true
+						break
 
-			var inventory: Array = character.get("inventory", [])
-			var found = false
-			for item in inventory:
-				if item is Dictionary and item.get("item") == item_name:
-					item["quantity"] = item.get("quantity", 0) + quantity
-					found = true
-					break
+				if not found:
+					inventory.append(
+						{"item": item_name, "quantity": quantity, "properties": properties}
+					)
 
-			if not found:
-				inventory.append(
-					{"item": item_name, "quantity": quantity, "properties": properties}
-				)
-
-			character["inventory"] = inventory
-			return null
+				character["inventory"] = inventory
 
 		"remove_from_inventory":
 			var char_id = change["char_id"]
@@ -280,28 +278,28 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 
 			var character = _get_character_internal(char_id)
 			if character.is_empty():
-				return false
+				result = false
+			else:
+				var inventory: Array = character.get("inventory", [])
+				var index_to_remove = -1
+				var success = false
 
-			var inventory: Array = character.get("inventory", [])
-			var index_to_remove = -1
-			var success = false
+				for i in range(inventory.size()):
+					var item = inventory[i]
+					if item is Dictionary and item.get("item") == item_name:
+						var current_qty = item.get("quantity", 0)
+						if current_qty >= quantity:
+							item["quantity"] = current_qty - quantity
+							success = true
+							if item["quantity"] <= 0:
+								index_to_remove = i
+							break
 
-			for i in range(inventory.size()):
-				var item = inventory[i]
-				if item is Dictionary and item.get("item") == item_name:
-					var current_qty = item.get("quantity", 0)
-					if current_qty >= quantity:
-						item["quantity"] = current_qty - quantity
-						success = true
-						if item["quantity"] <= 0:
-							index_to_remove = i
-						break
+				if index_to_remove != -1:
+					inventory.remove_at(index_to_remove)
 
-			if index_to_remove != -1:
-				inventory.remove_at(index_to_remove)
-
-			character["inventory"] = inventory
-			return success
+				character["inventory"] = inventory
+				result = success
 
 		"add_history_log":
 			var role = change["role"]
@@ -329,40 +327,31 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 				logs.remove_at(0)
 
 			state["history_logs"] = logs
-			return null
 
 		"set_player_character":
 			state["player_character"] = change["pc"]
-			return null
 
 		"set_memory":
 			state["memory"] = change["memory"]
-			return null
 
 		"set_pending_scene":
 			state["pending_scene"] = change["scene"]
-			return null
 
 		"set_turns_since_last_director":
 			state["turns_since_last_director"] = change["turns"]
-			return null
 
 		"set_last_director_beat":
 			state["last_director_beat"] = change["beat"]
-			return null
 
 		"set_director_cooldown":
 			state["director_cooldown"] = change["cooldown"]
-			return null
 
 		"set_history_logs":
 			state["history_logs"] = change["logs"]
-			return null
 
 		"set_knowledge_graph_data":
 			state["knowledge_graph"]["nodes"] = change["nodes"]
 			state["knowledge_graph"]["edges"] = change["edges"]
-			return null
 
 		"update_character_properties":
 			var char_id = change["char_id"]
@@ -371,7 +360,6 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 			if not character.is_empty():
 				for k in props_to_update.keys():
 					character[k] = props_to_update[k]
-			return null
 
 		"add_graph_node":
 			graph_manager._add_node_internal(
@@ -381,19 +369,16 @@ func _apply_change_internal(change: Dictionary) -> Variant:
 				change["description"],
 				change["properties"]
 			)
-			return null
 
 		"remove_graph_node":
 			graph_manager._remove_node_internal(change["node_id"])
-			return null
 
 		"add_graph_edge":
 			graph_manager._add_edge_internal(
 				change["from_node"], change["to_node"], change["relation"], change["weight"]
 			)
-			return null
 
-	return null
+	return result
 
 
 func _get_character_internal(char_id: String) -> Dictionary:
@@ -494,29 +479,22 @@ func trigger_autosave() -> Error:
 
 
 func _get_thumbnail_base64() -> Variant:
-	if DisplayServer.get_name() == "headless":
-		return null
-	var scene_tree = Engine.get_main_loop() as SceneTree
-	if not scene_tree:
-		return null
-	var root = scene_tree.root
-	if not root:
-		return null
-	var viewport = root.get_viewport()
-	if not viewport:
-		return null
-	var texture = viewport.get_texture()
-	if not texture:
-		return null
-	var img = texture.get_image()
-	if not img or img.is_empty():
-		return null
-
-	img.resize(160, 90, Image.INTERPOLATE_LANCZOS)
-	var buffer = img.save_png_to_buffer()
-	if buffer.is_empty():
-		return null
-	return Marshalls.raw_to_base64(buffer)
+	# Guard chain collapsed into one return (issue #3: max-returns). Each
+	# `if x else null` step short-circuits exactly like the original early
+	# return did, without dereferencing a null from the step before it.
+	var result: Variant = null
+	if DisplayServer.get_name() != "headless":
+		var scene_tree = Engine.get_main_loop() as SceneTree
+		var root = scene_tree.root if scene_tree else null
+		var viewport = root.get_viewport() if root else null
+		var texture = viewport.get_texture() if viewport else null
+		var img = texture.get_image() if texture else null
+		if img and not img.is_empty():
+			img.resize(160, 90, Image.INTERPOLATE_LANCZOS)
+			var buffer = img.save_png_to_buffer()
+			if not buffer.is_empty():
+				result = Marshalls.raw_to_base64(buffer)
+	return result
 
 
 # ==============================================================================
@@ -581,33 +559,26 @@ func get_character_profile(char_id: String) -> CharacterProfile:
 	return CharacterProfile.from_dict(char_id, char_data)
 
 
-func init_character(
-	char_id: String,
-	name: String,
-	biography: String = "",
-	writing_style: String = "",
-	avatar: String = "",
-	base_emotion: String = "",
-	base_intensity: float = -1.0,
-	affinity: float = 0.0,
-	is_creature: bool = false,
-	can_speak: bool = true,
-	humanoid: bool = true
-) -> void:
+# `options` bundles every field beyond the two required ones (issue #3:
+# function-arguments-number). Recognized keys, all optional: biography,
+# writing_style, avatar, base_emotion, base_intensity, affinity, is_creature,
+# can_speak, humanoid. Defaults below match the ones this signature used to
+# declare positionally.
+func init_character(char_id: String, name: String, options: Dictionary = {}) -> void:
 	apply_state_change(
 		{
 			"type": "init_character",
 			"char_id": char_id,
 			"name": name,
-			"biography": biography,
-			"writing_style": writing_style,
-			"avatar": avatar,
-			"base_emotion": base_emotion,
-			"base_intensity": base_intensity,
-			"affinity": affinity,
-			"is_creature": is_creature,
-			"can_speak": can_speak,
-			"humanoid": humanoid
+			"biography": options.get("biography", ""),
+			"writing_style": options.get("writing_style", ""),
+			"avatar": options.get("avatar", ""),
+			"base_emotion": options.get("base_emotion", ""),
+			"base_intensity": options.get("base_intensity", -1.0),
+			"affinity": options.get("affinity", 0.0),
+			"is_creature": options.get("is_creature", false),
+			"can_speak": options.get("can_speak", true),
+			"humanoid": options.get("humanoid", true)
 		}
 	)
 
