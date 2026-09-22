@@ -74,6 +74,26 @@ interface ModelsSummaryDto {
   tokenizer_is_approximate: boolean;
 }
 
+interface ModelArgsDto {
+  url: string;
+  actorModel: string;
+  directorModel: string | null;
+  twoCalls: boolean;
+  contextLimit: number | null;
+}
+
+interface StarterDto {
+  title: string;
+  description: string;
+  locationId: string;
+  characterId: string;
+  narration: string;
+}
+
+type StarterProgress =
+  | { campaignId: string; stage: "building_clusters" | "selecting_hooks"; index: null; total: null }
+  | { campaignId: string; stage: "writing_narration"; index: number; total: number };
+
 type ModelHealthStatus =
   | { kind: "available" }
   | { kind: "modelNotInstalled" }
@@ -132,6 +152,7 @@ interface TurnOutcome {
 type Screen =
   | { name: "campaigns" }
   | { name: "connect"; campaignId: string; campaignTitle: string }
+  | { name: "starters"; campaignId: string; campaignTitle: string; modelArgs: ModelArgsDto }
   | { name: "play"; campaignId: string; campaignTitle: string }
   | { name: "character"; campaignId: string; entity: EntityDto }
   | { name: "map"; campaignId: string }
@@ -196,6 +217,8 @@ async function render(screen: Screen) {
       return renderCampaigns();
     case "connect":
       return renderConnect(screen.campaignId, screen.campaignTitle);
+    case "starters":
+      return renderStarters(screen.campaignId, screen.campaignTitle, screen.modelArgs);
     case "play":
       lastPlayContext = { campaignId: screen.campaignId, campaignTitle: screen.campaignTitle };
       return renderPlay(screen.campaignId, screen.campaignTitle);
@@ -430,10 +453,108 @@ async function renderConnect(campaignId: string, campaignTitle: string) {
       });
       console.log("connected:", summary.summary);
       saveModels({ url, actorModel, directorModel: directorModelRaw, twoCalls });
-      render({ name: "play", campaignId, campaignTitle });
+      render({
+        name: "starters",
+        campaignId,
+        campaignTitle,
+        modelArgs: {
+          url,
+          actorModel,
+          directorModel: directorModelRaw || null,
+          twoCalls,
+          contextLimit: null,
+        },
+      });
     } catch (e) {
       document.querySelector("#connect-error")!.textContent = String(e);
     }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Adventure starters: between compile and play, the two-pass pipeline
+// (`orison_core::onboarding`) proposes up to 3 opening hooks and the player
+// picks one, or skips straight to `import`'s deterministic default start.
+
+let startersListenerAttached = false;
+
+async function renderStarters(campaignId: string, campaignTitle: string, modelArgs: ModelArgsDto) {
+  app.innerHTML = shell(
+    "campaigns",
+    `
+    <div class="pad">
+      <h1>How does it begin?</h1>
+      <p class="muted">Writing a few ways into <b>${escapeHtml(campaignTitle)}</b>…</p>
+      <p id="starters-progress" class="mono muted"></p>
+      <div id="starters-list"></div>
+      <p id="starters-error" class="error mono"></p>
+      <div style="margin-top:20px">
+        <button class="btn" id="starters-skip">SKIP — JUST START</button>
+      </div>
+    </div>
+  `,
+  );
+  attachNav();
+
+  if (!startersListenerAttached) {
+    startersListenerAttached = true;
+    await listen<StarterProgress>("starter-progress", (e) => {
+      if (current.name !== "starters" || current.campaignId !== e.payload.campaignId) return;
+      const progressLine = document.querySelector<HTMLParagraphElement>("#starters-progress");
+      if (!progressLine) return;
+      switch (e.payload.stage) {
+        case "building_clusters":
+          progressLine.textContent = "Finding starting places…";
+          break;
+        case "selecting_hooks":
+          progressLine.textContent = "Choosing hooks…";
+          break;
+        case "writing_narration":
+          progressLine.textContent = `Writing hook ${e.payload.index + 1}/${e.payload.total}…`;
+          break;
+      }
+    });
+  }
+
+  document.querySelector("#starters-skip")!.addEventListener("click", () => {
+    render({ name: "play", campaignId, campaignTitle });
+  });
+
+  let starters: StarterDto[];
+  try {
+    starters = await invoke<StarterDto[]>("generate_starters", { campaignId, args: modelArgs });
+  } catch (e) {
+    if (current.name === "starters" && current.campaignId === campaignId) {
+      document.querySelector("#starters-error")!.textContent = String(e);
+    }
+    return;
+  }
+  if (current.name !== "starters" || current.campaignId !== campaignId) return; // navigated away mid-generation
+
+  document.querySelector<HTMLParagraphElement>("#starters-progress")!.textContent = "";
+  document.querySelector("#starters-list")!.innerHTML = starters
+    .map(
+      (s, i) => `
+    <div class="row">
+      <div>
+        <div class="title-lg">${escapeHtml(s.title)}</div>
+        <div class="mono meta">${escapeHtml(s.description)}</div>
+        <p>${escapeHtml(s.narration)}</p>
+      </div>
+      <button class="btn btn-solid" data-pick="${i}">BEGIN HERE</button>
+    </div>`,
+    )
+    .join("");
+  app.querySelectorAll<HTMLButtonElement>("[data-pick]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const starter = starters[Number(btn.dataset.pick)];
+      try {
+        await invoke("pick_starter", { campaignId, starter });
+        render({ name: "play", campaignId, campaignTitle });
+      } catch (e) {
+        document.querySelector("#starters-error")!.textContent = String(e);
+      }
+    });
   });
 }
 

@@ -109,6 +109,21 @@ pub fn combined_instructions(speech: Speech) -> String {
     out
 }
 
+/// Pass 1 of adventure-starter generation: the Director picks a
+/// character and a hook concept for each starting cluster. Ported from
+/// `SystemPrompts.get_starters_selection_prompt()`, minus the JSON-format
+/// prose (§2.4 again — the response is schema-constrained).
+pub fn starter_selection_instructions() -> String {
+    STARTER_SELECTION_ROLE.to_string()
+}
+
+/// Pass 2 of adventure-starter generation: the Actor writes one hook's
+/// opening narration. Ported from
+/// `SystemPrompts.get_starter_narration_prompt()`.
+pub fn starter_narration_instructions() -> String {
+    STARTER_NARRATION_ROLE.to_string()
+}
+
 /// The judge's standing instructions (§1.3).
 ///
 /// A separate role rather than a variation on the Actor's, and deliberately:
@@ -253,6 +268,44 @@ overall progress and resolved plot points.
 
 ";
 
+const STARTER_SELECTION_ROLE: &str = "\
+=== STORY ARCHITECT / DUNGEON MASTER ===
+You are a master roleplaying Dungeon Master and campaign designer. You will \
+be given a player's profile, a campaign's title, and a small number of \
+starting location clusters, each with a location, its associated lore or \
+scene, and a list of candidate characters who could plausibly be there.
+
+For each cluster, choose exactly one character from its list of candidates \
+— the one who makes the most logical sense to be present at that location — \
+then devise a creative adventure hook: a 1-2 sentence concept for the \
+conflict or strange happening that connects the player, that character, the \
+location and its associated lore. Return one entry per cluster, in the same \
+order the clusters were given, with the location id and the chosen \
+character's id copied exactly as given.
+
+";
+
+const STARTER_NARRATION_ROLE: &str = "\
+=== CREATIVE NARRATIVE WRITER ===
+You are a professional fantasy/adventure writer and RPG narrator. You will \
+be given a player's profile, a campaign's title and writing-style reference, \
+one adventure hook concept, and the featured location and character. Write \
+that hook's opening narration.
+
+WRITING GUIDELINES:
+1. Start in media res, with sensory detail: sound, smell, temperature, \
+light.
+2. Set up the hook's central conflict or strange happening.
+3. Describe the featured character present in the location, true to their \
+biography, traits and role in this hook.
+4. Show, do not tell. Do not write the player character's dialogue or \
+actions; describe their presence and the sensory environment around them.
+5. Keep it to one rich, atmospheric paragraph of four to six sentences.
+6. When the player character's name, appearance or backstory are given, \
+pull them into the scene explicitly rather than writing around them.
+
+";
+
 const JUDGE_ROLE: &str = "\
 === TRANSCRIPT JUDGE ===
 You are grading one turn of an interactive story. You are not playing it, \
@@ -337,10 +390,23 @@ mod tests {
             actor_instructions(Speech::Verbal),
             director_instructions(),
             combined_instructions(Speech::Verbal),
+            starter_selection_instructions(),
+            starter_narration_instructions(),
         ] {
             assert!(!text.contains("JSON RESPONSE SCHEMA"));
             assert!(!text.to_lowercase().contains("perfectly formatted"));
         }
+    }
+
+    #[test]
+    fn starter_instructions_keep_the_persona_rules() {
+        let selection = starter_selection_instructions();
+        assert!(selection.contains("Dungeon Master"));
+        assert!(selection.contains("in the same order the clusters were given"));
+
+        let narration = starter_narration_instructions();
+        assert!(narration.contains("in media res"));
+        assert!(narration.contains("Show, do not tell."));
     }
 
     #[test]
@@ -354,6 +420,10 @@ mod tests {
         assert_eq!(
             combined_instructions(Speech::NonVerbal),
             combined_instructions(Speech::NonVerbal)
+        );
+        assert_eq!(
+            starter_selection_instructions(),
+            starter_selection_instructions()
         );
     }
 

@@ -633,7 +633,7 @@ Adding `apps/mobile` as a second Tauri target, a reduced UI for small screens, a
 | `VaultCompiler.gd` | 1,337 | `ingest/` | Highest-value port. Preserve heuristics, pin with `messy/` fixture. |
 | `GameLoopController.gd` | 1,069 | `turn/` | Becomes an explicit state machine. |
 | `LLMClient.gd` | 902 | `inference/` | Mostly deleted; replaced by crates. |
-| `OnboardingFlow.gd` | 1,150 | `apps/desktop` | UI only. |
+| `OnboardingFlow.gd` | 1,150 | `onboarding/` + `apps/desktop` | Adventure-starter generation (cluster finder, two-pass prompt pipeline) ported to `orison-core`; only the screen itself is UI. |
 | `MainViewport.gd` | 865 | `apps/desktop` | UI only. |
 | `CampaignState.gd` | 757 | `state/` | JSON document → SQLite tables. |
 | `CampaignGraphView.gd` | 765 | `apps/desktop` | Replaced by a graph library. |

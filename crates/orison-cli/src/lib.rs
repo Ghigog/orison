@@ -9,4 +9,5 @@
 pub mod campaign;
 pub mod config;
 pub mod error;
+pub mod onboarding;
 pub mod shell;

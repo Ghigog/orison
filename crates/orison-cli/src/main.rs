@@ -16,7 +16,7 @@
 //! product pillar rather than an implementation detail: no vault content,
 //! gameplay text or user data leaves the machine.
 
-use orison_cli::{campaign, config, error, shell};
+use orison_cli::{campaign, config, error, onboarding, shell};
 
 use std::collections::BTreeMap;
 use std::io::{BufReader, Write};
@@ -24,7 +24,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
-use orison_core::turn::{TurnConfig, TurnEngine};
+use orison_core::onboarding::StarterProgress;
+use orison_core::turn::{CancelToken, TurnConfig, TurnEngine};
 
 use config::ModelArgs;
 use error::CliError;
@@ -67,6 +68,14 @@ enum Command {
         vault: PathBuf,
         #[arg(long = "folder-type", value_parser = parse_folder_type)]
         folder_types: Vec<(String, String)>,
+    },
+    /// Generate adventure-starter hooks for a compiled campaign and pick
+    /// one. Reads the pick from stdin, so this stays scriptable.
+    Start {
+        /// Which campaign. Omitted, the most recently played one.
+        campaign: Option<String>,
+        #[command(flatten)]
+        models: ModelArgs,
     },
     /// Play. Reads from stdin, so a scripted transcript can be piped in.
     Play {
@@ -150,6 +159,100 @@ async fn run() -> Result<(), CliError> {
                 &folder_types.into_iter().collect::<BTreeMap<_, _>>(),
             )?;
             print_import(&mut out, &report)?;
+        }
+
+        Command::Start {
+            campaign: id,
+            models,
+        } => {
+            let id = match id {
+                Some(id) => id,
+                None => campaign::list(&store)?
+                    .into_iter()
+                    .max_by(|a, b| a.last_played.cmp(&b.last_played))
+                    .map(|c| c.id)
+                    .ok_or(CliError::NoCampaigns)?,
+            };
+            let session = campaign::open_session(&store, &id)?;
+            if campaign::is_empty(&session) {
+                writeln!(
+                    out,
+                    "{id} has no vault compiled into it yet. Run: orison import {id} <vault>"
+                )?;
+                return Ok(());
+            }
+            let mut campaign = campaign::load(&store, &id)?;
+
+            let backends = models.connect().await?;
+            let config = TurnConfig {
+                profile: backends.profile,
+                ..TurnConfig::default()
+            };
+            let cancel = CancelToken::new();
+
+            let starters = {
+                let out = &mut out;
+                onboarding::generate(
+                    session.graph(),
+                    &campaign,
+                    backends.director.as_ref(),
+                    backends.actor.as_ref(),
+                    config.director_sampling.clone(),
+                    config.actor_sampling.clone(),
+                    config.keep_alive,
+                    &cancel,
+                    |progress| {
+                        let _ = match progress {
+                            StarterProgress::BuildingClusters => {
+                                writeln!(out, "Finding starting places...")
+                            }
+                            StarterProgress::SelectingHooks => {
+                                writeln!(out, "Choosing hooks...")
+                            }
+                            StarterProgress::WritingNarration { index, total } => {
+                                writeln!(out, "Writing hook {}/{total}...", index + 1)
+                            }
+                        };
+                    },
+                )
+                .await
+            };
+            let starters = match starters {
+                Ok(starters) => starters,
+                Err(reason) => {
+                    writeln!(out, "Stopped: {reason}.")?;
+                    return Ok(());
+                }
+            };
+
+            writeln!(out)?;
+            for (index, starter) in starters.iter().enumerate() {
+                writeln!(
+                    out,
+                    "{}. {} — {}\n   {}\n",
+                    index + 1,
+                    starter.title,
+                    starter.description,
+                    starter.narration
+                )?;
+            }
+            write!(out, "Pick one [1-{}]: ", starters.len())?;
+            out.flush()?;
+
+            let mut choice = String::new();
+            std::io::stdin().read_line(&mut choice)?;
+            let picked_index = choice
+                .trim()
+                .parse::<usize>()
+                .ok()
+                .filter(|n| *n >= 1 && *n <= starters.len())
+                .map(|n| n - 1)
+                .unwrap_or(0);
+            let picked = &starters[picked_index];
+
+            onboarding::pick(&store, &mut campaign, picked, &shell::timestamp())?;
+            writeln!(out, "\n{}\n", picked.narration)?;
+            writeln!(out, "Play it: orison play {}", campaign.id)?;
         }
 
         Command::Play {

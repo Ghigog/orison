@@ -84,6 +84,8 @@ pub fn run() {
             commands::locations,
             commands::graph_edges,
             commands::character_emotion,
+            commands::generate_starters,
+            commands::pick_starter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
