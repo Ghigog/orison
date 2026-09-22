@@ -78,7 +78,7 @@ Splitting the engine into a standalone Rust crate makes the UI decision reversib
 - A Tauri 2 desktop shell for Windows, macOS and Linux.
 - An evaluation harness that measures narrative and retrieval quality, not just parser correctness.
 - Correction of the inference-layer defects catalogued in Appendix B.
-- Migration of existing save files, or an explicit decision to break them (see [D-6](#appendix-d--decisions-and-open-questions)).
+- ~~Migration of existing save files~~, or an explicit decision to break them (see [D-6](#appendix-d--decisions-and-open-questions)). **Resolved: they do not carry.** No saves worth keeping exist, so no importer is being written and none is owed.
 
 ### 2.2 Explicitly deferred: mobile
 
@@ -432,6 +432,8 @@ This is the second-largest quality win in the plan, after §2.2.
 
 Pipeline: metadata filter → parallel BM25 (`tantivy`) and dense ANN (`sqlite-vec`) → reciprocal rank fusion → cross-encoder rerank → budget-aware truncation.
 
+> **What was actually built, and what was not.** BM25 and fusion shipped and carry the retrieval win. The dense half exists (`sqlite-vec`, `DenseIndex`) and is **not wired into gameplay** — `TurnEngine::retrieve_lore` passes `None`, because an embedding model is configuration that may be absent. The cross-encoder was never built and [D-8](#appendix-d--decisions-and-open-questions) has now closed it on a measured null result: the model-free stand-in that was written instead moves no recall on any fixture. The instruction below — *add stages only where recall@k actually improves* — is the reason both outcomes look like this, and it worked.
+
 Why this matters specifically for Orison: the current retrieval is dense-only and brute-force (`EmbeddingStore.get_knn` cosines every stored vector on every query). Dense embeddings are structurally weak on rare proper nouns, and a personal worldbuilding vault is *almost entirely* rare proper nouns: invented character names, place names, faction names. BM25 handles exactly that case, and fusing the two consistently beats either alone. Reranking on top is the highest-return single addition to any retrieval pipeline.
 
 Measure each stage against `ground_truth.toml`. Add stages only where recall@k actually improves; do not adopt the pipeline on faith.
@@ -641,7 +643,7 @@ remaining parity work is for.
 |---|---|
 | `WelcomeScreen`, `SetupWizard` | **Real, and small.** There is no first-run path. The shell opens on an empty campaign list, which assumes somebody who already knows what Orison is. |
 | `CharacterCreator` | **Real.** `OnboardingFlow.gd`'s adventure-starter half was ported to the core and the shell ([#41](https://github.com/Ghigog/orison/issues/41)); the player-character half — avatar, description, the vision-model magic wand — was not, and `orison-core` has no equivalent. |
-| `AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel` | **Blocked on a decision, not on work.** All three are image generation. [D-7](#appendix-d--decisions-and-open-questions) is still Open and `orison-core` has no `media/` module, so these cannot be called missing or dismissed until D-7 is decided. Appendix A still maps `ImageGenManager.gd` to `media/`. |
+| `AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel` | **Not gaps, as of [D-7](#appendix-d--decisions-and-open-questions).** All three are image generation, which is not being ported: the Draw Things / A1111 contract stays in the Godot build and `orison-core` gets no `media/` module. Adding it to the Rust build later is a new feature, not unfinished migration. |
 | `ToastMessage`, `FloatingEmoji` | **Not gaps.** Round 2 chose an inline Interrupted state over toasts on purpose (see [docs/design/README.md](design/README.md)), and floating emoji are round 1 flourish the paper direction dropped. |
 
 Two screens are built but partial, and say so in the UI rather than faking it:
@@ -666,9 +668,11 @@ on which file you open.
 > **Phase 6 is not closed.** Two of three criteria are met, the third needs
 > the parity work above, and none of the three has been confirmed by a person
 > using the application. The order that follows from this: build the
-> first-run path and the character creator, decide D-7, rewrite
-> `design_philosophy.md`, then playtest — and let the playtest, not the
-> checklist, decide whether Phase 6 is done.
+> first-run path and the character creator, rewrite `design_philosophy.md`,
+> then playtest — and let the playtest, not the checklist, decide whether
+> Phase 6 is done. D-7 was a fourth item and is now decided: image generation
+> is not ported, so those three screens are no longer gaps and nothing is owed
+> for them.
 >
 > Phase 7 is written up at [handoff_phase7.md](handoff_phase7.md), and its
 > first item — the first-run path — is the same surface as Phase 6's missing
@@ -680,24 +684,27 @@ on which file you open.
 
 > **Executable brief**: [handoff_phase7.md](handoff_phase7.md). It carries four
 > findings that were not known when this section was written and that change
-> what the model-acquisition item is for, the §2.3 conflict the updater item
-> walks into, the decisions this phase owes, and proposed exit criteria — this
-> section has none.
+> what the model-acquisition item is for, and proposed exit criteria — this
+> section has none. The decisions it said this phase owed are now made:
+> [D-3](#appendix-d--decisions-and-open-questions) (in-process `llama.cpp`,
+> gated on running it once), [D-6](#appendix-d--decisions-and-open-questions)
+> (saves do not carry), [D-7](#appendix-d--decisions-and-open-questions)
+> (image generation is not ported) and the updater (there will not be one).
 
 **Duration estimate**: 1-2 weeks.
 
 - Signed builds for macOS (notarised), Windows and Linux (AppImage / Flatpak).
 - Model acquisition flow: guided download with progress and checksum verification, not "go install Ollama and run these commands." First-run friction is where most local-AI applications lose their users. Backlog ticket OBD001 already scoped this; build it properly here.
-- Tauri's built-in updater.
-- A save-migration path from Godot-era saves, or an explicit statement that they do not carry (see [D-6](#appendix-d--decisions-and-open-questions)).
+- ~~Tauri's built-in updater.~~ **Decided: no updater.** An update check is network egress to an endpoint the user did not configure, which [§2.3](#23-permanently-out-of-scope) puts permanently out of scope, and the shell's Settings screen answers "what leaves this machine" with "Nothing." Rather than amend the pillar to fit the feature, the feature goes: releases are downloads. The cost is accepted and named — users run whatever build they installed until they fetch another. §2.3 and the Settings screen stay literally true, with no exception to explain.
+- ~~A save-migration path from Godot-era saves~~ — **decided: they do not carry** ([D-6](#appendix-d--decisions-and-open-questions)). This is the explicit statement §2.1 permits, and nothing needs building for it.
 
 **Four things the list above does not account for**, each written up in the
 handoff:
 
 1. **The desktop shell hardcodes `tokenizer: None`** (`apps/desktop/src-tauri/src/commands.rs:47`), so every desktop session budgets context by counting words. B-1 was a critical defect about over-budgeted prompts and its fix is only as good as the counter. A tokenizer arrives with a model or not at all, so the acquisition flow owns this.
 2. **Dense retrieval and RAPTOR are built, tested and unwired** (`turn/engine.rs:802` passes `None`; `knowledge/raptor.rs` is called by nothing outside its own tests). OBD001's four-row checklist asks the player to download `nomic-embed-text`, which the engine would never call. Ship three rows, or wire the dense half first — but not the checklist as written.
-3. **`LlamaCppBackend` has never run against real weights.** [D-3](#appendix-d--decisions-and-open-questions) says it is likely the eventual default "once model acquisition is guided", which is this phase. Run it against a real GGUF before designing a download flow around it.
-4. **The updater contradicts [§2.3](#23-permanently-out-of-scope).** An update check is egress to an endpoint the user did not configure, and the shell's Settings screen currently answers "what leaves this machine" with "Nothing." Decide the exception explicitly, or drop the updater; do not let the binary and the pillar quietly disagree.
+3. **`LlamaCppBackend` has never run against real weights**, and [D-3](#appendix-d--decisions-and-open-questions) now commits the acquisition flow to it. **This makes running it the first task of the phase**, ahead of any UI: one real GGUF, one machine, one afternoon. Everything else in the model-acquisition item is designed on the assumption it works, and nobody has established that.
+4. ~~**The updater contradicts [§2.3](#23-permanently-out-of-scope).**~~ **Resolved: no updater** (see the bullet above). The pillar wins over the feature.
 
 **Phase 7 exit criteria** are proposed in [handoff_phase7.md](handoff_phase7.md),
 since this section never carried any. The one that matters: a new user reaches
@@ -747,7 +754,7 @@ Adding `apps/mobile` as a second Tauri target, a reduced UI for small screens, a
 | `CampaignGraphView.gd` | 765 | `apps/desktop` | Replaced by a graph library. |
 | `ThemeManager.gd` | 741 | `apps/desktop` | Replaced by CSS custom properties. |
 | `SystemPrompts.gd` | 547 | `prompt/templates/` | Content survives; schema text stripped. |
-| `ImageGenManager.gd` | 543 | `media/` | Keep the Draw Things / A1111 contract. |
+| `ImageGenManager.gd` | 543 | **Not ported** | Was `media/`, keeping the Draw Things / A1111 contract. [D-7](#appendix-d--decisions-and-open-questions) dropped it: image generation stays in the Godot build. |
 | `PromptBuilder.gd` | 522 | `prompt/` | Rewrite budgeting against real tokens. |
 | `ProceduralArtEngine.gd` | 413 | `apps/desktop` | Canvas or SVG. |
 | `KnowledgeGraphManager.gd` | 347 | `knowledge/` | Becomes authoritative. |
@@ -1084,12 +1091,12 @@ Migration does not mean starting over. These survive intact and represent most o
 |---|---|---|
 | D-1 | Shell framework | **Decided**: Tauri 2. Reversible by design; the engine is a standalone crate. |
 | D-2 | Mobile | **Decided**: deferred, criteria in Phase 8. |
-| D-3 | Default inference backend | **Decided for Phases 2-6, and due again in Phase 7**: Ollama for onboarding ease, `llama.cpp` in-process available from Phase 2 and likely the eventual default once model acquisition is guided. Phase 7 *is* guided model acquisition, so the deferral has expired. Note before choosing: `LlamaCppBackend` compiles under `--features llama-cpp` and has never been executed against real weights (its own header says so; CI does not build it). Run it before betting the acquisition flow on it. |
+| D-3 | Default inference backend | **Decided, with a gate**: the direction is in-process `llama.cpp`, and Phase 7's model acquisition targets GGUF files rather than `ollama pull`. That removes the separate Ollama install, removes the "is the server running?" failure class entirely, delivers a `tokenizer.json` alongside the weights (which is the only thing that fixes the shell's hardcoded `tokenizer: None`), and is the one path that also serves [Phase 8](#phase-8--mobile-re-entry-deferred-not-closed), since a phone cannot spawn a sidecar. **The gate**: `LlamaCppBackend` compiles under `--features llama-cpp` and has never been executed against real weights (its own header says so; CI does not build it). Run it against a real GGUF *before* any of the acquisition flow is designed around it. If it does not work, this reverts to Ollama and the tokenizer problem needs a different answer — found out for the cost of an afternoon rather than a phase. Ollama stays supported either way; `InferenceBackend` is a trait and §3.4's reversibility argument applies. |
 | D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
 | D-5 | Frontend framework inside Tauri | **Decided**: none. The shell is vanilla TypeScript over the Tauri command layer — one `main.ts` router, plus `markdown.ts` and `graph.ts`. This was not argued for, it is just what Phase 6 built and it held; recorded here so the next person knows it was a default rather than a conclusion, and is free to revisit it if a screen ever needs more than a re-render. |
-| D-6 | Godot-era save compatibility | **Open, and overdue**: a one-shot JSON-to-SQLite importer is cheap; whether it is worth writing depends on whether any saves worth keeping exist. The note said decide before Phase 3.1; Phase 3.1 shipped. It is now Phase 7's, and §2.1 requires an answer either way — including the answer that they do not carry. It turns on one question only: do any Godot-era saves exist that somebody wants to keep? |
-| D-7 | Image generation | **Open**: keep the Draw Things / A1111 HTTP contract as-is, or reconsider given VRAM contention with two resident LLMs. Revisit after D-4. |
-| D-8 | Reranker model | **Open**: which cross-encoder is small enough to run locally without materially hurting turn latency. Measure in Phase 3.4. |
+| D-6 | Godot-era save compatibility | **Decided: they do not carry.** No Godot-era saves exist that are worth keeping, so the one-shot JSON-to-SQLite importer §2.1 permits is not being written. This is the explicit statement §2.1 requires, not an omission. A Godot-era save is not migrated, detected or warned about; the Rust build simply does not read them. Anyone who later finds one they want has the Godot build under feature freeze to read it with, and an importer remains cheap to write if that day comes. |
+| D-7 | Image generation | **Decided: not ported.** The Draw Things / A1111 HTTP contract stays in the Godot build and is not carried into the Rust core or the Tauri shell. `orison-core` gets no `media/` module. Three Godot screens (`AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel`) therefore stop being parity gaps, and the VRAM contention this row was opened over stops being a question: only the two LLMs are resident. Adding image generation to the Rust build later is a new feature with its own case to make, not an unfinished migration item. |
+| D-8 | Reranker model | **Decided: no cross-encoder, on a measured null result.** Phase 3.4 answered this and the row was never updated. No cross-encoder was ever built — none was reachable from the build environment, and shipping something *called* one would have repeated the `LlamaCppBackend` problem. `PassageReranker` was written instead as a model-free stand-in aimed at the same failure, and measured: it **moves no recall on any fixture**, changing only ordering, and only on `messy` (MRR 0.900 → 1.000). See [eval_baseline.md](eval_baseline.md). Adding a model to reorder results that are already correct is not worth the latency. `PassageReranker` stays in the tree, tested and available behind the `Reranker` trait, wired to nothing (`turn/engine.rs` passes `NoRerank`). Reopen only if retrieval quality becomes a complaint from somebody actually playing — the same trigger [testing_backlog.md](testing_backlog.md) uses. |
 
 ### D-4 — the Director/Actor experiment, measured
 
