@@ -158,7 +158,7 @@ func send_player_input(input_text: String) -> void:
 # UI Update Receivers (from GameLoopController signals)
 # ==============================================================================
 
-func _on_controller_campaign_started(title: String, active_location_id: String) -> void:
+func _on_controller_campaign_started(_title: String, _active_location_id: String) -> void:
 	_displayed_messages.clear()
 	_is_sidebar_collapsed = false
 	sidebar_container.offset_left = -350.0
@@ -168,7 +168,7 @@ func _on_controller_campaign_started(title: String, active_location_id: String) 
 	_update_memory_ui()
 	_refresh_character_list()
 
-func _on_controller_campaign_loaded(campaign_id: String) -> void:
+func _on_controller_campaign_loaded(_campaign_id: String) -> void:
 	_is_sidebar_collapsed = false
 	sidebar_container.offset_left = -350.0
 	sidebar_container.offset_right = 0.0
@@ -377,17 +377,16 @@ func _update_nameplate_color(sender: String) -> void:
 func _get_adjusted_sender_color(sender: String, is_light: bool) -> String:
 	if sender == "user" or sender == "player":
 		return "#EA580C" if is_light else "#FF5F38"
-	elif sender == "system":
+	if sender == "system":
 		return "#4B5563" if is_light else "#A59EBF"
-	elif sender == "narrator":
+	if sender == "narrator":
 		return "#4A3F35" if is_light else "#FFF8F2"
-	else:
-		var character = CampaignState.get_character(sender)
-		if not character.is_empty():
-			var emotions = character.get("emotions", [])
-			var last_emotion = emotions[-1].get("emotion", "serenity") if not emotions.is_empty() else "serenity"
-			return _get_emotion_hex_color(last_emotion, is_light)
-		return "#BE123C" if is_light else "#F43F5E"
+	var character = CampaignState.get_character(sender)
+	if not character.is_empty():
+		var emotions = character.get("emotions", [])
+		var last_emotion = emotions[-1].get("emotion", "serenity") if not emotions.is_empty() else "serenity"
+		return _get_emotion_hex_color(last_emotion, is_light)
+	return "#BE123C" if is_light else "#F43F5E"
 
 func _get_emotion_hex_color(emotion: String, is_light: bool) -> String:
 	match emotion.to_lower():
@@ -570,7 +569,7 @@ func _on_theme_changed() -> void:
 	_rebuild_dialogue_text()
 	_update_memory_ui()
 
-func _on_background_generated(output_path: String, is_placeholder: bool) -> void:
+func _on_background_generated(output_path: String, _is_placeholder: bool) -> void:
 	unregister_task("image_gen")
 	var campaign_id = CampaignState.state.get("adventure_meta", {}).get("campaign_id", "default")
 	var filename = _last_rendered_location.to_lower().replace(" ", "_")
@@ -673,8 +672,8 @@ func show_toast(message: String, is_error: bool = false, duration: float = 4.0) 
 	if not _toast_container:
 		return
 		
-	var toast_scene = preload("res://scenes/ui/ToastMessage.tscn")
-	var toast = toast_scene.instantiate()
+	var ToastScene = preload("res://scenes/ui/ToastMessage.tscn")
+	var toast = ToastScene.instantiate()
 	_toast_container.add_child(toast)
 	toast.setup(message, is_error)
 	
@@ -807,7 +806,7 @@ func _close_or_toggle_settings() -> void:
 			if child.has_method("_on_close_pressed"):
 				child._on_close_pressed()
 				return
-			elif child.has_method("close"):
+			if child.has_method("close"):
 				child.close()
 				return
 				

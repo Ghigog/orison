@@ -82,18 +82,17 @@ func get_nearby_character_ids(active_character_id: String) -> Array[String]:
 			# If locations are defined in the campaign, but none is active,
 			# do not return all characters. Just return the active character (if any).
 			return nearby_ids
-		else:
-			# Fallback if no locations exist in the entire campaign (simple campaigns)
-			var char_ids = CampaignState.get_character_ids()
-			for char_id in char_ids:
-				if char_id == "player":
-					continue
-				var char_data = CampaignState.get_character(char_id)
-				if char_data.get("is_creature", false) or not char_data.get("can_speak", true):
-					continue
-				if not nearby_ids.has(char_id):
-					nearby_ids.append(char_id)
-			return nearby_ids
+		# Fallback if no locations exist in the entire campaign (simple campaigns)
+		var char_ids = CampaignState.get_character_ids()
+		for char_id in char_ids:
+			if char_id == "player":
+				continue
+			var char_data = CampaignState.get_character(char_id)
+			if char_data.get("is_creature", false) or not char_data.get("can_speak", true):
+				continue
+			if not nearby_ids.has(char_id):
+				nearby_ids.append(char_id)
+		return nearby_ids
 		
 	if not graph_manager:
 		return nearby_ids

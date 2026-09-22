@@ -116,11 +116,11 @@ func _estimate_message_height(msg: Dictionary) -> float:
 	var paragraphs = text.split("\n")
 	var est_lines = 0
 	
-	var W = size.x - 60.0 # accounting for left/right margins + padding
-	if W <= 100.0:
-		W = 800.0 # default fallback
-		
-	var chars_per_line = max(15.0, W / 9.0) # ~9px per character on average for 18px font
+	var available_width = size.x - 60.0 # accounting for left/right margins + padding
+	if available_width <= 100.0:
+		available_width = 800.0 # default fallback
+
+	var chars_per_line = max(15.0, available_width / 9.0) # ~9px per character on average for 18px font
 	
 	for p in paragraphs:
 		var p_len = p.length()

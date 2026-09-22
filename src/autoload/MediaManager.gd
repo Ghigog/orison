@@ -145,14 +145,13 @@ func load_audio_file(path: String) -> AudioStream:
 		# Validate OGG magic header 'OggS' ([0x4f, 0x67, 0x67, 0x53]) to avoid native hangs on corrupt files
 		if bytes.size() >= 4 and bytes[0] == 0x4f and bytes[1] == 0x67 and bytes[2] == 0x67 and bytes[3] == 0x53:
 			return AudioStreamOggVorbis.load_from_file(path)
-		else:
-			printerr("[MediaManager] Invalid OGG file magic header (missing 'OggS') for: ", path)
-			return null
-	elif ext == "mp3":
+		printerr("[MediaManager] Invalid OGG file magic header (missing 'OggS') for: ", path)
+		return null
+	if ext == "mp3":
 		var stream = AudioStreamMP3.new()
 		stream.data = bytes
 		return stream
-	elif ext == "wav":
+	if ext == "wav":
 		var stream = AudioStreamWAV.new()
 		# Simple WAV header bypass to load raw PCM data
 		if bytes.size() > 44:

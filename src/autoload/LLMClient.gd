@@ -421,7 +421,7 @@ func test_connection(test_url: String, callback: Callable) -> void:
 		callback.call(false, "Failed to start HTTP request.", [])
 		temp_http.queue_free()
 
-func _on_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS:
 		printerr("HTTP Request failed: result code ", result)
 		request_failed.emit("Connection failed or timed out. (Code: " + str(result) + ")")
@@ -611,7 +611,7 @@ func send_custom_stream_request(prompt: String, model_name: String, on_chunk: Ca
 	})
 
 ## Sends a custom prompt with an image asynchronously and streams the response via callbacks.
-func send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, priority: int = RequestPriority.HIGH, role: String = ROLE_AUTO) -> void:
+func send_custom_vision_stream_request(prompt: String, image_path: String, model_name: String, on_chunk: Callable, on_completed: Callable, on_failed: Callable, timeout: float = 300.0, priority: int = RequestPriority.HIGH, _role: String = ROLE_AUTO) -> void:
 	var wrapped_completed = func(full_text: String):
 		if on_completed.is_valid():
 			on_completed.call(full_text)

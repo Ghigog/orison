@@ -1,0 +1,46 @@
+# gdlint configuration for the Godot build.
+#
+# Triage for https://github.com/Ghigog/orison/issues/3. The codebase was
+# never linted before CI added this job, so the defaults surfaced ~2,900
+# findings. Most fall into three buckets:
+#
+#   1. Real, small, mechanical fixes (no-elif-return, no-else-return,
+#      unused-argument, the *-variable-name checks) - fixed directly, not
+#      tuned away.
+#   2. trailing-whitespace and max-line-length reformatting (gdformat would
+#      touch 57 files) - deliberately NOT done here. Landing that diff in
+#      the same change as anything else makes both unreviewable; it is
+#      still open as a follow-up batch per the issue.
+#   3. Rules below, disabled or loosened, because satisfying them would mean
+#      a purely mechanical restructuring of files this project is not going
+#      to keep: the Godot build is in feature freeze pending the Rust/Tauri
+#      port (docs/migration_plan.md), so paying for a member-reordering or
+#      file-splitting pass now buys nothing before that code is replaced.
+
+# class-definitions-order: reordering signals/consts/vars/methods into
+# gdlint's prescribed section order is pure churn across 44 files (some with
+# 20-30 violations each) with no behavioural upside, and non-trivial risk of
+# breaking @onready/export initialization order along the way. Not worth
+# doing on code the migration plan replaces outright.
+#
+# max-public-methods: the two files over the default of 20 are
+# CampaignState (a global-state autoload, whose whole job is to expose
+# state) and TestRunnerNode (46 independent test_* methods by design, see
+# AGENTS.md). Neither file's method count says anything about cohesion.
+disable:
+  - class-definitions-order
+  - max-public-methods
+
+# The default of 100 flags 582 lines, the large majority of which are
+# comments and format strings rather than a case where wrapping code would
+# actually help readability. 120 matches the length this codebase already
+# writes at in practice.
+max-line-length: 120
+
+# GameLoopController.gd, VaultCompiler.gd, OnboardingFlow.gd and
+# TestRunnerNode.gd exceed 1000 lines by design: they are orchestration/
+# compiler/test-runner files this repo's own docs (AGENTS.md) call out as
+# intentionally monolithic. Splitting them for a lint threshold ahead of a
+# rewrite is not a fix, just churn.
+max-file-lines: 4000
+

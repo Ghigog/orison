@@ -523,8 +523,7 @@ func get_avatar_path(char_id: String, emotion: String = "") -> String:
 		campaign_id = CampaignState.state.get("adventure_meta", {}).get("campaign_id", "default")
 	if emotion.is_empty():
 		return "user://adventures/%s/generated_assets/character_%s.png" % [campaign_id, char_id]
-	else:
-		return "user://adventures/%s/generated_assets/character_%s_%s.png" % [campaign_id, char_id, emotion]
+	return "user://adventures/%s/generated_assets/character_%s_%s.png" % [campaign_id, char_id, emotion]
 
 func get_scene_path(location_id: String) -> String:
 	var campaign_id = "default"
@@ -536,8 +535,8 @@ func get_scene_path(location_id: String) -> String:
 func get_asset_state(path: String) -> Dictionary:
 	if _generations_in_progress.has(path):
 		return { "status": "generating", "error": "" }
-	elif generation_errors.has(path):
+	if generation_errors.has(path):
 		return { "status": "error", "error": generation_errors[path] }
-	elif FileAccess.file_exists(path):
+	if FileAccess.file_exists(path):
 		return { "status": "success", "error": "" }
 	return { "status": "none", "error": "" }

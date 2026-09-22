@@ -998,9 +998,8 @@ func _find_and_copy_asset(ref_val: String, search_list: Array[String], target_di
 	if copy_err == OK:
 		print("[VaultCompiler] Successfully copied asset from %s to %s" % [source_path, target_path])
 		return target_path
-	else:
-		printerr("[VaultCompiler] Failed to copy asset from %s to %s (error %d)" % [source_path, target_path, copy_err])
-		return ""
+	printerr("[VaultCompiler] Failed to copy asset from %s to %s (error %d)" % [source_path, target_path, copy_err])
+	return ""
 
 func _embed_all_nodes(campaign_id: String):
 	if campaign_id.is_empty():

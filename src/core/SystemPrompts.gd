@@ -495,8 +495,7 @@ static func _get_first_sentence(text: String) -> String:
 				
 	if end_idx != -1:
 		return clean.left(end_idx + 1).strip_edges()
-	else:
-		return clean.left(100).strip_edges()
+	return clean.left(100).strip_edges()
 
 ## Returns the system prompt for the Director ReAct loop (left-brain research)
 static func get_director_react_system_prompt() -> String:

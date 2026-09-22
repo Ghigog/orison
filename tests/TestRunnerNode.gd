@@ -3377,10 +3377,9 @@ func test_semantic_retrieval() -> bool:
 	LLMClient.mock_embedding_handler = func(text: String) -> Array:
 		if "young man in the forge" in text or "blacksmith's apprentice" in text:
 			return [1.0, 0.0, 0.0]
-		elif "grumpy dwarven merchant" in text or "dwarf merchant" in text:
+		if "grumpy dwarven merchant" in text or "dwarf merchant" in text:
 			return [0.0, 1.0, 0.0]
-		else:
-			return [0.0, 0.0, 0.0]
+		return [0.0, 0.0, 0.0]
 			
 	# Seed mock embeddings in the store
 	EmbeddingStore.clear()
