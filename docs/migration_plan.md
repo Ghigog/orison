@@ -643,7 +643,7 @@ remaining parity work is for.
 |---|---|
 | `WelcomeScreen`, `SetupWizard` | **Real, and small.** There is no first-run path. The shell opens on an empty campaign list, which assumes somebody who already knows what Orison is. |
 | `CharacterCreator` | **Real.** `OnboardingFlow.gd`'s adventure-starter half was ported to the core and the shell ([#41](https://github.com/Ghigog/orison/issues/41)); the player-character half — avatar, description, the vision-model magic wand — was not, and `orison-core` has no equivalent. |
-| `AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel` | **Not gaps, as of [D-7](#appendix-d--decisions-and-open-questions).** All three are image generation, which is not being ported: the Draw Things / A1111 contract stays in the Godot build and `orison-core` gets no `media/` module. Adding it to the Rust build later is a new feature, not unfinished migration. |
+| `AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel` | **Real.** Image generation (character portraits, environment art) is being ported — [#59](https://github.com/Ghigog/orison/issues/59). |
 | `ToastMessage`, `FloatingEmoji` | **Not gaps.** Round 2 chose an inline Interrupted state over toasts on purpose (see [docs/design/README.md](design/README.md)), and floating emoji are round 1 flourish the paper direction dropped. |
 
 Two screens are built but partial, and say so in the UI rather than faking it:
@@ -670,9 +670,8 @@ on which file you open.
 > using the application. The order that follows from this: build the
 > first-run path and the character creator, rewrite `design_philosophy.md`,
 > then playtest — and let the playtest, not the checklist, decide whether
-> Phase 6 is done. D-7 was a fourth item and is now decided: image generation
-> is not ported, so those three screens are no longer gaps and nothing is owed
-> for them.
+> Phase 6 is done. Image generation was a fourth item and is now a real parity
+> gap rather than a closed decision — [#59](https://github.com/Ghigog/orison/issues/59).
 >
 > Phase 7 is written up at [handoff_phase7.md](handoff_phase7.md), and its
 > first item — the first-run path — is the same surface as Phase 6's missing
@@ -688,8 +687,9 @@ on which file you open.
 > section has none. The decisions it said this phase owed are now made:
 > [D-3](#appendix-d--decisions-and-open-questions) (in-process `llama.cpp`,
 > gated on running it once), [D-6](#appendix-d--decisions-and-open-questions)
-> (saves do not carry), [D-7](#appendix-d--decisions-and-open-questions)
-> (image generation is not ported) and the updater (there will not be one).
+> (saves do not carry) and the updater (there will not be one). Image
+> generation is now a parity requirement, tracked as
+> [#59](https://github.com/Ghigog/orison/issues/59).
 
 **Duration estimate**: 1-2 weeks.
 
@@ -754,7 +754,7 @@ Adding `apps/mobile` as a second Tauri target, a reduced UI for small screens, a
 | `CampaignGraphView.gd` | 765 | `apps/desktop` | Replaced by a graph library. |
 | `ThemeManager.gd` | 741 | `apps/desktop` | Replaced by CSS custom properties. |
 | `SystemPrompts.gd` | 547 | `prompt/templates/` | Content survives; schema text stripped. |
-| `ImageGenManager.gd` | 543 | **Not ported** | Was `media/`, keeping the Draw Things / A1111 contract. [D-7](#appendix-d--decisions-and-open-questions) dropped it: image generation stays in the Godot build. |
+| `ImageGenManager.gd` | 543 | `media/` | Keep the Draw Things / A1111 contract. Port tracked as [#59](https://github.com/Ghigog/orison/issues/59). |
 | `PromptBuilder.gd` | 522 | `prompt/` | Rewrite budgeting against real tokens. |
 | `ProceduralArtEngine.gd` | 413 | `apps/desktop` | Canvas or SVG. |
 | `KnowledgeGraphManager.gd` | 347 | `knowledge/` | Becomes authoritative. |
@@ -1095,7 +1095,7 @@ Migration does not mean starting over. These survive intact and represent most o
 | D-4 | Director/Actor split | **Decided**: keep the split (arm A). The two flagged narrations were read in Phase 5.0 and are both false positives; arm A wins outright on both fixtures once discounted. See below. |
 | D-5 | Frontend framework inside Tauri | **Decided**: none. The shell is vanilla TypeScript over the Tauri command layer — one `main.ts` router, plus `markdown.ts` and `graph.ts`. This was not argued for, it is just what Phase 6 built and it held; recorded here so the next person knows it was a default rather than a conclusion, and is free to revisit it if a screen ever needs more than a re-render. |
 | D-6 | Godot-era save compatibility | **Decided: they do not carry.** No Godot-era saves exist that are worth keeping, so the one-shot JSON-to-SQLite importer §2.1 permits is not being written. This is the explicit statement §2.1 requires, not an omission. A Godot-era save is not migrated, detected or warned about; the Rust build simply does not read them. Anyone who later finds one they want has the Godot build under feature freeze to read it with, and an importer remains cheap to write if that day comes. |
-| D-7 | Image generation | **Decided: not ported.** The Draw Things / A1111 HTTP contract stays in the Godot build and is not carried into the Rust core or the Tauri shell. `orison-core` gets no `media/` module. Three Godot screens (`AssetStatusOverlay`, `DrawThingsTutorial`, `ImageGenSettingsPanel`) therefore stop being parity gaps, and the VRAM contention this row was opened over stops being a question: only the two LLMs are resident. Adding image generation to the Rust build later is a new feature with its own case to make, not an unfinished migration item. |
+| D-7 | Image generation | **Superseded — tracked as [#59](https://github.com/Ghigog/orison/issues/59).** Character portraits and environment art are being ported to `orison-core` (a `media/` module) and the desktop shell; Godot's Draw Things / A1111 contract and procedural fallback are the reference. The earlier "not ported" decision was an MVP scoping call and no longer applies. |
 | D-8 | Reranker model | **Decided: no cross-encoder, on a measured null result.** Phase 3.4 answered this and the row was never updated. No cross-encoder was ever built — none was reachable from the build environment, and shipping something *called* one would have repeated the `LlamaCppBackend` problem. `PassageReranker` was written instead as a model-free stand-in aimed at the same failure, and measured: it **moves no recall on any fixture**, changing only ordering, and only on `messy` (MRR 0.900 → 1.000). See [eval_baseline.md](eval_baseline.md). Adding a model to reorder results that are already correct is not worth the latency. `PassageReranker` stays in the tree, tested and available behind the `Reranker` trait, wired to nothing (`turn/engine.rs` passes `NoRerank`). Reopen only if retrieval quality becomes a complaint from somebody actually playing — the same trigger [testing_backlog.md](testing_backlog.md) uses. |
 
 ### D-4 — the Director/Actor experiment, measured

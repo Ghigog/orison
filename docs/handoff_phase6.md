@@ -229,11 +229,10 @@ Phase 6 exit criteria:
 2. **The character creator.** `OnboardingFlow.gd`'s adventure-starter half
    was ported; the player-character half — avatar, description, the
    vision-model magic wand — was not, and the core has no equivalent.
-3. ~~**Decide [D-7](migration_plan.md#appendix-d--decisions-and-open-questions)**
-   (image generation).~~ **Done: not ported.** The Draw Things / A1111 contract
-   stays in the Godot build and `orison-core` gets no `media/` module, so
-   `AssetStatusOverlay`, `DrawThingsTutorial` and `ImageGenSettingsPanel` stop
-   being parity gaps. Nothing to build.
+3. **Image generation** (`AssetStatusOverlay`, `DrawThingsTutorial`,
+   `ImageGenSettingsPanel`). The Draw Things / A1111 contract and the
+   procedural fallback are being ported, not dropped —
+   [#59](https://github.com/Ghigog/orison/issues/59).
 4. **Rewrite [design_philosophy.md](../design_philosophy.md) to round 2.** It
    still specifies the round 1 dark presets and the Lora/Outfit type stack;
    the shell ships Lamplight/E-ink with Spectral and IBM Plex Mono. Until it

@@ -143,13 +143,12 @@ The engine communicates with the models using HTTP requests.
 
 ## Local AI Image Generation (Optional)
 
-> **This is a Godot-build feature and is not being ported.**
-> [D-7](docs/migration_plan.md#appendix-d--decisions-and-open-questions) decided
-> that image generation stays where it is: the Rust core has no `media/` module
-> and the Tauri desktop shell does not generate or display artwork. Everything
-> below describes the Godot build, which remains under feature freeze and still
-> works. Adding image generation to the new build would be a new feature with
-> its own case to make, not unfinished migration work.
+> **Currently available in the Godot build; porting is tracked as
+> [#59](https://github.com/Ghigog/orison/issues/59).** Image generation
+> (character portraits and environment art) is being carried into the Rust
+> core's `media/` module and the Tauri desktop shell. Until that lands, the
+> instructions below apply to the Godot build, which remains under feature
+> freeze and still works.
 
 Orison can generate AI-painted portraits, scenes, and item artwork using a locally-running Stable Diffusion backend. This is **entirely optional** — if disabled, Orison uses its built-in procedural art engine to generate instant retro-style artwork automatically.
 
