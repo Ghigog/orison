@@ -291,10 +291,8 @@ become the reason it happens by accident.
 Then the playtest that [#30](https://github.com/Ghigog/orison/issues/30)
 deferred.
 
-[D-7](migration_plan.md#appendix-d--decisions-and-open-questions) was the
-fourth and is now decided: image generation is not ported, so
-`AssetStatusOverlay`, `DrawThingsTutorial` and `ImageGenSettingsPanel` stop
-being parity gaps and nothing is owed for them.
+The fourth is image generation, which is a real parity requirement rather
+than a closed question — [#59](https://github.com/Ghigog/orison/issues/59).
 
 **Item 1 is not merely a Phase 6 leftover — it is Phase 7's main screen.**
 "First-run path" and "guided model acquisition" are the same surface described
@@ -323,11 +321,12 @@ phases use — each one either verifiable or explicitly amended:
 - [ ] Token counting is exact in the shipped application, or the approximation
       is a recorded decision with its consequences for B-1 written down.
 - [ ] The setup checklist asks for no model the engine does not use.
-- [x] **D-3, D-6, D-7 and the updater resolved.** In-process `llama.cpp` gated
-      on running it once; saves do not carry; image generation is not ported;
-      no updater. D-3 is the only one with work attached, and that work is the
-      verification gate, not the decision. D-8 was closed at the same time on
-      Phase 3.4's measured null result.
+- [x] **D-3, D-6 and the updater resolved.** In-process `llama.cpp` gated
+      on running it once; saves do not carry; no updater. D-3 is the only one
+      with work attached, and that work is the verification gate, not the
+      decision. D-8 was closed at the same time on Phase 3.4's measured null
+      result. Image generation is no longer a closed question —
+      [#59](https://github.com/Ghigog/orison/issues/59).
 - [x] **§2.3, the Settings screen, and the shipped binary agree about what
       leaves the machine** — by dropping the updater rather than amending the
       pillar. Re-check this if anything ever proposes a network call again.
