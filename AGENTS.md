@@ -58,8 +58,18 @@ godot --headless --path . res://tests/TestRunner.tscn
 # On a cold checkout, import assets first if the suite misbehaves.
 godot --headless --path . --import
 
+# Formatting and lint. Blocking in CI, over src/ and tests/ only.
+gdformat --check src/ tests/
+gdlint src/ tests/
+
+# The evaluation harness, replayed against a committed cassette: no Ollama.
+godot --headless --path . res://eval/EvalRunner.tscn -- --fixture=all --selftest
+
 # The Rust core and the headless client. No model, no network.
 cargo test --workspace
+
+# The desktop front end. Node only: no webview, no Tauri bundle.
+cd apps/desktop && npm ci && npm test && npx tsc --noEmit
 
 # Play a campaign. Needs a local Ollama and a model pulled.
 cargo run -p orison-cli -- new --title "Thornwick" --vault fixtures/vaults/minimal
@@ -80,15 +90,23 @@ environment-dependent and had to be repaired; do not add a fourth.
 ## Layout and responsibilities
 
 ```
+apps/desktop/   The Tauri 2 desktop shell (Phase 6); see its README.md. Front end
+                in src/main.ts, typed commands in src-tauri/src/commands.rs
 crates/         The Rust core (orison-core) and the headless client (orison-cli)
-src/autoload/   Global singletons, registered in project.godot
-src/core/       Engine logic with no scene dependencies
-src/resources/  Typed Resource models
-src/ui/         Controllers bound to scenes in scenes/ui/
-scenes/ui/      Scene trees (.tscn)
-resources/      Themes and static assets
-tests/          TestRunner scene and the suite
 docs/           Design documents and planning
+eval/           Evaluation harness: EvalRunnerNode.gd, booted as EvalRunner.tscn
+fixtures/       Vaults the tests ingest: vaults/minimal, vaults/messy, and
+                vaults/large, which generate_large_vault.py generates
+resources/      Themes and static assets: themes/orison_ui.tres
+scenes/ui/      Scene trees (.tscn): MainViewport.tscn
+scratch/        Throwaway probe scripts, not part of the build
+src/autoload/   Global singletons, registered in project.godot: EventBus.gd,
+                LLMClient.gd
+src/core/       Engine logic with no scene dependencies: VaultCompiler.gd,
+                PromptBuilder.gd
+src/resources/  Typed Resource models: CharacterProfile.gd, InventoryItem.gd
+src/ui/         Controllers bound to scenes in scenes/ui/: MainViewport.gd
+tests/          TestRunner scene and the suite: TestRunnerNode.gd
 ```
 
 **Autoloads.** `EventBus` (global signals), `CampaignState` (live campaign state
@@ -135,6 +153,12 @@ a person types into. It is built against `TurnEngine` and `TurnEvent` and
 nothing under them; if a shell needs something the engine does not expose, the
 answer is to add it to the engine, not to reach past it. Which models play
 which role is configuration (B-10) and never a comparison against a model name.
+
+**The desktop shell.** `apps/desktop` is Phase 6: a Tauri 2 shell whose front end
+is vanilla TypeScript built by Vite, over a typed command layer in
+`src-tauri/src/commands.rs` that calls into `orison-cli`. `src/main.ts` is still a
+proof-of-wiring scaffold, not the design canvas ported; `docs/design/Orison.dc.html`
+holds all nine screens and `docs/design/README.md` the decisions behind them.
 
 **The Rust core's turn loop.** `crates/orison-core/src/turn/` is the port:
 `state` owns which transitions are legal, `queue` sequential execution and
@@ -233,7 +257,11 @@ purged once and must not come back.
 |---|---|
 | [docs/migration_plan.md](docs/migration_plan.md) | The plan off Godot. Phases, exit criteria, defect register. |
 | [docs/first_run.md](docs/first_run.md) | How to play the Rust engine, and the four runs that close Phase 5's gate. |
-| [docs/handoff_phase5.md](docs/handoff_phase5.md) | Executable brief for the current phase (the headless playable milestone). |
+| [docs/handoff_phase6.md](docs/handoff_phase6.md) | Executable brief for the phase in flight (the Tauri shell and the UI). |
+| [docs/handoff_phase7.md](docs/handoff_phase7.md) | The next phase's brief (packaging and distribution). Phase 6 gates it. |
+| [docs/handoff_phase5.md](docs/handoff_phase5.md) | The completed headless playable milestone. |
+| [docs/eval_baseline.md](docs/eval_baseline.md) | The measured numbers the migration is graded against. |
+| [docs/testing_backlog.md](docs/testing_backlog.md) | What is deliberately left unmeasured, and what would make each worth doing. |
 | [docs/handoff_phase4.md](docs/handoff_phase4.md) | The completed orchestration brief. |
 | [docs/handoff_phase3.md](docs/handoff_phase3.md) | The completed data-layer brief. Useful as the record of what `orison-core` now provides. |
 | [docs/handoff_phase0.md](docs/handoff_phase0.md) | The original Phase 0 brief, kept as history. |
