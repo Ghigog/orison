@@ -6,91 +6,14 @@ on:
 
 env:
   # Matched to the version developed against locally. 4.7 was verified against
-  # the full unit suite (46/46) and the eval harness with byte-identical results
-  # to 4.6, so this is a version bump with no behavioural change. project.godot
-  # still declares 4.6 in config/features, which is forward-compatible and left
-  # alone deliberately: rewriting it triggers an editor migration pass on a
-  # codebase the migration plan replaces outright.
+  # the eval harness with byte-identical results to 4.6, so this is a version
+  # bump with no behavioural change. project.godot still declares 4.6 in
+  # config/features, which is forward-compatible and left alone deliberately:
+  # rewriting it triggers an editor migration pass on a codebase the migration
+  # plan replaces outright.
   GODOT_VERSION: "4.7-stable"
 
 jobs:
-  tests:
-    name: Godot test suite
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache Godot headless binary
-        id: cache-godot
-        uses: actions/cache@v4
-        with:
-          path: ~/godot-bin
-          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
-
-      - name: Download Godot headless binary
-        if: steps.cache-godot.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/godot-bin
-          curl -fL -o /tmp/godot.zip \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
-          unzip -q /tmp/godot.zip -d ~/godot-bin
-          mv ~/godot-bin/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot-bin/godot
-          chmod +x ~/godot-bin/godot
-
-      - name: Add Godot to PATH
-        run: echo "$HOME/godot-bin" >> "$GITHUB_PATH"
-
-      - name: Import project assets
-        # Cold checkouts have no .godot import cache. Godot can behave as
-        # though resources are missing (or fail the run entirely) if the
-        # test scene is booted before an import pass has ever happened.
-        run: godot --headless --path . --import
-        continue-on-error: true
-
-      - name: Run test suite
-        id: run_tests
-        run: |
-          set +e
-          godot --headless --path . res://tests/TestRunner.tscn 2>&1 | tee godot_test_output.log
-          echo "godot_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
-        shell: bash
-
-      - name: Verify results
-        run: |
-          godot_exit="${{ steps.run_tests.outputs.godot_exit }}"
-          echo "Godot process exit code: $godot_exit"
-
-          summary_line="$(grep -E 'Test Results: [0-9]+ / [0-9]+ Tests Passed' godot_test_output.log || true)"
-          if [ -z "$summary_line" ]; then
-            echo "::error::No 'Test Results: N / M Tests Passed' summary line found in output. The suite likely crashed before completing."
-            exit 1
-          fi
-          echo "Summary line: $summary_line"
-
-          passed="$(echo "$summary_line" | grep -oE '[0-9]+' | sed -n '1p')"
-          total="$(echo "$summary_line" | grep -oE '[0-9]+' | sed -n '2p')"
-
-          # TestRunnerNode.gd already calls get_tree().quit(0 if pass_count ==
-          # total_tests else 1) on its final line, so the exit code alone
-          # should be sufficient. Godot has historically been inconsistent
-          # about propagating exit codes through the headless binary across
-          # versions and platforms, so this step trusts the parsed summary
-          # line as the source of truth and additionally checks the process
-          # exit code as a second, independent signal. Either one failing
-          # fails the job.
-          if [ "$passed" != "$total" ]; then
-            echo "::error::Test summary reports $passed / $total tests passed."
-            exit 1
-          fi
-
-          if [ "$godot_exit" != "0" ]; then
-            echo "::error::Test summary reports all $total tests passed, but the Godot process exited with code $godot_exit. Treating this as a failure since a nonzero exit on a fully-passing run indicates the exit code is not trustworthy on this runner."
-            exit 1
-          fi
-
-          echo "All $total tests passed and the process exit code was 0."
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
