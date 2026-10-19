@@ -1,4 +1,4 @@
-# formic-runner: b6886f3a95b0
+# formic-runner: 3ad244ff0e30
 # Installed by Formic (https://formic-board.vercel.app). Runs a coding agent
 # on your own plan when a Formic card asks for one, and pushes its work to a
 # formic-staging/ branch for Formic to check. Formic replaces this file when
@@ -7,7 +7,7 @@
 # formic-loop-entry names the loop entry this workflow was installed with, in
 # .github/formic/loop-entry.mjs beside it. The version below covers both, so a
 # repository has the pair or neither, and a job never runs the wrong loop.
-# formic-loop-entry: cb24cc35ecce
+# formic-loop-entry: 7982674dc558
 name: Formic agent
 run-name: "Formic ${{ inputs.mode }} ${{ inputs.ticket }} · ${{ inputs.job }}"
 
