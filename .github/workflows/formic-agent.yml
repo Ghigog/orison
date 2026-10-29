@@ -1,13 +1,11 @@
-# formic-runner: 414a8b178ea7
-# Installed by Formic (https://formic-board.vercel.app). Runs a coding agent
+# formic-runner: 52129d55bd65
+# Installed by Formic. Runs a coding agent
 # on your own plan when a Formic card asks for one, and pushes its work to a
 # formic-staging/ branch for Formic to check. Formic replaces this file when
 # its version changes.
 #
-# formic-loop-entry names the loop entry this workflow was installed with, in
-# .github/formic/loop-entry.mjs beside it. The version below covers both, so a
-# repository has the pair or neither, and a job never runs the wrong loop.
-# formic-loop-entry: 14cd8e38656a
+# The loop runs as Ghigog/formic-runner, pinned below by the commit of its
+# release. Nothing is downloaded from Formic when a job runs.
 name: Formic agent
 run-name: "Formic ${{ inputs.mode }} ${{ inputs.ticket }} · ${{ inputs.job }}"
 
@@ -39,10 +37,6 @@ on:
       prompt:
         description: What to do
         required: true
-      bundle:
-        description: Where to fetch Formic's loop entry from (mode loop), or empty
-        required: false
-        default: ""
       report:
         description: Where to post what the agent does as it works, or empty
         required: false
@@ -67,6 +61,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(inputs.timeout) }}
     steps:
+      # First, so a missing secret fails at once and says where to add it,
+      # before the job spends time on anything else.
+      - name: Check the agent's secret
+        env:
+          SECRET: ${{ inputs.secret }}
+          VALUE: ${{ startsWith(inputs.secret, 'FORMIC_') && secrets[inputs.secret] || '' }}
+          SECRETS_PAGE: ${{ github.server_url }}/${{ github.repository }}/settings/secrets/actions
+        run: |
+          if [ -z "$VALUE" ]; then
+            echo "::error::Add $SECRET in Settings: $SECRETS_PAGE"
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.from }}
@@ -110,17 +117,18 @@ jobs:
         with:
           node-version: 22
 
-      # Every run is a fresh machine. The package caches carry the agent's
-      # own install and the project's dependencies from one run to the next,
-      # so neither is downloaded from scratch each time.
+      # Every run is a fresh machine. The caches carry the agent's own install
+      # and the project's dependencies and engines from one run to the next, so
+      # neither is downloaded from scratch each time.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.npm
-            ~/.cache/pip
             ~/.cache/yarn
             ~/.local/share/pnpm/store
-          key: formic-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml', '**/requirements*.txt') }}
+            ~/.cache/pip
+            ~/.cache/formic/godot
+          key: formic-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml', '**/requirements*.txt', 'project.godot', '.github/formic/godot-version') }}
           restore-keys: formic-${{ runner.os }}-
 
       - name: Install the agent
@@ -135,40 +143,136 @@ jobs:
             *) echo "Unknown agent: $CLI"; exit 1 ;;
           esac
 
-      # Ready before the agent starts, so it spends its turns on the ticket.
-      # The coding modes need them, and so does a sentinel's audit, which runs
+      # Ready before the agent starts, so it spends its turns on the ticket:
+      # whatever toolchains the checkout uses (src/lib/toolchains), then the
+      # repository's own .github/formic/setup.sh. The coding modes need them, and so does a sentinel's audit, which runs
       # the tests and the build to back its report. A failure here is not
       # fatal: the agent can still install what it needs itself.
       - name: Install the project's dependencies
-        if: inputs.mode == 'implement' || inputs.mode == 'fix' || inputs.mode == 'loop' || (inputs.mode == 'ask' && inputs.ticket == 'sentinel')
+        if: inputs.mode == 'implement' || inputs.mode == 'fix' || inputs.mode == 'loop' || (inputs.mode == 'ask' && (inputs.ticket == 'sentinel' || inputs.ticket == 'assistant'))
         continue-on-error: true
         run: |
-          # Installed, never handed back: kept out of what the agent commits.
-          echo "node_modules/" >> .git/info/exclude
-          if [ -f package-lock.json ]; then npm ci --prefer-offline --no-audit --fund=false
-          elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
-          elif [ -f yarn.lock ]; then corepack enable && yarn install
-          elif [ -f requirements.txt ]; then pip install -r requirements.txt
+          set +e
+          FORMIC_CHECKS="$HOME/.formic/checks.md"
+          FORMIC_BIN="$HOME/.formic/bin"
+          mkdir -p "$FORMIC_BIN"
+          : > "$FORMIC_CHECKS"
+          export FORMIC_CHECKS FORMIC_BIN PATH="$FORMIC_BIN:$PATH"
+          formic_bin() {
+            chmod +x "$1"
+            ln -sf "$1" "$FORMIC_BIN/$2"
+            if [ -n "${GITHUB_PATH:-}" ]; then echo "$FORMIC_BIN" >> "$GITHUB_PATH"; fi
+          }
+          formic_note() { printf '%s\n' "$*" >> "$FORMIC_CHECKS"; }
+          export -f formic_bin formic_note
+
+          if [ -f package-lock.json ] || [ -f pnpm-lock.yaml ] || [ -f yarn.lock ]; then
+            echo "Setting up Node..."
+            (
+              set -e
+              # Installed, never handed back: kept out of what the agent commits.
+              echo "node_modules/" >> .git/info/exclude
+              if [ -f package-lock.json ]; then npm ci --prefer-offline --no-audit --fund=false
+              elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile
+              elif [ -f yarn.lock ]; then corepack enable && yarn install
+              fi
+            )
+            if [ "$?" -ne 0 ]; then echo "Setting up Node failed; the agent can still install what it needs."; fi
           fi
 
-      - name: Run the agent
+          if [ -f requirements.txt ]; then
+            echo "Setting up Python..."
+            (
+              set -e
+              pip install -r requirements.txt
+            )
+            if [ "$?" -ne 0 ]; then echo "Setting up Python failed; the agent can still install what it needs."; fi
+          fi
+
+          if [ -f project.godot ]; then
+            echo "Setting up Godot..."
+            (
+              set -e
+              want=""
+              if [ -f .github/formic/godot-version ]; then want="$(tr -d '[:space:]' < .github/formic/godot-version)"; fi
+              if [ -z "$want" ]; then
+                want="$(sed -n 's/^config\/features=PackedStringArray("\([0-9][0-9.]*\)".*/\1/p' project.godot | head -n 1)"
+              fi
+              if [ -z "$want" ]; then
+                echo "project.godot names no Godot version. Pin one in .github/formic/godot-version, for example 4.7.1."
+                exit 1
+              fi
+              if grep -q '^config/features=.*"C#"' project.godot; then
+                formic_note "This is a C# Godot project. Formic does not install the .NET build of Godot yet, so there is no engine here to build or test it with."
+                echo "C# Godot projects are not supported yet."
+                exit 1
+              fi
+
+              case "$want" in
+                *-*) tag="$want" ;;
+                *)
+                  pattern="^$(printf '%s' "$want" | sed 's/\./\\./g')(\.[0-9]+)*-stable$"
+                  tag="$(git ls-remote --tags --refs https://github.com/godotengine/godot-builds | sed -n 's#.*refs/tags/##p' | grep -E "$pattern" | sort -V | tail -n 1)"
+                  ;;
+              esac
+              if [ -z "$tag" ]; then
+                echo "No stable Godot release matches $want."
+                exit 1
+              fi
+              case "$(uname -m)" in
+                x86_64) arch=x86_64 ;;
+                aarch64 | arm64) arch=arm64 ;;
+                *) echo "No Linux Godot build for $(uname -m)."; exit 1 ;;
+              esac
+
+              dir="$HOME/.cache/formic/godot/$tag"
+              bin="$dir/Godot_v$tag""_linux.$arch"
+              if [ ! -f "$bin" ]; then
+                echo "Downloading Godot $tag..."
+                mkdir -p "$dir"
+                curl -fsSL --retry 3 --max-time 600 -o "$dir/godot.zip" \
+                  "https://github.com/godotengine/godot-builds/releases/download/$tag/Godot_v$tag""_linux.$arch.zip"
+                unzip -q -o "$dir/godot.zip" -d "$dir" 2>/dev/null || python3 -m zipfile -e "$dir/godot.zip" "$dir"
+                rm -f "$dir/godot.zip"
+              fi
+              formic_bin "$bin" godot
+              godot --headless --version
+
+              formic_note "## Godot"
+              formic_note "Godot $tag, headless, is installed: run it as \`godot\`. There is no display, so always pass --headless."
+              formic_note "A fresh checkout has nothing imported. When there is no .godot/ folder, or after you add or change an asset, run \`godot --headless --import\` first: a script that loads an unimported resource fails."
+              if [ -f addons/gut/gut_cmdln.gd ]; then formic_note 'Tests (GUT): `godot --headless -s addons/gut/gut_cmdln.gd -gexit`. A non-zero exit means a test failed; read the log above the summary for which.'
+              else formic_note "No test framework Formic knows (GUT) is installed in addons/."
+              fi
+            )
+            if [ "$?" -ne 0 ]; then echo "Setting up Godot failed; the agent can still install what it needs."; fi
+          fi
+
+          if [ -f .github/formic/setup.sh ]; then
+            echo "Running .github/formic/setup.sh..."
+            FORMIC_HOST=job bash .github/formic/setup.sh
+            if [ "$?" -ne 0 ]; then echo ".github/formic/setup.sh failed; carrying on without it."; fi
+          fi
+
+          if [ -f project.godot ]; then
+            echo "Preparing the Godot project..."
+            (
+              set -e
+              echo "Importing the project..."
+              log="$HOME/.formic/godot-import.log"
+              if ! timeout 1200 godot --headless --import > "$log" 2>&1; then
+                echo "The import did not finish cleanly; the agent will see the same when it runs it."
+              fi
+              tail -n 20 "$log"
+            )
+            if [ "$?" -ne 0 ]; then echo "Preparing the Godot project failed; the agent can still install what it needs."; fi
+          fi
+
+      # What the agent does, posted to Formic as it works. It runs beside the
+      # steps below and is stopped by the last of them.
+      - name: Report what the agent does
         env:
-          CLI: ${{ inputs.cli }}
-          MODE: ${{ inputs.mode }}
-          # The card's own key, for the summary a loop run writes.
-          TICKET: ${{ inputs.ticket }}
-          BUNDLE: ${{ inputs.bundle }}
-          MODEL: ${{ inputs.model }}
-          PROMPT: ${{ inputs.prompt }}
           REPORT: ${{ inputs.report }}
-          FORMIC_REPORT: ${{ runner.temp }}/formic-report.json
-          # The loop's key comes from the repository's Actions secrets, like a
-          # CLI agent's sign-in: never from an input, which the run's event
-          # keeps for anyone who can read it.
-          FORMIC_API_KEY: ${{ inputs.mode == 'loop' && startsWith(inputs.secret, 'FORMIC_API_KEY_') && secrets[inputs.secret] || '' }}
-          FORMIC_SUMMARY: ${{ runner.temp }}/formic-summary.md
-          FORMIC_OUTPUT: ${{ runner.temp }}/formic-answer.md
-          FORMIC_STDOUT: ${{ runner.temp }}/formic-stdout.md
           FORMIC_STREAM: ${{ runner.temp }}/formic-stream.jsonl
           FORMIC_NOTES: ${{ runner.temp }}/formic-notes.md
           FORMIC_DONE: ${{ runner.temp }}/formic-done
@@ -176,18 +280,9 @@ jobs:
           # Coding runs save checkpoints; a run resolving merge conflicts is
           # short, and its merge could not be carried on from one.
           FORMIC_CHECKPOINT: ${{ (inputs.mode == 'implement' || inputs.mode == 'fix' || inputs.mode == 'loop') && inputs.merge == '' && 'on' || '' }}
-          # Claude Code turns its todo tool off when run with -p; the ticket's
-          # plan and progress bar are read from it.
-          CLAUDE_CODE_ENABLE_TODO_TOOLS: "true"
-          CLAUDE_CODE_ENABLE_TASKS: "false"
-          FORMIC_ATTACHMENTS: ${{ runner.temp }}/formic-attachments
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.cli == 'claude' && startsWith(inputs.secret, 'FORMIC_CLAUDE_CODE_TOKEN') && secrets[inputs.secret] || '' }}
-          CODEX_CREDENTIAL: ${{ inputs.cli == 'codex' && startsWith(inputs.secret, 'FORMIC_CODEX_AUTH') && secrets[inputs.secret] || '' }}
-          GEMINI_API_KEY: ${{ inputs.cli == 'gemini' && startsWith(inputs.secret, 'FORMIC_GEMINI_API_KEY') && secrets[inputs.secret] || '' }}
         run: |
           set -euo pipefail
           : > "$FORMIC_STREAM"
-          # What the agent does, posted to Formic as it works.
           if [ -n "$REPORT" ]; then
             cat > "$RUNNER_TEMP/formic-report.py" <<'FORMIC_REPORTER'
           import base64, hashlib, json, os, subprocess, time, urllib.request
@@ -305,69 +400,90 @@ jobs:
               time.sleep(4)
 
           FORMIC_REPORTER
-            python3 "$RUNNER_TEMP/formic-report.py" &
-            reporter=$!
-            trap 'touch "$FORMIC_DONE"; wait "$reporter" || true' EXIT
+            nohup python3 "$RUNNER_TEMP/formic-report.py" > /dev/null 2>&1 &
+            echo $! > "$RUNNER_TEMP/formic-reporter.pid"
           fi
-          case "$MODE" in
-            loop)
-              # Formic's own loop, as the entry this repository carries beside
-              # this workflow: an agent on an API key working here, where a CLI
-              # agent works, until its budget says stop. It writes its progress
-              # to stderr as one JSON event per line, which the reporter above
-              # posts as it goes.
-              if [ -z "$FORMIC_API_KEY" ]; then echo "No API key for this agent. Add it to the agent in Formic."; exit 1; fi
-              payload="$RUNNER_TEMP/formic-payload.json"
-              jq --arg key "$FORMIC_API_KEY" --arg dir "$PWD" '.apiKey = $key | .repo.dir = $dir' <<< "$PROMPT" > "$payload"
-              # Already in the checkout: the setup pull request installs the
-              # pair. A board that has a public address to serve one from still
-              # hands over a signed URL too, which is all a repository set up
-              # before the entry shipped with it has.
-              entry="$RUNNER_TEMP/formic-loop.mjs"
-              if [ -f ".github/formic/loop-entry.mjs" ]; then
-                cp ".github/formic/loop-entry.mjs" "$entry"
-              elif [ -n "$BUNDLE" ]; then
-                curl -fsSL --max-time 60 --retry 2 -o "$entry" "$BUNDLE"
-              else
-                echo "This repository has no loop entry, and the run came with no bundle URL."
-                exit 1
-              fi
-              set +e
-              # Its account of the run goes to Formic through the reporter, and
-              # to this log as well: a step that shows nothing cannot be told
-              # apart from one that is stuck. tee writes the stream, and the
-              # pipeline is waited on, so every line is flushed before the step
-              # moves on; the loop's own exit code is PIPESTATUS[0].
-              node "$entry" < "$payload"                 2>&1 > "$FORMIC_REPORT" | tee -a "$FORMIC_STREAM"
-              status=${PIPESTATUS[0]}
-              set -e
-              rm -f "$payload" "$entry"
-              if [ "$status" -ne 0 ]; then
-                if [ -s "$FORMIC_REPORT" ]; then jq -r '.error // empty' "$FORMIC_REPORT" >&2 || true; fi
-                echo "The loop stopped (exit $status)."
-                exit "$status"
-              fi
-              # Its report becomes the commit's message: what it changed, what
-              # it hands to the person, and what it used.
-              {
-                printf '%s: %s\n\n' "$TICKET" "$(jq -r '.summary' "$FORMIC_REPORT")"
-                jq -r '.detail' "$FORMIC_REPORT"
-                if [ "$(jq -r '.handoff | length' "$FORMIC_REPORT")" -gt 0 ]; then
-                  printf '\nFor you:\n'
-                  jq -r '.handoff[] | "- " + .' "$FORMIC_REPORT"
-                fi
-                printf '\nFormic-Usage: %s\n' "$(jq -c '.usage | {model, tokensIn, tokensOut, costCents}' "$FORMIC_REPORT")"
-              } > "$FORMIC_SUMMARY"
-              if [ "$(jq -r '.alreadyDone' "$FORMIC_REPORT")" = "true" ]; then
-                printf 'Formic-Already-Done: true\n' >> "$FORMIC_SUMMARY"
-                # Nothing to change: an empty commit, so the step below hands
-                # back a report instead of calling it a run that failed.
-                if git diff --quiet && git diff --cached --quiet; then
-                  git -c user.name="Formic Agent" -c user.email=formic-agent@users.noreply.github.com commit -q --allow-empty -m "$TICKET: nothing to change"
-                fi
-              fi
-              ;;
-          esac
+
+      # Formic's own loop, as the runner Action pinned by commit: an agent on
+      # an API key working here, where a CLI agent works, until its budget
+      # says stop. Nothing is fetched from Formic. The Action writes its
+      # events to the stream and its report to FORMIC_REPORT, for the reporter
+      # above and the step after.
+      - name: Run the loop
+        if: inputs.mode == 'loop'
+        uses: Ghigog/formic-runner@d9fc607520b3842efee2b885e9c2ee4e4130237c # v1.0.2
+        with:
+          job: ${{ inputs.job }}
+          mode: ${{ inputs.mode }}
+          ticket: ${{ inputs.ticket }}
+          cli: ${{ inputs.cli }}
+          model: ${{ inputs.model }}
+          from: ${{ inputs.from }}
+          secret: ${{ inputs.secret }}
+          prompt: ${{ inputs.prompt }}
+          report: ${{ inputs.report }}
+          merge: ${{ inputs.merge }}
+        env:
+          # The loop's key comes from the repository's Actions secrets, like a
+          # CLI agent's sign-in: never from an input, which the run's event
+          # keeps for anyone who can read it.
+          FORMIC_API_KEY: ${{ startsWith(inputs.secret, 'FORMIC_API_KEY_') && secrets[inputs.secret] || '' }}
+          FORMIC_REPORT: ${{ runner.temp }}/formic-report.json
+          FORMIC_STREAM: ${{ runner.temp }}/formic-stream.jsonl
+
+      # The loop's report becomes the commit's message: what it changed, what
+      # it hands to the person, and what it used.
+      - name: Write the loop's report
+        if: inputs.mode == 'loop'
+        env:
+          # The card's own key, for the summary.
+          TICKET: ${{ inputs.ticket }}
+          FORMIC_REPORT: ${{ runner.temp }}/formic-report.json
+          FORMIC_SUMMARY: ${{ runner.temp }}/formic-summary.md
+        run: |
+          set -euo pipefail
+          {
+            printf '%s: %s\n\n' "$TICKET" "$(jq -r '.summary' "$FORMIC_REPORT")"
+            jq -r '.detail' "$FORMIC_REPORT"
+            if [ "$(jq -r '.handoff | length' "$FORMIC_REPORT")" -gt 0 ]; then
+              printf '\nFor you:\n'
+              jq -r '.handoff[] | "- " + .' "$FORMIC_REPORT"
+            fi
+            printf '\nFormic-Usage: %s\n' "$(jq -c '.usage | {model, tokensIn, tokensOut, costCents}' "$FORMIC_REPORT")"
+          } > "$FORMIC_SUMMARY"
+          if [ "$(jq -r '.alreadyDone' "$FORMIC_REPORT")" = "true" ]; then
+            printf 'Formic-Already-Done: true\n' >> "$FORMIC_SUMMARY"
+            # Nothing to change: an empty commit, so the step below hands
+            # back a report instead of calling it a run that failed.
+            if git diff --quiet && git diff --cached --quiet; then
+              git -c user.name="Formic Agent" -c user.email=formic-agent@users.noreply.github.com commit -q --allow-empty -m "$TICKET: nothing to change"
+            fi
+          fi
+
+      - name: Run the agent
+        if: inputs.mode != 'loop'
+        env:
+          CLI: ${{ inputs.cli }}
+          MODEL: ${{ inputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+          # Where the agent's prompt tells it to write its summary and answer;
+          # the hand-off step reads them from the same paths.
+          FORMIC_SUMMARY: ${{ runner.temp }}/formic-summary.md
+          FORMIC_OUTPUT: ${{ runner.temp }}/formic-answer.md
+          FORMIC_STDOUT: ${{ runner.temp }}/formic-stdout.md
+          FORMIC_STREAM: ${{ runner.temp }}/formic-stream.jsonl
+          FORMIC_NOTES: ${{ runner.temp }}/formic-notes.md
+          FORMIC_PROGRESS: ${{ runner.temp }}/formic-progress.md
+          # Claude Code turns its todo tool off when run with -p; the ticket's
+          # plan and progress bar are read from it.
+          CLAUDE_CODE_ENABLE_TODO_TOOLS: "true"
+          CLAUDE_CODE_ENABLE_TASKS: "false"
+          FORMIC_ATTACHMENTS: ${{ runner.temp }}/formic-attachments
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.cli == 'claude' && startsWith(inputs.secret, 'FORMIC_CLAUDE_CODE_TOKEN') && secrets[inputs.secret] || '' }}
+          CODEX_CREDENTIAL: ${{ inputs.cli == 'codex' && startsWith(inputs.secret, 'FORMIC_CODEX_AUTH') && secrets[inputs.secret] || '' }}
+          GEMINI_API_KEY: ${{ inputs.cli == 'gemini' && startsWith(inputs.secret, 'FORMIC_GEMINI_API_KEY') && secrets[inputs.secret] || '' }}
+        run: |
+          set -euo pipefail
           case "$CLI" in
             claude)
               if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then echo "No Claude Code token. Add it to the agent in Formic."; exit 1; fi
@@ -402,6 +518,20 @@ jobs:
               ;;
           esac
 
+      # Whatever happened above: tell the reporter it is the last round, and
+      # give it a moment to post the end of the stream and the final checkpoint.
+      - name: Stop reporting
+        if: always()
+        env:
+          FORMIC_DONE: ${{ runner.temp }}/formic-done
+        run: |
+          touch "$FORMIC_DONE"
+          pid="$(cat "$RUNNER_TEMP/formic-reporter.pid" 2>/dev/null || true)"
+          for _ in $(seq 1 60); do
+            if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+
       - name: Hand the work to Formic
         env:
           JOB: ${{ inputs.job }}
@@ -421,7 +551,18 @@ jobs:
           git config user.email "formic-agent@users.noreply.github.com"
           case "$MODE" in
             product|architect|showcase|ask)
-              # An answer, not a change: only the answer leaves this run.
+              # The board's assistant may have changed the code: that goes to
+              # a branch of its own, for Formic to offer as a pull request.
+              # Workflow changes stay behind; this token may not push them.
+              if [ "$MODE" = "ask" ] && [ "$TICKET" = "assistant" ]; then
+                git add -A
+                git reset -q -- .github/workflows
+                if ! git diff --cached --quiet; then
+                  git commit -q -m "Changes from the board's assistant"
+                  git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/formic-staging/${JOB}-change"
+                fi
+              fi
+              # The answer, on its own: only it leaves on this branch.
               git reset -q --hard "$FORMIC_START"
               git clean -qfdx
               answer="$FORMIC_OUTPUT"
@@ -447,7 +588,9 @@ jobs:
             git reset -q --soft "$FORMIC_START"
           fi
           git add -A
-          if git diff --cached --quiet && [ "$(git rev-parse HEAD)" = "$FORMIC_START" ]; then
+          # A resolution that kept the branch's side changes no files, yet is
+          # still the merge: Formic records it as one.
+          if [ -z "${FORMIC_MERGED:-}" ] && git diff --cached --quiet && [ "$(git rev-parse HEAD)" = "$FORMIC_START" ]; then
             echo "The agent finished without changing anything."
             exit 1
           fi
